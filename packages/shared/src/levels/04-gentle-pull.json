@@ -1,0 +1,31 @@
+{
+  "id": "gentle-pull",
+  "title": "Gentle Pull",
+  "briefing": "Pip's course is locked in and it will sail right past Nerio. Drop a gas giant where its gravity can bend Pip into a flyby of Nerio.",
+  "tip": "Pip arcs slowly out past Nerio's orbit. Place the giant just outside Nerio's orbit and a little ahead of Nest, so it drifts along beside Pip and tugs it back across Nerio's path.",
+  "par": 3,
+  "player": "probe",
+  "controls": [],
+  "pieces": {
+    "kinds": ["giant"],
+    "max": 1
+  },
+  "spec": {
+    "title": "Gentle Pull",
+    "description": "A fixed shot that misses Nerio until the player places a gas giant to bend it.",
+    "bodies": [
+      { "id": "lumen", "name": "Lumen", "type": "star", "mass": 0.2, "radius": 0.0025, "color": "#ffd98a", "placement": { "kind": "free", "position": [0, 0, 0], "velocity": [0, 0, 0] } },
+      { "id": "nest", "name": "Nest", "type": "planet", "mass": 0.000003, "radius": 0.000043, "color": "#6fb8ff", "placement": { "kind": "orbit", "parent": "lumen", "a": 1, "phase": 0 } },
+      { "id": "nerio", "name": "Nerio", "type": "planet", "mass": 0.0003, "radius": 0.00025, "color": "#8ff0c0", "placement": { "kind": "orbit", "parent": "lumen", "a": 1.6, "phase": 324 } },
+      { "id": "probe", "name": "Pip", "type": "probe", "mass": 0, "radius": 1e-7, "color": "#ffffff", "placement": { "kind": "launch", "from": "nest", "speed": 0.6, "angle": 30, "time": 0 } }
+    ],
+    "goal": [
+      { "type": "flyby", "body": "probe", "target": "nerio", "maxDistance": 0.3 }
+    ],
+    "sim": { "duration": 2.7 }
+  },
+  "solution": {
+    "values": [],
+    "pieces": [{ "kind": "giant", "r": 1.8, "angle": 18 }]
+  }
+}

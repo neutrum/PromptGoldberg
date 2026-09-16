@@ -6,7 +6,8 @@ A gravity puzzle game. Aim a probe, bend it around planets, and trigger a cosmic
 
 - **Aim, launch, watch the chain.** Drag back from the glowing probe (or use the sliders / arrow keys) to set power, aim and launch time. A dotted line previews the first part of the path; the rest is the surprise. Numbered checkpoint rings light up with a chime as each goal step happens, time slows near every encounter, and a miss shows exactly where and by how much.
 - **Stars and par.** Solve within par shots for three stars. Previous shots stay as ghost trails.
-- **Build pieces.** Some levels let you drop a planet or gas giant onto an orbit to bend the path.
+- **Build pieces.** Some levels let you drop a planet or gas giant onto an orbit to bend the path; pure build levels lock the shot so placing pieces is the whole puzzle.
+- **Tutorial.** Coach marks react to what you do (drag, launch, miss, win), with a separate lesson for placing pieces; `?` replays it.
 - **Race the machine.** Start the optimizer on the same level and compare its hundreds of simulations to your handful of shots.
 - **Hints and coach.** After two misses you get a direction ("a little more power"); an AI coach phrases it from the actual event log. A solution path costs a star.
 
@@ -107,4 +108,5 @@ Hosted-demo protection: per-IP limits on LLM endpoints (`RATE_LIMIT_PER_MIN`=6, 
 - [x] Rate limits, caching, budget cap, community gallery
 - [x] Game loop: aim/launch/checkpoints/stars, sound, ghosts, hints, race the machine, build pieces
 - [x] Replayability: campaign, daily, endless, AI levels, remix, share links, community gallery
-- [ ] Onboarding tutorial, mobile touch polish, deploy
+- [x] Interactive tutorial; 10-level campaign with pure build levels
+- [ ] Two-piece build levels, mobile touch polish, deploy

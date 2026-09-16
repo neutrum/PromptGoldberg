@@ -2,11 +2,13 @@ import { Level } from '../game/level';
 import firstLight from './01-first-light.json';
 import bullseye from './02-bullseye.json';
 import launchWindow from './03-launch-window.json';
-import slingshot from './04-slingshot.json';
-import escapeVelocity from './05-escape-velocity.json';
-import moonThief from './06-moon-thief.json';
-import buildASlingshot from './07-build-a-slingshot.json';
-import shadowRun from './08-shadow-run.json';
+import gentlePull from './04-gentle-pull.json';
+import slingshot from './05-slingshot.json';
+import escapeVelocity from './06-escape-velocity.json';
+import bankShot from './07-bank-shot.json';
+import moonThief from './08-moon-thief.json';
+import buildASlingshot from './09-build-a-slingshot.json';
+import shadowRun from './10-shadow-run.json';
 
 /**
  * The hand-made campaign, in play order. Every level is verified by test/levels.test.ts:
@@ -17,8 +19,10 @@ export const CAMPAIGN: Level[] = [
   firstLight,
   bullseye,
   launchWindow,
+  gentlePull,
   slingshot,
   escapeVelocity,
+  bankShot,
   moonThief,
   buildASlingshot,
   shadowRun,

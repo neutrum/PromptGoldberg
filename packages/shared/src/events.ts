@@ -77,6 +77,9 @@ export interface Trace {
 export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 export const eclipseKey = (source: string, occluder: string, observer: string) => `${source}|${occluder}|${observer}`;
 
+/** Ids of bodies the player drops into a level (see pieceBody in game/level.ts). */
+const PIECE_ID = /^piece\d+$/;
+
 const MAX_LIST = 4000;
 const ENERGY_SAMPLES = 400;
 const MAX_ECLIPSE_EVENTS_PER_TRIPLE = 12;
@@ -151,11 +154,12 @@ export class EventTracker {
     this.tripleQ = new Float64Array(3 * this.triples.length);
     this.tripleFront = new Uint8Array(this.triples.length);
 
-    // Escape radius: 3x the extent of the initial massive system.
+    // Escape radius: 3x the extent of the initial massive system. Player-placed pieces
+    // (game/level.ts pieceBody ids) are left out so where a piece goes never moves the goal line.
     const com = centreOfMass(s);
     let extent = 0;
     for (let i = 0; i < n; i++) {
-      if (s.status[i] !== ACTIVE || s.mass[i] <= 0) continue;
+      if (s.status[i] !== ACTIVE || s.mass[i] <= 0 || PIECE_ID.test(s.ids[i])) continue;
       extent = Math.max(extent, Math.hypot(s.pos[3 * i] - com.x, s.pos[3 * i + 1] - com.y, s.pos[3 * i + 2] - com.z));
     }
 

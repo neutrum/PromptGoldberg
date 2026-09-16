@@ -1,0 +1,31 @@
+{
+  "id": "bank-shot",
+  "title": "Bank Shot",
+  "briefing": "Rook is launched and will sail wide of the bloated world Brute. Place a gas giant that bends Rook's path so it smashes straight into Brute.",
+  "tip": "Think of the giant as a cushion. Drop it a little outside Kiln's orbit, ahead of Kiln and just inside Rook's outward curve, so Rook swings around it and turns toward Brute.",
+  "par": 4,
+  "player": "probe",
+  "controls": [],
+  "pieces": {
+    "kinds": ["giant"],
+    "max": 1
+  },
+  "spec": {
+    "title": "Bank Shot",
+    "description": "A fixed shot that misses Brute until the player places a gas giant to redirect it into a collision.",
+    "bodies": [
+      { "id": "cinnabar", "name": "Cinnabar", "type": "star", "mass": 0.3, "radius": 0.003, "color": "#ff8a5c", "placement": { "kind": "free", "position": [0, 0, 0], "velocity": [0, 0, 0] } },
+      { "id": "kiln", "name": "Kiln", "type": "planet", "mass": 0.000003, "radius": 0.000043, "color": "#7fc4ff", "placement": { "kind": "orbit", "parent": "cinnabar", "a": 1, "phase": 0 } },
+      { "id": "brute", "name": "Brute", "type": "planet", "mass": 0.001, "radius": 0.011, "color": "#d9a05b", "placement": { "kind": "orbit", "parent": "cinnabar", "a": 2.3, "phase": 66 } },
+      { "id": "probe", "name": "Rook", "type": "probe", "mass": 0, "radius": 1e-7, "color": "#ffffff", "placement": { "kind": "launch", "from": "kiln", "speed": 0.6, "angle": 40, "time": 0 } }
+    ],
+    "goal": [
+      { "type": "collision", "a": "probe", "b": "brute" }
+    ],
+    "sim": { "duration": 2.2 }
+  },
+  "solution": {
+    "values": [],
+    "pieces": [{ "kind": "giant", "r": 1.62, "angle": 53 }]
+  }
+}

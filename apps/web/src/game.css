@@ -184,3 +184,6 @@ button.link:hover:not(:disabled) { background: none; color: var(--text); }
 .tut-highlight { outline: 2px solid var(--gold) !important; outline-offset: 3px; border-radius: 12px; animation: tut-pulse 1.2s ease-in-out infinite; }
 @keyframes tut-pulse { 50% { outline-color: rgba(255, 210, 122, 0.25); } }
 .hint-piece { color: var(--gold); font-size: 12px; font-weight: 700; white-space: nowrap; text-shadow: 0 0 8px #000; animation: bob 1.4s ease-in-out infinite; }
+
+/* Pure build levels: no sliders, just the launch button. */
+.controls:has(> .launch:only-child) { justify-content: center; }
