@@ -1,0 +1,137 @@
+{
+  "id": "slingshot",
+  "title": "Slingshot",
+  "briefing": "Dive past the giant Titan first, then ride its slingshot out to the icy world Rime.",
+  "tip": "Titan bends your path hard, so small changes near it matter a lot. Get the Titan flyby first, then nudge launch time and aim to swing the exit toward Rime.",
+  "par": 3,
+  "player": "probe",
+  "controls": [
+    {
+      "path": "bodies.probe.placement.speed",
+      "label": "Power",
+      "min": 0.6,
+      "max": 1.4
+    },
+    {
+      "path": "bodies.probe.placement.angle",
+      "label": "Aim",
+      "min": -25,
+      "max": 35
+    },
+    {
+      "path": "bodies.probe.placement.time",
+      "label": "Launch time",
+      "min": 0,
+      "max": 0.5
+    }
+  ],
+  "spec": {
+    "title": "Slingshot",
+    "description": "A gravity assist around the heavy giant of the red dwarf Vesper.",
+    "bodies": [
+      {
+        "id": "vesper",
+        "name": "Vesper",
+        "type": "star",
+        "mass": 0.4,
+        "radius": 0.003,
+        "color": "#ff9966",
+        "placement": {
+          "kind": "free",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "hearth",
+        "name": "Hearth",
+        "type": "planet",
+        "mass": 0.000003,
+        "radius": 0.000043,
+        "color": "#6fc3a0",
+        "placement": {
+          "kind": "orbit",
+          "parent": "vesper",
+          "a": 1,
+          "phase": 0
+        }
+      },
+      {
+        "id": "titan",
+        "name": "Titan",
+        "type": "planet",
+        "mass": 0.005,
+        "radius": 0.0007,
+        "color": "#e0a86a",
+        "placement": {
+          "kind": "orbit",
+          "parent": "vesper",
+          "a": 2,
+          "phase": 100
+        }
+      },
+      {
+        "id": "rime",
+        "name": "Rime",
+        "type": "planet",
+        "mass": 0.00005,
+        "radius": 0.0002,
+        "color": "#9fe3e8",
+        "placement": {
+          "kind": "orbit",
+          "parent": "vesper",
+          "a": 3.5,
+          "phase": 167
+        }
+      },
+      {
+        "id": "probe",
+        "name": "Kestrel",
+        "type": "probe",
+        "mass": 0,
+        "radius": 1e-7,
+        "color": "#ffffff",
+        "placement": {
+          "kind": "launch",
+          "from": "hearth",
+          "speed": 1.2,
+          "angle": 0,
+          "time": 0
+        }
+      }
+    ],
+    "goal": [
+      {
+        "type": "flyby",
+        "body": "probe",
+        "target": "titan",
+        "maxDistance": 0.3
+      },
+      {
+        "type": "flyby",
+        "body": "probe",
+        "target": "rime",
+        "maxDistance": 0.5
+      }
+    ],
+    "sim": {
+      "duration": 2.2
+    }
+  },
+  "solution": {
+    "values": [
+      0.846634,
+      2.84376,
+      0.250929
+    ],
+    "pieces": []
+  }
+}

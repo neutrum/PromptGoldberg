@@ -1,0 +1,89 @@
+{
+  "title": "Three-Day Eclipse",
+  "description": "The moon Pale blocks the sun from the gas giant Tarsis every three days.",
+  "bodies": [
+    {
+      "id": "sun",
+      "name": "Sol",
+      "type": "star",
+      "mass": 1,
+      "radius": 0.00465,
+      "color": "#ffd27a",
+      "placement": {
+        "kind": "free",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "tarsis",
+      "name": "Tarsis",
+      "type": "planet",
+      "mass": 0.000955,
+      "radius": 0.000478,
+      "color": "#d9915b",
+      "placement": {
+        "kind": "orbit",
+        "parent": "sun",
+        "a": 1,
+        "phase": 0
+      }
+    },
+    {
+      "id": "pale",
+      "name": "Pale",
+      "type": "moon",
+      "mass": 3.7e-8,
+      "radius": 0.00002,
+      "color": "#d8d8e0",
+      "placement": {
+        "kind": "orbit",
+        "parent": "tarsis",
+        "a": 0.00407,
+        "phase": 90
+      }
+    },
+    {
+      "id": "vesta",
+      "name": "Vesta",
+      "type": "planet",
+      "mass": 0.000003,
+      "radius": 0.0000426,
+      "color": "#7fbf7f",
+      "placement": {
+        "kind": "orbit",
+        "parent": "sun",
+        "a": 0.6,
+        "phase": 200
+      }
+    }
+  ],
+  "goal": [
+    {
+      "type": "eclipse",
+      "occluder": "pale",
+      "source": "sun",
+      "observer": "tarsis",
+      "period": 0.00821
+    }
+  ],
+  "tunables": [
+    {
+      "path": "bodies.pale.placement.a",
+      "min": 0.003,
+      "max": 0.006
+    }
+  ],
+  "sim": {
+    "duration": 0.05,
+    "samples": 2000
+  }
+}
