@@ -1,0 +1,131 @@
+{
+  "id": "launch-window",
+  "title": "Launch Window",
+  "briefing": "Glacia is on the far side of Sol. Wait for the right moment, then launch to fly past it.",
+  "tip": "No aim can reach Glacia right now. Slide the launch time until Glacia is about to come around, then adjust power.",
+  "par": 3,
+  "player": "probe",
+  "controls": [
+    {
+      "path": "bodies.probe.placement.speed",
+      "label": "Power",
+      "min": 0.8,
+      "max": 2.8
+    },
+    {
+      "path": "bodies.probe.placement.angle",
+      "label": "Aim",
+      "min": -40,
+      "max": 40
+    },
+    {
+      "path": "bodies.probe.placement.time",
+      "label": "Launch time",
+      "min": 0,
+      "max": 1
+    }
+  ],
+  "spec": {
+    "title": "Launch Window",
+    "description": "Timing a transfer to a distant ice world.",
+    "bodies": [
+      {
+        "id": "sol",
+        "name": "Sol",
+        "type": "star",
+        "mass": 1,
+        "radius": 0.00465,
+        "color": "#ffd27a",
+        "placement": {
+          "kind": "free",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "terra",
+        "name": "Terra",
+        "type": "planet",
+        "mass": 0.000003,
+        "radius": 0.000043,
+        "color": "#5fa8ff",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sol",
+          "a": 1,
+          "phase": 0
+        }
+      },
+      {
+        "id": "rust",
+        "name": "Rust",
+        "type": "planet",
+        "mass": 0.00003,
+        "radius": 0.0001,
+        "color": "#d9623b",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sol",
+          "a": 1.5,
+          "phase": 130
+        }
+      },
+      {
+        "id": "glacia",
+        "name": "Glacia",
+        "type": "planet",
+        "mass": 0.0003,
+        "radius": 0.00025,
+        "color": "#8fd8ff",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sol",
+          "a": 2,
+          "phase": 240
+        }
+      },
+      {
+        "id": "probe",
+        "name": "Courier",
+        "type": "probe",
+        "mass": 0,
+        "radius": 1e-7,
+        "color": "#ffffff",
+        "placement": {
+          "kind": "launch",
+          "from": "terra",
+          "speed": 1.8,
+          "angle": 0,
+          "time": 0
+        }
+      }
+    ],
+    "goal": [
+      {
+        "type": "flyby",
+        "body": "probe",
+        "target": "glacia",
+        "maxDistance": 0.25
+      }
+    ],
+    "sim": {
+      "duration": 2
+    }
+  },
+  "solution": {
+    "values": [
+      1.86738,
+      18.9699,
+      0.831064
+    ],
+    "pieces": []
+  }
+}
