@@ -42,7 +42,8 @@ export const Level = z.object({
   spec: SystemSpec,
   /** Body the player controls; the camera follows it after launch. */
   player: z.string(),
-  controls: z.array(Control).min(1).max(4),
+  /** May be empty for pure build puzzles: the shot is fixed and only pieces change. */
+  controls: z.array(Control).max(4),
   /** Shots for three stars. */
   par: z.number().int().min(1).default(3),
   pieces: z.object({ kinds: z.array(PieceKind).min(1), max: z.number().int().min(1).max(3) }).optional(),

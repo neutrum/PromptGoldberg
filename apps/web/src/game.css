@@ -4,6 +4,7 @@ button.active { border-color: var(--gold); color: var(--gold); }
 kbd { font-size: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 6px; opacity: 0.7; font-family: inherit; }
 
 .toast {
+  z-index: 2147483601 !important;
   position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 50;
   background: #10162e; border: 1px solid var(--gold); color: var(--text); padding: 8px 16px; border-radius: 999px;
   box-shadow: 0 6px 30px rgba(0, 0, 0, 0.5); max-width: min(90vw, 640px); word-break: break-all; animation: pop 0.25s ease-out;
@@ -156,3 +157,30 @@ kbd { font-size: 10px; border: 1px solid currentColor; border-radius: 4px; paddi
   .controls { gap: 8px; }
   .launch { width: 100%; }
 }
+
+/* Tutorial */
+.tutorial {
+  /* Above drei <Html> labels, which use a very large z-index. */
+  position: fixed; left: 0; top: 0; z-index: 2147483600; width: min(320px, calc(100vw - 20px));
+  background: #141a38; border: 1px solid var(--gold); border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(255, 210, 122, 0.15);
+  display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.4;
+  animation: tut-in 0.25s ease-out; will-change: transform;
+}
+@keyframes tut-in { from { opacity: 0; } to { opacity: 1; } }
+.tutorial b { color: var(--gold); }
+.tutorial::after {
+  content: ""; position: absolute; width: 12px; height: 12px; background: #141a38;
+  border: 1px solid var(--gold); transform: rotate(45deg);
+}
+.tutorial[data-pointing="no"]::after { display: none; }
+.tutorial.side-below::after { top: -7px; left: calc(var(--arrow-x) - 6px); border-right: none; border-bottom: none; }
+.tutorial.side-above::after { bottom: -7px; left: calc(var(--arrow-x) - 6px); border-left: none; border-top: none; }
+.tutorial.side-left::after { right: -7px; top: calc(var(--arrow-y) - 6px); border-left: none; border-bottom: none; }
+.tutorial-foot { display: flex; align-items: center; gap: 10px; }
+.tutorial-foot .primary { margin-left: auto; }
+button.link { border: none; background: none; color: var(--muted); padding: 0; font-size: 12px; text-decoration: underline; }
+button.link:hover:not(:disabled) { background: none; color: var(--text); }
+.tut-highlight { outline: 2px solid var(--gold) !important; outline-offset: 3px; border-radius: 12px; animation: tut-pulse 1.2s ease-in-out infinite; }
+@keyframes tut-pulse { 50% { outline-color: rgba(255, 210, 122, 0.25); } }
+.hint-piece { color: var(--gold); font-size: 12px; font-weight: 700; white-space: nowrap; text-shadow: 0 0 8px #000; animation: bob 1.4s ease-in-out infinite; }

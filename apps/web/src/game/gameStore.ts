@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { computePool, generateInWorker, runPreview, runSimulation, solveInWorker, type RunData } from '../simClient';
 import { useStore } from '../store';
 import { setMuted, sfx } from './audio';
-import { directionalHint, missSummary, playerFate } from './hints';
+import { directionalHint, missSummary, pieceHint, playerFate } from './hints';
 import { coach, publishLevel, reportGalleryResult, streamLevel } from './net';
 import { loadProgress, mergeRecord, saveProgress, todayKey, type Progress } from './progress';
 
@@ -91,6 +91,8 @@ interface GameState {
   go: (screen: Screen) => void;
   toggleMute: () => void;
   setAuthor: (name: string) => void;
+  finishTutorial: (id: string) => void;
+  replayTutorials: () => void;
   showToast: (text: string) => void;
 
   openLevel: (level: Level, source: Source) => void;
@@ -237,6 +239,14 @@ export const useGame = create<GameState>((set, get) => {
     toggleMute() {
       saveP((p) => { p.muted = !p.muted; });
       setMuted(get().progress.muted);
+    },
+    finishTutorial(id) {
+      saveP((p) => { p.tutorial = { ...p.tutorial, [id]: true }; });
+    },
+    replayTutorials() {
+      saveP((p) => { p.tutorial = {}; });
+      const { level, source } = get();
+      if (level && source && get().phase === 'result') get().aimAgain();
     },
     setAuthor(name) {
       saveP((p) => { p.author = name.slice(0, 32); });
@@ -393,7 +403,7 @@ export const useGame = create<GameState>((set, get) => {
         stars,
         summary: missSummary(level, flight.goal, names),
         fate: success ? null : playerFate(level, flight.events, names),
-        hint: success || shots.length < 2 ? null : directionalHint(level, values) ?? level.tip ?? null,
+        hint: success || shots.length < 2 ? null : (level.controls.length ? directionalHint(level, values) : pieceHint(level, pieces)) ?? level.tip ?? null,
         coachTip: null,
       };
 

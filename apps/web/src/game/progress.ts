@@ -10,12 +10,13 @@ export interface Progress {
   endlessBest: number;
   muted: boolean;
   author: string;
-  seenIntro: boolean;
+  /** Tutorials already finished, by id ('aim', 'pieces'). */
+  tutorial: Record<string, boolean>;
 }
 
 const KEY = 'orbital-goldberg:progress:v1';
 
-const empty = (): Progress => ({ levels: {}, daily: {}, endlessBest: 0, muted: false, author: '', seenIntro: false });
+const empty = (): Progress => ({ levels: {}, daily: {}, endlessBest: 0, muted: false, author: '', tutorial: {} });
 
 export function loadProgress(): Progress {
   try {

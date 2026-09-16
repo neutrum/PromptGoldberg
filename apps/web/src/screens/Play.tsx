@@ -6,6 +6,7 @@ import { GOAL_ICON, goalShort } from '../game/hints';
 import { copyText, galleryLink, levelLink } from '../game/share';
 import { formatTime } from '../format';
 import { GameScene } from '../scene/GameScene';
+import { Tutorial } from './Tutorial';
 
 function sourceLabel(source: Source | null): string {
   switch (source?.kind) {
@@ -149,11 +150,11 @@ function Assist({ level }: { level: Level }) {
 
   return (
     <div className="panel assist">
-      <div className="panel-title">Race the machine</div>
-      {machine.status === 'idle' && (
+      {level.controls.length > 0 && <div className="panel-title">Race the machine</div>}
+      {level.controls.length > 0 && machine.status === 'idle' && (
         <button onClick={() => void raceMachine()} title="The optimizer tries to solve this level by brute force while you play">🤖 Start the machine</button>
       )}
-      {machine.status !== 'idle' && (
+      {level.controls.length > 0 && machine.status !== 'idle' && (
         <div className="machine">
           <div className="machine-bar"><div style={{ width: `${Math.round(machine.best * 100)}%` }} /></div>
           <div className="muted">
@@ -271,7 +272,7 @@ export function PlayScreen() {
   const endless = useGame((s) => s.endless);
   const usedHint = useGame((s) => s.usedHint);
   const progress = useGame((s) => s.progress);
-  const { go, toggleMute } = useGame.getState();
+  const { go, toggleMute, replayTutorials } = useGame.getState();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -332,6 +333,7 @@ export function PlayScreen() {
                 {source?.kind !== 'endless' && <Stars count={Math.max(1, liveStars)} />}
               </div>
               {endless && source?.kind === 'endless' && <div className="endless-left"><span className="big-num">{endless.shotsLeft}</span> shots left · {endless.cleared} cleared</div>}
+              <button className="icon" onClick={replayTutorials} title="How to play (replay the tutorial)">?</button>
               <button className="icon" onClick={toggleMute} title="Sound">{progress.muted ? '🔇' : '🔊'}</button>
             </div>
           </header>
@@ -347,8 +349,13 @@ export function PlayScreen() {
             {phase === 'flying' && <div className="skip muted">Space to skip</div>}
             {error && phase !== 'loading' && <div className="error-inline">{error}</div>}
             <ControlsPanel level={level} />
-            <div className="keys muted">Drag back from the glowing probe to aim · ←→ aim · ↑↓ power · Q/E timing · Shift for fine steps</div>
+            <div className="keys muted">
+              {level.controls.length === 0
+                ? 'The shot is fixed: build the machine with pieces, then launch'
+                : 'Drag back from the glowing probe to aim · ←→ aim · ↑↓ power · Q/E timing · Shift for fine steps'}
+            </div>
           </footer>
+          {phase !== 'loading' && <Tutorial key={level.id + level.title} level={level} />}
         </>
       )}
     </div>

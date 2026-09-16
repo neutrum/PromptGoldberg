@@ -1,4 +1,4 @@
-import { Stars } from '@react-three/drei';
+import { Html, Stars } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import type { Level } from '@og/shared';
 import { useCallback, useMemo, useRef } from 'react';
@@ -84,6 +84,31 @@ function FlightDriver({ level, run }: { level: Level; run: RunData }) {
   return null;
 }
 
+/** Sparkle markers where the known solution's pieces sit, shown when the player asks for the solution. */
+function HintPieces({ run }: { run: RunData }) {
+  const groups = useRef<(THREE.Group | null)[]>([]);
+  const ids = run.ids.map((id, i) => ({ id, i })).filter((b) => /^piece\d+$/.test(b.id));
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+  useFrame(() => {
+    const time = useStore.getState().time;
+    ids.forEach((b, k) => {
+      const g = groups.current[k];
+      if (g && positionAt(run, b.i, time, tmp)) g.position.copy(tmp);
+    });
+  });
+  return (
+    <>
+      {ids.map((b, k) => (
+        <group key={b.id} ref={(el) => { groups.current[k] = el; }}>
+          <Html center style={{ pointerEvents: 'none' }}>
+            <div className="hint-piece">✨ place here</div>
+          </Html>
+        </group>
+      ))}
+    </>
+  );
+}
+
 function Level3D({ level }: { level: Level }) {
   const phase = useGame((s) => s.phase);
   const preview = useGame((s) => s.preview);
@@ -113,6 +138,7 @@ function Level3D({ level }: { level: Level }) {
       <GameCamera run={run} level={level} scale={scale} />
       {ghosts.map((s, i) => <Trails key={`g${shots.indexOf(s)}`} run={s.run} ghost showFull={onlyPlayer} ghostColor={i === ghosts.length - 1 ? '#8aa0ff' : '#56608a'} />)}
       {hint && <Trails run={hint} ghost showFull={onlyPlayer} ghostColor="#ffd27a" />}
+      {hint && phase !== 'flying' && <HintPieces run={hint} />}
       <Trails run={run} showFull={notPlayer} />
       <Bodies run={run} scale={scale} onBodyClick={onBodyClick} hidden={[level.player]} />
       <PlayerGlow run={run} level={level} scale={scale} />

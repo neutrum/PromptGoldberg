@@ -1,4 +1,4 @@
-import type { GoalEvent, GoalResult, Level, SimEvent } from '@og/shared';
+import type { GoalEvent, GoalResult, Level, Piece, SimEvent } from '@og/shared';
 import { formatDistance, formatTime } from '../format';
 
 /** The body a goal step is "about", which gets the checkpoint ring. */
@@ -96,4 +96,27 @@ export function playerFate(level: Level, events: SimEvent[], names: Map<string, 
   }
   if (events.some((e) => e.type === 'escape' && e.bodies[0] === level.player)) return 'It flew out of the system.';
   return null;
+}
+
+/** Nudge for build puzzles: compare the first placed piece with the known solution's pieces. */
+export function pieceHint(level: Level, pieces: Piece[]): string | null {
+  const sol = level.solution?.pieces;
+  if (!sol?.length) return level.tip ?? null;
+  if (pieces.length < sol.length) return sol.length > 1 ? `This one needs ${sol.length} pieces.` : 'Place a piece first: pick one in the Build panel, then click in space.';
+  // Match each solution piece to the nearest placed one and report the worst mismatch.
+  let worst: { dr: number; da: number } | null = null;
+  for (const target of sol) {
+    let best: { dr: number; da: number; score: number } | null = null;
+    for (const p of pieces) {
+      const dr = (target.r - p.r) / target.r;
+      const da = ((((target.angle - p.angle) % 360) + 540) % 360) - 180;
+      const score = Math.abs(dr) * 3 + Math.abs(da) / 60;
+      if (!best || score < best.score) best = { dr, da, score };
+    }
+    if (best && (!worst || Math.abs(best.dr) * 3 + Math.abs(best.da) / 60 > Math.abs(worst.dr) * 3 + Math.abs(worst.da) / 60)) worst = best;
+  }
+  if (!worst) return null;
+  if (Math.abs(worst.dr) < 0.03 && Math.abs(worst.da) < 3) return 'You are very close. Nudge the piece just a little.';
+  if (Math.abs(worst.dr) * 3 >= Math.abs(worst.da) / 60) return worst.dr > 0 ? 'Try placing it further from the star.' : 'Try placing it closer to the star.';
+  return worst.da > 0 ? 'Try placing it further counter-clockwise along its orbit.' : 'Try placing it further clockwise along its orbit.';
 }

@@ -74,6 +74,9 @@ function launchBasis(run: RunData, level: Level, time: number): Basis | null {
 
 const toScene = (p: number[], out: THREE.Vector3) => out.set(p[0], p[2] ?? 0, -p[1]);
 
+/** Where the launch pad is on screen (CSS px, viewport), for tutorial pointers. Null when off-screen or absent. */
+export const padScreen: { current: { x: number; y: number } | null } = { current: null };
+
 /** Pull back from the probe to aim (like a slingshot); click the plane to drop a piece when placing. */
 export function AimController({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
   const gl = useThree((s) => s.gl);
@@ -104,7 +107,7 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
 
   useEffect(() => {
     const el = gl.domElement.parentElement ?? gl.domElement;
-    const padScreen = () => {
+    const padOnScreen = () => {
       if (!basis) return null;
       const p = toScene(basis.pad, new THREE.Vector3()).project(camera);
       const rect = gl.domElement.getBoundingClientRect();
@@ -116,7 +119,7 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
       if (!basis || !planePoint(e, drag.current.pointer)) return;
       const px = drag.current.pointer.x, py = -drag.current.pointer.z;
       const pull = [basis.pad[0] - px, basis.pad[1] - py];
-      const s = padScreen();
+      const s = padOnScreen();
       const pixels = s ? Math.hypot(e.clientX - s.x, e.clientY - s.y) : 0;
       if (angleIdx >= 0 && Math.hypot(pull[0], pull[1]) > 0) {
         const c = level.controls[angleIdx];
@@ -153,7 +156,7 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
         return;
       }
       if (!canDrag) return;
-      const s = padScreen();
+      const s = padOnScreen();
       if (!s || Math.hypot(e.clientX - s.x, e.clientY - s.y) > 56) return;
       e.stopPropagation();
       drag.current.active = true;
@@ -170,7 +173,7 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
         document.body.style.cursor = 'crosshair';
         return;
       }
-      const s = padScreen();
+      const s = padOnScreen();
       const near = canDrag && s && Math.hypot(e.clientX - s.x, e.clientY - s.y) <= 56;
       document.body.style.cursor = near ? 'grab' : '';
     };
@@ -204,9 +207,20 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
     return l;
   }, []);
 
+  useEffect(() => () => { padScreen.current = null; }, []);
+
   useFrame(() => {
     const aiming = phase === 'aiming' || phase === 'result';
     const b = basis;
+    if (b && canDrag) {
+      const p = toScene(b.pad, new THREE.Vector3()).project(camera);
+      const rect = gl.domElement.getBoundingClientRect();
+      padScreen.current = p.z < 1 && Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1
+        ? { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height }
+        : null;
+    } else {
+      padScreen.current = null;
+    }
     if (band.current) {
       band.current.visible = drag.current.active && !!b;
       if (b && drag.current.active) {
