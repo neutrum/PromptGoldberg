@@ -88,7 +88,9 @@ export function validateLevelDesign(json: unknown, keep?: { player: string; path
 export async function designLevel(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<LevelDesign> {
   return requestValidated(
     llm,
-    { system: LEVEL_PROMPT, prompt: `Design a level for this description:\n\n${userPrompt}` },
+    // First design without thinking: planets appear within seconds and the draft is playable fast;
+    // redesigns (which happen while the player is already playing) think.
+    { system: LEVEL_PROMPT, prompt: `Design a level for this description:\n\n${userPrompt}`, thinking: 'off' },
     (json) => validateLevelDesign(json),
     calls,
     1,
@@ -144,7 +146,7 @@ Current level:
 ${JSON.stringify({ ...spec, briefing: level.briefing, tip: level.tip, player: level.player })}
 
 Apply the change and keep everything else as it is where possible. Keep the player body "${level.player}" and its launch tunables. Update the briefing if the goal changed. Reply with the full JSON object (system plus briefing, tip and player).`;
-  return requestValidated(llm, { system: LEVEL_PROMPT, prompt }, (json) => validateLevelDesign(json, keep), calls, 1, onProgress);
+  return requestValidated(llm, { system: LEVEL_PROMPT, prompt, thinking: 'off' }, (json) => validateLevelDesign(json, keep), calls, 1, onProgress);
 }
 
 export const editRequest = (level: Level, instruction: string) =>

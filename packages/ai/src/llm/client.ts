@@ -14,6 +14,8 @@ export interface CompletionRequest {
   onText?: (delta: string) => void;
   /** Overrides CLAUDE_EFFORT for this call (API backend). */
   effort?: Effort;
+  /** 'off' answers without a thinking phase, e.g. for short replies under a small max_tokens. */
+  thinking?: 'off';
 }
 
 /** Where a call's time went, in ms from the request. */
@@ -57,6 +59,8 @@ const MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5';
  * word (first text 9-129 s) while low answered in 2-7 s and still produced solvable levels.
  */
 const EFFORT = (process.env.CLAUDE_EFFORT || 'low') as Effort;
+/** CLAUDE_THINKING=off answers every call without a thinking phase (API backend); by default only first designs skip it. */
+const THINKING_OFF = process.env.CLAUDE_THINKING === 'off';
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -69,7 +73,7 @@ function apiBackend(): LlmBackend {
   const client = new Anthropic();
   return {
     name: 'api',
-    async complete({ system, prompt, maxTokens = 16000, model = MODEL, onText, effort = EFFORT }) {
+    async complete({ system, prompt, maxTokens = 16000, model = MODEL, onText, effort = EFFORT, thinking }) {
       const started = Date.now();
       const timing: CompletionTiming = { totalMs: 0 };
       try {
@@ -82,6 +86,7 @@ function apiBackend(): LlmBackend {
           system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: prompt }],
           ...(effort ? { output_config: { effort } } : {}),
+          ...(THINKING_OFF || thinking === 'off' ? { thinking: { type: 'disabled' as const } } : {}),
         });
         for await (const event of stream) {
           if (event.type !== 'content_block_delta') continue;

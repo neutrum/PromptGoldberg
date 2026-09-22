@@ -57,7 +57,7 @@ export type Validation<T> = { ok: true; value: T } | { ok: false; problems: stri
  */
 export async function requestValidated<T>(
   llm: LlmBackend,
-  req: { system: string; prompt: string; maxTokens?: number },
+  req: { system: string; prompt: string; maxTokens?: number; thinking?: 'off' },
   validate: (json: unknown) => Validation<T>,
   calls: Completion[],
   retries = 1,
@@ -71,7 +71,7 @@ export async function requestValidated<T>(
       soFar += delta;
       onProgress(soFar);
     });
-    const reply = await llm.complete({ system: req.system, prompt, maxTokens: req.maxTokens, onText });
+    const reply = await llm.complete({ system: req.system, prompt, maxTokens: req.maxTokens, onText, thinking: req.thinking });
     calls.push(reply);
 
     let problems: string;

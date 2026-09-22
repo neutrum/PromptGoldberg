@@ -133,7 +133,8 @@ export async function coachTip(req: CoachRequest, llm: LlmBackend | null, opts: 
   let timer: NodeJS.Timeout | undefined;
   try {
     const reply = await Promise.race([
-      llm.complete({ system: COACH_SYSTEM, prompt: context, maxTokens: 120, model: COACH_MODEL() }),
+      // No thinking: it would eat the small token budget and delay a tip the player is waiting for.
+      llm.complete({ system: COACH_SYSTEM, prompt: context, maxTokens: 120, model: COACH_MODEL(), thinking: 'off' }),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error('coach timeout')), opts.timeoutMs ?? 8000);
       }),
