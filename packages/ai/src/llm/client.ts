@@ -51,8 +51,12 @@ export class LlmError extends Error {
 }
 
 const MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5';
-/** How much Claude thinks before answering (API backend): low | medium | high | xhigh | max. Unset = the model default (high). */
-const EFFORT = process.env.CLAUDE_EFFORT as Effort | undefined;
+/**
+ * How much Claude thinks before answering (API backend): low | medium | high | xhigh | max.
+ * Default low: measured on level design, high sometimes thought for 1-2 minutes before the first
+ * word (first text 9-129 s) while low answered in 2-7 s and still produced solvable levels.
+ */
+const EFFORT = (process.env.CLAUDE_EFFORT || 'low') as Effort;
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 

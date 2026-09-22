@@ -1,8 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { setImmediate as yieldToLoop } from 'node:timers/promises';
 import {
-  Level, applyTunables, checkShot, controlValues, levelFromSpec,
-  type LevelStage, type LevelStreamEvent, type OptimizeResult,
+  Level, applyTunables, controlValues, levelFromSpec,
+  type GoalResult, type LevelStage, type LevelStreamEvent, type OptimizeResult,
 } from '@og/shared';
 import type { Completion, LlmBackend } from './llm/client';
 import { designLevel, editLevelDesign, editRequest, redesignLevel, type LevelDesign } from './llm/level';
@@ -31,6 +30,28 @@ interface Attempt {
 }
 
 const progressOf = (r: OptimizeResult) => (r.solved ? Infinity : r.result.progress);
+
+const TOO_SLOW_NOTE = 'the system was too slow to simulate (very tight or fast orbits, or a long run): use wider orbits, fewer close encounters and a shorter sim.duration';
+
+/** Goal result for a shot that could not be simulated in time: a plain miss. */
+function tooSlow(goalLength: number): GoalResult {
+  return {
+    success: false, satisfiedCount: 0, score: 0, progress: 0, failedAt: 0,
+    events: Array.from({ length: goalLength }, (_, index) => ({ index, satisfied: false, partial: 0, note: TOO_SLOW_NOTE })),
+  };
+}
+
+/** Runs one shot in the solver (worker, with a timeout); a shot too slow to simulate counts as a miss. */
+function shotChecker(solver: Solver, signal?: AbortSignal) {
+  return async (level: Level, values: number[]): Promise<GoalResult> => {
+    try {
+      return await solver.check(level, values, [], { timeoutMs: 10_000, signal });
+    } catch (err) {
+      if (signal?.aborted || !(err instanceof SolverError)) throw err;
+      return tooSlow(level.spec.goal.length);
+    }
+  };
+}
 
 export const newLevelId = (prefix: string) => `${prefix}-${randomBytes(4).toString('hex')}`;
 
@@ -126,13 +147,20 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
     });
     const goalLength = design.spec.goal.length;
     emit({ type: 'progress', attempt, evals: 0, bestScore: 0, goalLength });
-    const tuned = await deps.solver.optimize(design.spec, {
-      budget: deps.budget,
-      timeLimitMs: deps.timeLimitMs,
-      seed: attempt,
-      signal,
-      onProgress: (p) => emit({ type: 'progress', attempt, evals: p.evals, bestScore: p.bestScore, goalLength }),
-    });
+    let tuned: OptimizeResult;
+    try {
+      tuned = await deps.solver.optimize(design.spec, {
+        budget: deps.budget,
+        timeLimitMs: deps.timeLimitMs,
+        seed: attempt,
+        signal,
+        onProgress: (p) => emit({ type: 'progress', attempt, evals: p.evals, bestScore: p.bestScore, goalLength }),
+      });
+    } catch (err) {
+      // A design whose shots take too long to simulate is redesigned, not a failed request.
+      if (signal?.aborted || !(err instanceof SolverError)) throw err;
+      tuned = { spec: design.spec, values: [], result: tooSlow(goalLength), evals: 0, solved: false };
+    }
     emit({ type: 'progress', attempt, evals: tuned.evals, bestScore: tuned.result.score, goalLength });
     notes.push(tuned.solved
       ? `Design ${attempt}: solved after ${tuned.evals} simulated shots.`
@@ -147,7 +175,7 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
     if (!tuned.solved) continue;
 
     // A proven shot is not enough: players need some slack around it.
-    const level = await buildLevel(last, loop.level);
+    const level = await buildLevel(last, loop.level, shotChecker(deps.solver, signal));
     if (!level.solution) continue;
     emit({ type: 'draft', level, status: 'solved', attempt });
     const forgiving = await makeForgiving(level, check, deps.deadline);
@@ -159,7 +187,7 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
 
   if (bestBuilt) return { type: 'level', level: bestBuilt.level, solved: true, attempts, notes, cached: false, attempt: bestBuilt.attempt };
   if (!best) throw new SolverError('no design to build a level from');
-  const level = await buildLevel(best, loop.level);
+  const level = await buildLevel(best, loop.level, shotChecker(deps.solver, signal));
   return { type: 'level', level, solved: !!level.solution, attempts, notes, cached: false, attempt: bestAttempt };
 }
 
@@ -175,7 +203,7 @@ function draftLevel(design: LevelDesign, meta: LoopSpec['level']): Level {
 }
 
 /** Level from the best attempt: solution = tuned values, starting sliders = a sensible miss. */
-export async function buildLevel(best: Attempt, meta: LoopSpec['level']): Promise<Level> {
+export async function buildLevel(best: Attempt, meta: LoopSpec['level'], check: (level: Level, values: number[]) => Promise<GoalResult>): Promise<Level> {
   const { design, tuned } = best;
   const base = levelFromSpec(tuned.spec, {
     id: meta.id,
@@ -184,10 +212,6 @@ export async function buildLevel(best: Attempt, meta: LoopSpec['level']): Promis
     par: meta.par,
   });
   const solution = controlValues(base);
-  const check = async (level: Level, values: number[]) => {
-    await yieldToLoop();
-    return checkShot(level, values).goal;
-  };
   const solved = tuned.solved && (await check(base, solution)).success;
   const guess = valuesFromSpec(design.spec, base.controls);
 

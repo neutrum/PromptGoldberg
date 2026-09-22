@@ -248,6 +248,7 @@ function ResultCard({ level }: { level: Level }) {
         {source?.kind === 'daily' && <button onClick={() => void shareDaily()}>Share result</button>}
         {source?.kind !== 'endless' && source?.kind !== 'daily' && <button onClick={() => void share()}>Share level</button>}
         {canPublish && !publishedId && <button onClick={() => void doPublish()}>Publish to community</button>}
+        {source?.kind !== 'ai' && <button onClick={() => go('create')}>✨ Create your own level</button>}
       </div>
     </div>
   );
@@ -362,7 +363,7 @@ export function PlayScreen() {
     <aside className="hud-side">
       <PiecesPanel level={level} />
       <Assist level={level} />
-      {!narrow && (source?.kind === 'ai' || source?.kind === 'shared' || source?.kind === 'gallery') && <AiEdit />}
+      {(source?.kind === 'ai' || source?.kind === 'shared' || source?.kind === 'gallery') && <AiEdit />}
     </aside>
   );
   const liveStars = level ? (shots.length < level.par ? 3 : shots.length < 2 * level.par ? 2 : 1) - (usedHint ? 1 : 0) : 0;

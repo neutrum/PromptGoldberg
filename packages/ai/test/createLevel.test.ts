@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkShot, controlValues } from '@og/shared';
-import { createLevel, createSolver, LlmError } from '../src';
+import { createLevel, createSolver, LlmError, SolverError } from '../src';
 import { FakeLlm, levelReply } from './helpers';
 
 // Inline solver: no worker threads, so tests stay fast and deterministic.
@@ -43,6 +43,20 @@ describe('createLevel', () => {
     expect(res.level.controls.map((c) => c.path)).toEqual(first.level.controls.map((c) => c.path));
     expect(res.level.briefing).toBe('Now with a heavier Jove.');
     expect(llm.requests[0].prompt).toContain('make Jove heavier');
+  });
+
+  it('redesigns a design that is too slow to simulate instead of failing', async () => {
+    let calls = 0;
+    const slowOnce: typeof solver = {
+      ...solver,
+      get mode() { return solver.mode; },
+      optimize: (spec, job) => (++calls === 1 ? Promise.reject(new SolverError('simulation took too long')) : solver.optimize(spec, job)),
+    };
+    const llm = new FakeLlm([levelReply()]);
+    const res = await createLevel({ prompt: 'grand tour' }, { llm, solver: slowOnce });
+    expect(res.solved).toBe(true);
+    expect(res.attempts).toBe(2);
+    expect(llm.requests[1].prompt).toContain('too slow to simulate');
   });
 
   it('fails clearly when no LLM backend is available', async () => {
