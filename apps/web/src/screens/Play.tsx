@@ -6,6 +6,7 @@ import { GOAL_ICON, goalShort } from '../game/hints';
 import { copyText, galleryLink, levelLink } from '../game/share';
 import { formatTime } from '../format';
 import { GameScene } from '../scene/GameScene';
+import { isTouch, useNarrow } from '../ui/device';
 import { Tutorial } from './Tutorial';
 
 function sourceLabel(source: Source | null): string {
@@ -122,13 +123,13 @@ function PiecesPanel({ level }: { level: Level }) {
             className={placing === k ? 'active' : ''}
             disabled={phase === 'flying' || (full && placing !== k)}
             onClick={() => setPlacing(placing === k ? null : k)}
-            title="Click in space to place it on an orbit"
+            title={`${isTouch ? 'Tap' : 'Click'} in space to place it on an orbit`}
           >
             <span className="piece-dot" style={{ background: PIECE_BODIES[k].color }} /> {k === 'giant' ? 'Gas giant' : 'Planet'}
           </button>
         ))}
       </div>
-      {placing && <div className="muted">Click in space to drop it. It orbits the star from there.</div>}
+      {placing && <div className="muted">{isTouch ? 'Tap or drag' : 'Click'} in space to drop it. It orbits the star from there.</div>}
       {pieces.map((p, i) => (
         <div key={i} className="piece-item">
           <span className="piece-dot" style={{ background: PIECE_BODIES[p.kind].color }} /> {p.kind} at {p.r.toFixed(2)} AU
@@ -272,7 +273,8 @@ export function PlayScreen() {
   const endless = useGame((s) => s.endless);
   const usedHint = useGame((s) => s.usedHint);
   const progress = useGame((s) => s.progress);
-  const { go, toggleMute, replayTutorials } = useGame.getState();
+  const { go, toggleMute, replayTutorials, skipFlight } = useGame.getState();
+  const narrow = useNarrow();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -305,6 +307,13 @@ export function PlayScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const side = level && (
+    <aside className="hud-side">
+      <PiecesPanel level={level} />
+      <Assist level={level} />
+      {!narrow && (source?.kind === 'ai' || source?.kind === 'shared' || source?.kind === 'gallery') && <AiEdit />}
+    </aside>
+  );
   const liveStars = level ? (shots.length < level.par ? 3 : shots.length < 2 * level.par ? 2 : 1) - (usedHint ? 1 : 0) : 0;
 
   return (
@@ -338,21 +347,22 @@ export function PlayScreen() {
             </div>
           </header>
 
-          <aside className="hud-side">
-            <PiecesPanel level={level} />
-            <Assist level={level} />
-            {(source?.kind === 'ai' || source?.kind === 'shared' || source?.kind === 'gallery') && <AiEdit />}
-          </aside>
+          {!narrow && side}
 
           <footer className="hud-bottom">
             {phase === 'result' && <ResultCard level={level} />}
-            {phase === 'flying' && <div className="skip muted">Space to skip</div>}
+            {phase === 'flying' && (isTouch
+              ? <button className="skip-btn" onClick={skipFlight}>Skip ▸▸</button>
+              : <div className="skip muted">Space to skip</div>)}
+            {narrow && phase === 'aiming' && side}
             {error && phase !== 'loading' && <div className="error-inline">{error}</div>}
             <ControlsPanel level={level} />
             <div className="keys muted">
               {level.controls.length === 0
                 ? 'The shot is fixed: build the machine with pieces, then launch'
-                : 'Drag back from the glowing probe to aim · ←→ aim · ↑↓ power · Q/E timing · Shift for fine steps'}
+                : isTouch
+                  ? 'Drag back from the glowing probe to aim · pinch to zoom · two fingers to pan'
+                  : 'Drag back from the glowing probe to aim · ←→ aim · ↑↓ power · Q/E timing · Shift for fine steps'}
             </div>
           </footer>
           {phase !== 'loading' && <Tutorial key={level.id + level.title} level={level} />}

@@ -16,12 +16,29 @@ const desired = new THREE.Vector3();
 const delta = new THREE.Vector3();
 
 /**
+ * The part of the canvas the HUD leaves free: how far to pull the camera back so the system
+ * fits in it (1 on a wide desktop screen), and how far the free area's center sits above the
+ * canvas center, in CSS px.
+ */
+function freeArea(canvas: HTMLCanvasElement): { zoom: number; lift: number } {
+  const rect = canvas.getBoundingClientRect();
+  const top = document.querySelector('.hud-top')?.getBoundingClientRect().bottom ?? rect.top;
+  const bottom = document.querySelector('.hud-bottom')?.getBoundingClientRect().top ?? rect.bottom;
+  const freeH = Math.max(rect.height * 0.3, bottom - top);
+  const zoom = THREE.MathUtils.clamp(rect.height / Math.min(freeH * 1.4, rect.width), 1, 2.5);
+  const lift = (rect.top + rect.bottom) / 2 - (top + bottom) / 2;
+  return { zoom, lift };
+}
+
+/**
  * Overview while aiming; during a flight the view glides after the player, zooming in once
  * at launch and then respecting whatever zoom and angle the user picks.
  */
 export function GameCamera({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
   const controls = useRef<OrbitControlsImpl>(null);
-  const camera = useThree((s) => s.camera);
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const gl = useThree((s) => s.gl);
+  const view = useRef({ zoom: 1, lift: 0 });
   const phase = useGame((s) => s.phase);
   const transition = useRef({ phase, since: 0, fromDist: 0 });
 
@@ -29,10 +46,13 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
     camera.near = scale * 1e-4;
     camera.far = scale * 2000;
     camera.updateProjectionMatrix();
-    camera.position.set(0, scale * 2.1, scale * 0.95);
+    view.current = freeArea(gl.domElement);
+    camera.position.set(0, scale * 2.1, scale * 0.95).multiplyScalar(view.current.zoom);
     controls.current?.target.set(0, 0, 0);
     controls.current?.update();
-  }, [camera, scale]);
+  }, [camera, gl, scale]);
+
+  useEffect(() => () => { camera.clearViewOffset(); }, [camera]);
 
   useFrame((state, dt) => {
     const c = controls.current;
@@ -45,6 +65,14 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
     }
     const age = state.clock.elapsedTime - tr.since;
     const k = 1 - Math.exp(-dt * 5);
+
+    // Keep the scene centered in the space between the HUD panels, easing as they change size.
+    const free = freeArea(gl.domElement);
+    const v = view.current;
+    v.zoom = free.zoom;
+    v.lift += (free.lift - v.lift) * (1 - Math.exp(-dt * 6));
+    const { width, height } = gl.domElement.getBoundingClientRect();
+    if (width > 0 && height > 0) camera.setViewOffset(width, height, 0, v.lift, width, height);
     const i = run.ids.indexOf(level.player);
 
     if ((phase === 'flying' || phase === 'result') && i >= 0 && positionAt(run, i, useStore.getState().time, tmp)) {
@@ -58,7 +86,7 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
 
     // One-off zoom after a phase change, then hands off to the user.
     if (age < 1.2) {
-      const goal = phase === 'flying' ? scale * 0.55 : phase === 'aiming' ? scale * 2.3 : null;
+      const goal = phase === 'flying' ? scale * 0.55 * Math.sqrt(v.zoom) : phase === 'aiming' ? scale * 2.3 * v.zoom : null;
       if (goal !== null) {
         const offset = camera.position.clone().sub(c.target);
         const dist = offset.length();

@@ -12,6 +12,11 @@ export const PREVIEW_FRACTION = 0.3;
 
 const RAD = 180 / Math.PI;
 
+/** How close to the probe (CSS px) a press grabs it; fingers need more room than a mouse. */
+const grabRadius = (e: PointerEvent) => (e.pointerType === 'mouse' ? 56 : 80);
+/** Pull distance (CSS px) for full power; shorter on small screens so a thumb can reach it. */
+const fullPull = () => Math.min(220, Math.max(130, 0.42 * Math.min(window.innerWidth, window.innerHeight)));
+
 /** Dashed path of the first part of the shot. */
 export function PreviewPath({ run, level }: { run: RunData; level: Level }) {
   const i = run.ids.indexOf(level.player);
@@ -92,6 +97,10 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
   const basis = useMemo(() => launchBasis(run, level, Math.min(time, run.duration)), [run, level, time]);
 
   const drag = useRef<{ active: boolean; pointer: THREE.Vector3 }>({ active: false, pointer: new THREE.Vector3() });
+  /** Pointer id of a press that will drop a piece on release (the ghost ring follows it meanwhile). */
+  const placeDrag = useRef<number | null>(null);
+  /** Whether `hover` tracks a real pointer (a mouse, or a finger that is down). */
+  const hoverLive = useRef(false);
   const hover = useRef(new THREE.Vector3());
   const band = useRef<THREE.Line>(null);
   const arrow = useRef<THREE.Group>(null);
@@ -131,33 +140,41 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
       }
       if (speedIdx >= 0) {
         const c = level.controls[speedIdx];
-        const f = Math.min(1, Math.max(0, (pixels - 12) / 220));
+        const f = Math.min(1, Math.max(0, (pixels - 12) / fullPull()));
         game.setValue(speedIdx, c.min + f * (c.max - c.min));
       }
+    };
+
+    const dropPiece = (e: PointerEvent) => {
+      const game = useGame.getState();
+      const p = new THREE.Vector3();
+      if (!game.placing || !planePoint(e, p)) return;
+      const anchor = anchorBody(run.spec);
+      const ai = run.ids.indexOf(anchor.id);
+      const ap = [0, 0, 0];
+      simPositionAt(run, ai, time, ap);
+      const x = p.x - ap[0], y = -p.z - ap[1];
+      const r = Math.hypot(x, y);
+      if (r < scale * 0.03) return;
+      const period = orbitalPeriod(r, anchor.mass + PIECE_BODIES[game.placing].mass);
+      const angle = ((Math.atan2(y, x) * RAD - (360 * time) / period) % 360 + 360) % 360;
+      game.placePiece({ kind: game.placing, r, angle });
     };
 
     const onDown = (e: PointerEvent) => {
       const game = useGame.getState();
       if (e.button !== 0 || game.phase === 'flying') return;
       if (game.placing) {
-        const p = new THREE.Vector3();
-        if (!planePoint(e, p)) return;
+        // Drop on release, so a finger can slide to the spot while the ghost orbit follows.
+        if (!e.isPrimary || !planePoint(e, hover.current)) return;
         e.stopPropagation();
-        const anchor = anchorBody(run.spec);
-        const ai = run.ids.indexOf(anchor.id);
-        const ap = [0, 0, 0];
-        simPositionAt(run, ai, time, ap);
-        const x = p.x - ap[0], y = -p.z - ap[1];
-        const r = Math.hypot(x, y);
-        if (r < scale * 0.03) return;
-        const period = orbitalPeriod(r, anchor.mass + PIECE_BODIES[game.placing].mass);
-        const angle = ((Math.atan2(y, x) * RAD - (360 * time) / period) % 360 + 360) % 360;
-        game.placePiece({ kind: game.placing, r, angle });
+        placeDrag.current = e.pointerId;
+        hoverLive.current = true;
         return;
       }
       if (!canDrag) return;
       const s = padOnScreen();
-      if (!s || Math.hypot(e.clientX - s.x, e.clientY - s.y) > 56) return;
+      if (!s || Math.hypot(e.clientX - s.x, e.clientY - s.y) > grabRadius(e)) return;
       e.stopPropagation();
       drag.current.active = true;
       document.body.style.cursor = 'grabbing';
@@ -168,27 +185,42 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
         applyDrag(e);
         return;
       }
+      if (placeDrag.current !== null && e.pointerId !== placeDrag.current) return;
+      if (e.pointerType === 'mouse') hoverLive.current = true;
+      else if (placeDrag.current === null) return;
       planePoint(e, hover.current);
       if (useGame.getState().placing) {
         document.body.style.cursor = 'crosshair';
         return;
       }
       const s = padOnScreen();
-      const near = canDrag && s && Math.hypot(e.clientX - s.x, e.clientY - s.y) <= 56;
+      const near = canDrag && s && Math.hypot(e.clientX - s.x, e.clientY - s.y) <= grabRadius(e);
       document.body.style.cursor = near ? 'grab' : '';
     };
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
+      if (placeDrag.current === e.pointerId) {
+        placeDrag.current = null;
+        hoverLive.current = e.pointerType === 'mouse';
+        dropPiece(e);
+      }
       if (!drag.current.active) return;
       drag.current.active = false;
       document.body.style.cursor = '';
     };
+    const onCancel = (e: PointerEvent) => {
+      if (placeDrag.current === e.pointerId) placeDrag.current = null;
+      hoverLive.current = e.pointerType === 'mouse';
+      drag.current.active = false;
+    };
     el.addEventListener('pointerdown', onDown, { capture: true });
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
     return () => {
       el.removeEventListener('pointerdown', onDown, { capture: true });
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
       document.body.style.cursor = '';
     };
   }, [gl, camera, basis, run, level, scale, time, canDrag, angleIdx, speedIdx]);
@@ -247,7 +279,7 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
     }
     if (ghost.current) {
       const placingNow = useGame.getState().placing;
-      ghost.current.visible = !!placingNow && aiming;
+      ghost.current.visible = !!placingNow && aiming && hoverLive.current;
       if (placingNow) {
         const anchor = anchorBody(run.spec);
         const ap = [0, 0, 0];

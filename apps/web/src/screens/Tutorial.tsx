@@ -2,6 +2,7 @@ import type { Level } from '@og/shared';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useGame } from '../game/gameStore';
 import { padScreen } from '../scene/Aim';
+import { isTouch } from '../ui/device';
 
 type TutorialId = 'aim' | 'pieces';
 type GameSnapshot = ReturnType<typeof useGame.getState>;
@@ -41,12 +42,12 @@ const AIM: Step[] = [
     anchor: { pad: true }, side: 'below', button: 'Got it',
   },
   {
-    text: <>Fire! Press <b>LAUNCH</b> or <kbd>Space</kbd>.</>,
+    text: isTouch ? <>Fire! Tap <b>LAUNCH</b>.</> : <>Fire! Press <b>LAUNCH</b> or <kbd>Space</kbd>.</>,
     anchor: { selector: '.launch' }, side: 'above', highlight: '.launch',
     done: (g) => g.phase === 'flying',
   },
   {
-    text: <>Rings light up as each step happens, and time slows at close passes. <kbd>Space</kbd> skips ahead.</>,
+    text: <>Rings light up as each step happens, and time slows at close passes. {isTouch ? <><b>Skip</b></> : <kbd>Space</kbd>} skips ahead.</>,
     anchor: { selector: '.chain' }, side: 'below',
     done: (g) => g.phase === 'result',
     then: (g) => (g.outcome?.success ? 5 : 6),
@@ -71,12 +72,12 @@ const PIECES: Step[] = [
     done: (g) => g.placing !== null || g.pieces.length > 0,
   },
   {
-    text: <><b>Click anywhere in space</b> to drop it. It orbits the star from that spot, and its gravity bends the probe’s path.</>,
+    text: <><b>{isTouch ? 'Tap' : 'Click'} anywhere in space</b> to drop it. It orbits the star from that spot, and its gravity bends the probe’s path.</>,
     anchor: { center: true }, side: 'below',
     done: (g) => g.pieces.length > 0,
   },
   {
-    text: <>See the dashed preview bend? Remove a piece with <b>✕</b> or by clicking it, try other spots, then launch.</>,
+    text: <>See the dashed preview bend? Remove a piece with <b>✕</b> or by {isTouch ? 'tapping' : 'clicking'} it, try other spots, then launch.</>,
     anchor: { selector: '.pieces' }, side: 'left',
     done: (g) => g.phase === 'flying',
     then: () => 'finish',
@@ -158,11 +159,19 @@ export function Tutorial({ level }: { level: Level }) {
       const el = bubble.current;
       const hl = step.highlight ? document.querySelector(step.highlight) : null;
       hl?.classList.add('tut-highlight');
-      const p = anchorPoint(step.anchor, step.side) ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
       if (el) {
         const w = el.offsetWidth, h = el.offsetHeight, gap = 'pad' in step.anchor ? 40 : 18, m = 10;
-        let x = step.side === 'left' ? p.x - w - gap : p.x - w / 2;
-        let y = step.side === 'above' ? p.y - h - gap : step.side === 'below' ? p.y + gap : p.y - h / 2;
+        // On narrow screens a 'left' bubble would cover its anchor; sit above it instead.
+        let side = step.side;
+        let p = anchorPoint(step.anchor, side);
+        if (side === 'left' && p && p.x - w - gap < m) {
+          side = 'above';
+          p = anchorPoint(step.anchor, side);
+        }
+        p ??= { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        el.className = `tutorial side-${side}`;
+        let x = side === 'left' ? p.x - w - gap : p.x - w / 2;
+        let y = side === 'above' ? p.y - h - gap : side === 'below' ? p.y + gap : p.y - h / 2;
         x = Math.min(window.innerWidth - w - m, Math.max(m, x));
         y = Math.min(window.innerHeight - h - m, Math.max(m, y));
         el.style.transform = `translate(${x}px, ${y}px)`;
