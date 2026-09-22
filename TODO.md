@@ -6,7 +6,7 @@ Hackathon deadline: **Nov 11, 16:30 CEST** (submit a day early). Hosted demo mus
 
 - [ ] **Playtest with 3–5 people who have never seen the game.** Watch them play the tutorial and levels 1–5 without helping. Note where they get stuck, what they misread, and how many shots each level takes. Adjust par and level order from this.
 - [x] **Mobile / touch polish.** Checked in emulated phones (390×844): side panels move into the bottom stack, the camera frames the system in the space the HUD leaves free, larger grab radius, press-drag-release piece placement, tappable Skip, and touch-worded tutorial. Still to do: try it on a real phone (iOS Safari and Android Chrome).
-- [ ] **Deploy.** VPS or managed host, `NODE_ENV=production`, `ANTHROPIC_API_KEY` set (the CLI backend is refused in production), `TRUST_PROXY=1` behind a proxy, persistent `DATA_DIR` for the gallery, and uptime monitoring through Nov 25.
+- [x] **Deploy.** Live on Railway: https://ogserver-production.up.railway.app (Dockerfile + railway.json, volume at /data, see DEPLOY.md). Still to do: move to the Hobby plan before the free trial ends, add uptime monitoring on `/api/health`, raise `DAILY_LLM_CALL_CAP` to about 300 for judging. Measured live: first AI draft 30 s, final version 169 s (slower than local; the free trial has 2 shared vCPUs).
 - [ ] **Demo video (under 3 min).** A prompt → the AI designs → the optimizer proves the level can be won → you beat it; show the tutorial, a build level and the daily challenge.
 - [ ] **Submission:** short description, focus category (confirm on Discord), public repo link, hosted link, `CREDITS.md` check.
 
