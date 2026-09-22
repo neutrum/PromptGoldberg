@@ -151,12 +151,12 @@ function cliBackend(): LlmBackend {
 }
 
 /**
- * LLM_BACKEND=api|cli picks explicitly. Otherwise: API when a key is set, else the
- * CLI outside production. The CLI backend is refused when NODE_ENV=production.
+ * `choice` (or LLM_BACKEND=api|cli) picks explicitly. Otherwise: API when a key is set, else
+ * the CLI outside production. The CLI backend is refused when NODE_ENV=production.
  */
-export function createLlm(): LlmBackend | null {
+export function createLlm(choice?: LlmBackendName): LlmBackend | null {
   const production = process.env.NODE_ENV === 'production';
-  const choice = process.env.LLM_BACKEND ?? (process.env.ANTHROPIC_API_KEY ? 'api' : production ? 'none' : 'cli');
+  choice ??= (process.env.LLM_BACKEND as LlmBackendName | undefined) ?? (process.env.ANTHROPIC_API_KEY ? 'api' : production ? undefined : 'cli');
   if (choice === 'cli') {
     if (production) throw new Error('LLM_BACKEND=cli is for local development only.');
     return cliBackend();

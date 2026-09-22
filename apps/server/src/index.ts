@@ -2,8 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { buildApp } from './app';
-import type { SolverMode } from './game/solver';
-import { createLlm } from './llm/client';
+import { createLlm, type SolverMode } from '@og/ai';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const WEB_DIST = resolve(import.meta.dirname, '../../web/dist');

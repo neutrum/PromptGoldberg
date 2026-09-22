@@ -5,12 +5,11 @@ import {
   type CoachRequest, type GallerySort, type Level, type LevelStreamEvent,
 } from '@og/shared';
 import { LevelCache } from './cache';
-import { coachTip } from './coach';
 import { GalleryStore } from './gallery';
-import { editLevel, generateLevel, type PipelineDeps } from './game/pipeline';
-import { SolverError, createSolver, type Solver, type SolverMode } from './game/solver';
-import { LlmError, type LlmBackend } from './llm/client';
-import { designSystem } from './llm/design';
+import {
+  coachTip, createLevel, createSolver, designSystem, LlmError, SolverError,
+  type CreateLevelResult, type LevelRequest, type LlmBackend, type Solver, type SolverMode,
+} from '@og/ai';
 import { DailyCap, RateLimiter } from './rateLimit';
 import { openSse } from './sse';
 
@@ -96,10 +95,14 @@ export async function buildApp(opts: AppOptions) {
     return 'Something went wrong while building the level. Please try again.';
   };
 
-  const deps = (signal: AbortSignal): PipelineDeps => ({
-    llm: llm!, solver, signal,
-    maxAttempts: limits.maxAttempts, budget: limits.solveBudget, timeLimitMs: limits.solveTimeMs,
-  });
+  /** The whole AI side is one call; the server only adds limits, streaming and caching. */
+  const runAi = async (request: LevelRequest, emit: (e: LevelStreamEvent) => void, signal: AbortSignal): Promise<Extract<LevelStreamEvent, { type: 'level' }>> => {
+    const res: CreateLevelResult = await createLevel(request, {
+      llm: llm!, solver, signal, onEvent: emit,
+      maxAttempts: limits.maxAttempts, budget: limits.solveBudget, timeLimitMs: limits.solveTimeMs,
+    });
+    return { type: 'level', level: res.level, solved: res.solved, attempts: res.attempts, notes: res.notes, cached: false };
+  };
 
   /** Reply with a single-error SSE stream (status still reflects the failure). */
   const sseError = (reply: FastifyReply, status: number, error: string) => {
@@ -197,7 +200,7 @@ export async function buildApp(opts: AppOptions) {
     if (blocked) return sseError(reply, blocked.status, blocked.error);
 
     await streamPipeline(req, reply, async (emit, signal) => {
-      const event = await generateLevel(deps(signal), prompt, emit);
+      const event = await runAi({ prompt }, emit, signal);
       if (event.solved) {
         const { cached: _cached, ...rest } = event;
         await cache.put(prompt, rest).catch((err) => req.log.warn({ err }, 'could not write level cache'));
@@ -215,7 +218,7 @@ export async function buildApp(opts: AppOptions) {
     const blocked = guardLlm(req);
     if (blocked) return sseError(reply, blocked.status, blocked.error);
 
-    await streamPipeline(req, reply, (emit, signal) => editLevel(deps(signal), parsed.level, instruction, emit));
+    await streamPipeline(req, reply, (emit, signal) => runAi({ level: parsed.level, instruction }, emit, signal));
   });
 
   app.post<{ Body: Partial<CoachRequest> }>('/api/coach', async (req, reply) => {

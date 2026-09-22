@@ -1,0 +1,20 @@
+{
+  "name": "@og/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
+    "@og/shared": "*",
+    "zod": "^4.6.5"
+  },
+  "scripts": {
+    "eval": "tsx --env-file-if-exists=../../.env scripts/eval.ts",
+    "solve": "tsx --env-file-if-exists=../../.env scripts/solve.ts"
+  }
+}

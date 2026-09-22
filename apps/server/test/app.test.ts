@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { checkShot, controlValues, type Level, type LevelStreamEvent } from '@og/shared';
 import slingshot from '@og/shared/fixtures/slingshot.json' with { type: 'json' };
 import { buildApp, type Limits } from '../src/app';
-import type { LlmBackend } from '../src/llm/client';
+import type { LlmBackend } from '@og/ai';
 import { parseSse } from '../src/sse';
 import { FakeLlm, clone, impossibleSpec, levelReply, slingshotLevel, tempDir } from './helpers';
 

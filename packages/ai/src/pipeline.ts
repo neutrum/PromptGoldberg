@@ -4,8 +4,8 @@ import {
   Level, applyTunables, checkShot, controlValues, levelFromSpec,
   type LevelStage, type LevelStreamEvent, type OptimizeResult,
 } from '@og/shared';
-import type { Completion, LlmBackend } from '../llm/client';
-import { designLevel, editLevelDesign, editRequest, redesignLevel, type LevelDesign } from '../llm/level';
+import type { Completion, LlmBackend } from './llm/client';
+import { designLevel, editLevelDesign, editRequest, redesignLevel, type LevelDesign } from './llm/level';
 import { SolverError, type Solver } from './solver';
 import { chooseStartValues, roundForControl, valuesFromSpec } from './startValues';
 

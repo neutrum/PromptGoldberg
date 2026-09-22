@@ -39,11 +39,17 @@ packages/shared   Pure TS used by browser worker and server
   game/level.ts   Level schema (spec + player body + controls + par + pieces + solution), scoring
   game/procgen.ts Seeded procedural levels for daily / endless, verified solvable
   levels/         Campaign
+packages/ai       The AI level designer as one call, createLevel(); no server, UI or renderer code
+  index.ts        createLevel({prompt} | {level, instruction}, options) -> {level, solved, attempts, notes, usage}
+  pipeline.ts     Design -> optimizer proof -> redesign loop; starting sliders that miss
+  llm/            Claude API and Claude Code CLI backends, prompts, reply validation
+  solver.ts       Optimizer in worker_threads; coach.ts: miss tips
+  scripts/        eval.ts (prompt-set eval), solve.ts (one level from the command line)
 apps/web          Vite + React Three Fiber; simulation, optimizer and procgen run in Web Workers
   game/           Game store, WebAudio synth sfx, hints, share links, API client
   scene/          GameScene (flight playback + slow-mo), Aim (drag to aim, piece placement), Checkpoints, Effects
   screens/        Menu, campaign, play HUD, create, community, sandbox
-apps/server       Fastify game backend: prompt -> proven-solvable level (SSE), talk-to-edit, coach, gallery
+apps/server       Fastify host around @og/ai: SSE streaming, rate limits, daily AI cap, prompt cache, gallery
 ```
 
 Units: AU, years, solar masses (G = 4π²). Launch `speed` is departure speed once clear of the source body's gravity.
@@ -66,16 +72,28 @@ npx tsx packages/shared/scripts/tune-fixture.ts packages/shared/src/fixtures/sli
 
 ### AI backend
 
-Two LLM backends, chosen in `apps/server/src/llm/client.ts`:
+All AI logic lives in `packages/ai` behind a single call, so the server, the scripts and any other client use it the same way:
+
+```ts
+import { createLevel } from '@og/ai';
+const { level, solved } = await createLevel({ prompt: 'A comet crashes into the moon' }, { onEvent: console.log });
+const harder = await createLevel({ level, instruction: 'make it harder' });
+```
+
+The result is plain level data (spec, controls, par, proven solution); rendering it is up to the caller.
+
+Two LLM backends, chosen in `packages/ai/src/llm/client.ts` (or per call with `llm: 'api' | 'cli'`):
 
 - **`cli` (dev only, default without a key):** runs the local Claude Code CLI headless (`claude -p`), so development uses your own Claude Code login. Refused when `NODE_ENV=production`.
 - **`api`:** the Claude API via `@anthropic-ai/sdk`; used automatically once `ANTHROPIC_API_KEY` is set. Required for the hosted demo.
 
 Copy `.env.example` to `.env` to override (`LLM_BACKEND`, `CLAUDE_MODEL`, `CLAUDE_COACH_MODEL`, rate limits, ...).
 
-**Repair loop** (`apps/server/src/game/pipeline.ts`): the LLM designs a level (system + briefing + tip + player body) -> the optimizer searches all tunables (600 evals / 12 s, in a `worker_threads` worker so the stream keeps flowing) -> on a miss the LLM redesigns from the goal checker's miss notes, up to 3 designs. The level's `solution` holds the proven control values; the starting sliders are the LLM's original guess if it misses, otherwise a nudge away from the solution that is checked to miss.
+**Repair loop** (`packages/ai/src/pipeline.ts`): the LLM designs a level (system + briefing + tip + player body) -> the optimizer searches all tunables (600 evals / 12 s, in a `worker_threads` worker so the stream keeps flowing) -> on a miss the LLM redesigns from the goal checker's miss notes, up to 3 designs. The level's `solution` holds the proven control values; the starting sliders are the LLM's original guess if it misses, otherwise a nudge away from the solution that is checked to miss.
 
-Try the pipeline without HTTP: `npm run solve -w @og/server -- "A comet swings past the gas giant and crashes into its moon"`.
+Try it without HTTP: `npm run solve -w @og/ai -- "A comet swings past the gas giant and crashes into its moon"`.
+
+Eval on a fixed set of 10 prompts (solve rate, time, how often random shots win, how often small nudges off the solution still win): `npm run eval -w @og/ai -- [--edits] [--out results.json]`.
 
 ### API
 
