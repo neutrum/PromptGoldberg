@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { launchTime, useGame } from '../game/gameStore';
 import type { RunData } from '../simClient';
 import { useStore } from '../store';
-import { frameAt, simPositionAt, simVelocityAt } from './frames';
+import { frameAt, positionAt, simPositionAt, simVelocityAt } from './frames';
 
 /** Share of the flight after launch that the dotted preview reveals. */
 export const PREVIEW_FRACTION = 0.3;
@@ -17,13 +17,11 @@ const grabRadius = (e: PointerEvent) => (e.pointerType === 'mouse' ? 56 : 80);
 /** Pull distance (CSS px) for full power; shorter on small screens so a thumb can reach it. */
 const fullPull = () => Math.min(220, Math.max(130, 0.42 * Math.min(window.innerWidth, window.innerHeight)));
 
-/** Dashed path of the first part of the shot. */
-export function PreviewPath({ run, level }: { run: RunData; level: Level }) {
-  const i = run.ids.indexOf(level.player);
+/** Dashed line along body `i`'s path between two times. */
+function DashedPath({ run, i, t0, t1, color, opacity = 0.85 }: { run: RunData; i: number; t0: number; t1: number; color: string; opacity?: number }) {
   const line = useMemo(() => {
-    const launchT = run.trace.launches[level.player] ?? 0;
-    const f0 = Math.max(0, Math.floor(frameAt(run, launchT)));
-    const f1 = Math.min(run.frameCount - 1, Math.ceil(frameAt(run, launchT + PREVIEW_FRACTION * (run.duration - launchT))));
+    const f0 = Math.max(0, Math.floor(frameAt(run, t0)));
+    const f1 = Math.min(run.frameCount - 1, Math.ceil(frameAt(run, t1)));
     const pts: THREE.Vector3[] = [];
     for (let f = f0; f <= f1; f++) {
       const o = f * run.frameStride + 1 + 3 * i;
@@ -32,14 +30,52 @@ export function PreviewPath({ run, level }: { run: RunData; level: Level }) {
     }
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
     const len = pts.reduce((s, p, k) => (k ? s + p.distanceTo(pts[k - 1]) : 0), 0);
-    const mat = new THREE.LineDashedMaterial({ color: '#ffffff', dashSize: len / 60, gapSize: len / 90, transparent: true, opacity: 0.85, depthWrite: false });
+    const mat = new THREE.LineDashedMaterial({ color, dashSize: len / 60, gapSize: len / 90, transparent: true, opacity, depthWrite: false });
     const l = new THREE.Line(geo, mat);
     l.computeLineDistances();
     l.frustumCulled = false;
     return l;
-  }, [run, level, i]);
+  }, [run, i, t0, t1, color, opacity]);
   useEffect(() => () => { line.geometry.dispose(); (line.material as THREE.Material).dispose(); }, [line]);
   return <primitive object={line} />;
+}
+
+/** The part of the flight the dashed preview reveals. */
+function previewWindow(run: RunData, level: Level): [number, number] {
+  const launchT = run.trace.launches[level.player] ?? 0;
+  return [launchT, launchT + PREVIEW_FRACTION * (run.duration - launchT)];
+}
+
+/** Dashed path of the first part of the shot. */
+export function PreviewPath({ run, level }: { run: RunData; level: Level }) {
+  const [t0, t1] = previewWindow(run, level);
+  return <DashedPath run={run} i={run.ids.indexOf(level.player)} t0={t0} t1={t1} color="#ffffff" />;
+}
+
+/** Where each placed piece travels while the probe flies its dashed preview, so pieces read as moving. */
+export function PieceArcs({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
+  const [t0, t1] = previewWindow(run, level);
+  const pieces = run.spec.bodies.filter((b) => /^piece\d+$/.test(b.id));
+  const end = new THREE.Vector3();
+  return (
+    <>
+      {pieces.map((b) => {
+        const i = run.ids.indexOf(b.id);
+        const color = b.color ?? '#ffffff';
+        return (
+          <group key={b.id}>
+            <DashedPath run={run} i={i} t0={t0} t1={t1} color={color} opacity={0.6} />
+            {positionAt(run, i, t1, end) && (
+              <mesh position={end.clone()}>
+                <sphereGeometry args={[scale * 0.006, 12, 12]} />
+                <meshBasicMaterial color={color} transparent opacity={0.45} toneMapped={false} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
+    </>
+  );
 }
 
 interface Basis {

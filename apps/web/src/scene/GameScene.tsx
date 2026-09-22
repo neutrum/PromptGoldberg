@@ -6,7 +6,7 @@ import { useGame } from '../game/gameStore';
 import { sfx } from '../game/audio';
 import type { RunData } from '../simClient';
 import { useStore } from '../store';
-import { AimController, PreviewPath } from './Aim';
+import { AimController, PieceArcs, PreviewPath } from './Aim';
 import { Bodies } from './Bodies';
 import { Checkpoints } from './Checkpoints';
 import { Bursts, burst, PlayerGlow } from './Effects';
@@ -144,6 +144,7 @@ function Level3D({ level }: { level: Level }) {
       <PlayerGlow run={run} level={level} scale={scale} />
       <Checkpoints run={run} level={level} scale={scale} />
       {phase === 'aiming' && <PreviewPath run={run} level={level} />}
+      {phase === 'aiming' && <PieceArcs run={run} level={level} scale={scale} />}
       {phase !== 'flying' && <AimController run={run} level={level} scale={scale} />}
       <Bursts scale={scale} />
     </>
