@@ -9,6 +9,7 @@ import {
 export type SolveTask =
   | { kind: 'optimize'; spec: SystemSpec; budget: number; timeLimitMs: number; seed: number }
   | { kind: 'check'; level: Level; values: number[]; pieces: Piece[] }
+  | { kind: 'checkMany'; level: Level; shots: number[][] }
   | { kind: 'evaluate'; spec: SystemSpec };
 
 export type WorkerMessage =
@@ -34,6 +35,8 @@ export interface Solver {
   /** Simulate one shot of a level; `timeoutMs` is enforced only in worker mode. */
   check(level: Level, values: number[], pieces: Piece[], opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<GoalResult>;
   evaluate(spec: SystemSpec, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<GoalResult>;
+  /** Many shots of one level in a single task (one worker instead of one per shot). */
+  checkMany(level: Level, shots: number[][], opts?: { signal?: AbortSignal }): Promise<GoalResult[]>;
 }
 
 const WORKER_URL = new URL('./solveWorker.ts', import.meta.url);
@@ -144,6 +147,11 @@ export function createSolver(mode: SolverMode = 'auto', maxConcurrent = Math.max
     check(level, values, pieces, opts = {}) {
       return attempt({ kind: 'check', level, values, pieces }, () => checkShot(level, values, pieces).goal, {
         timeoutMs: opts.timeoutMs ?? 10_000, signal: opts.signal,
+      });
+    },
+    checkMany(level, shots, opts = {}) {
+      return attempt({ kind: 'checkMany', level, shots }, () => shots.map((v) => checkShot(level, v).goal), {
+        timeoutMs: 10_000 + 2_000 * shots.length, signal: opts.signal,
       });
     },
     evaluate(spec, opts = {}) {

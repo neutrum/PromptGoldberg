@@ -89,6 +89,7 @@ for (const [idx, { prompt, curveball }] of PROMPTS.entries()) {
       bodies: level.spec.bodies.length, controls: level.controls.length, duration: level.spec.sim.duration,
       startMisses, randomRate: randomRate(level), robustness: robustness(level),
       notes: event.notes,
+      level,
       edit: undefined as Record<string, unknown> | undefined,
     };
     if (withEdits && event.solved) {

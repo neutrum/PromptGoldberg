@@ -89,7 +89,7 @@ Two LLM backends, chosen in `packages/ai/src/llm/client.ts` (or per call with `l
 
 Copy `.env.example` to `.env` to override (`LLM_BACKEND`, `CLAUDE_MODEL`, `CLAUDE_COACH_MODEL`, rate limits, ...).
 
-**Repair loop** (`packages/ai/src/pipeline.ts`): the LLM designs a level (system + briefing + tip + player body) -> the optimizer searches all tunables (600 evals / 12 s, in a `worker_threads` worker so the stream keeps flowing) -> on a miss the LLM redesigns from the goal checker's miss notes, up to 3 designs. The level's `solution` holds the proven control values; the starting sliders are the LLM's original guess if it misses, otherwise a nudge away from the solution that is checked to miss.
+**Repair loop** (`packages/ai/src/pipeline.ts`): the LLM designs a level (system + briefing + tip + player body) -> the optimizer searches all tunables (600 evals / 12 s, in a `worker_threads` worker so the stream keeps flowing) -> on a miss the LLM redesigns from the goal checker's miss notes, up to 3 designs. A solved level must then be forgiving: at least half of ±0.5% nudges to each control must still win (`forgiving.ts`). If not, the goal is loosened (wider flyby windows, bigger collision targets, as long as random shots still mostly miss), and if that is not enough the LLM redesigns it with the near-miss notes. The level's `solution` holds the proven control values; the starting sliders are the LLM's original guess if it misses, otherwise a nudge away from the solution that is checked to miss.
 
 Try it without HTTP: `npm run solve -w @og/ai -- "A comet swings past the gas giant and crashes into its moon"`.
 

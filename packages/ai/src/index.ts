@@ -32,6 +32,8 @@ export interface CreateLevelOptions {
   budget?: number;
   /** Optimizer time per design in ms (default 12 000). */
   timeLimitMs?: number;
+  /** Total time budget in ms (default 180 000): after it, no new redesign starts and the best level so far is returned. */
+  deadlineMs?: number;
   signal?: AbortSignal;
   /** Live progress: stages (designing, verifying, redesigning) and optimizer progress. */
   onEvent?: (event: LevelStreamEvent) => void;
@@ -86,6 +88,7 @@ export async function createLevel(request: LevelRequest, options: CreateLevelOpt
     budget: options.budget ?? 600,
     timeLimitMs: options.timeLimitMs ?? 12_000,
     signal: options.signal,
+    deadline: Date.now() + (options.deadlineMs ?? 180_000),
   };
   const emit = options.onEvent ?? (() => {});
   const event = 'prompt' in request

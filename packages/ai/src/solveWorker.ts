@@ -22,6 +22,8 @@ parentPort!.once('message', (task: SolveTask) => {
       post({ type: 'done', result: res });
     } else if (task.kind === 'check') {
       post({ type: 'done', result: checkShot(task.level, task.values, task.pieces).goal });
+    } else if (task.kind === 'checkMany') {
+      post({ type: 'done', result: task.shots.map((v) => checkShot(task.level, v).goal) });
     } else {
       post({ type: 'done', result: evaluateGoal(task.spec.goal, simulate(task.spec, { record: false }).trace) });
     }

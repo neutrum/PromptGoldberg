@@ -28,10 +28,16 @@ Hackathon deadline: **Nov 11, 16:30 CEST** (submit a day early). Hosted demo mus
 
 ## AI
 
-- [ ] Eval script: 10 test prompts; target 8/10 levels proven solvable within 3 designs, first level in under 60 s.
-- [ ] Curveball / off-topic prompts: check they become sensible space levels.
-- [ ] Talk-to-edit and the redesign path were only tested with the fake LLM; test with the real API.
-- [ ] Speed up AI level creation (~60 s now): cheaper model for the first design, or stream the design as soon as it's valid and verify in the background.
+All AI logic is in `packages/ai` behind one call, `createLevel()`. Eval: `npm run eval -w @og/ai -- --edits`.
+
+- [x] Eval script with 10 prompts (8 normal, 2 curveballs). Claude Code CLI backend, 2026-09-22:
+  - Baseline: 10/10 solved within 3 designs, 9/10 under 60 s (median 23 s), but 4/10 levels were knife-edge (17% or fewer of ±0.5% control nudges still won).
+  - After adding forgiveness (loosen the goal, else redesign with the near-miss notes): 10/10 solved, 8/10 under 60 s (median 44 s), least forgiving level 33%, 7/10 at 67% or more.
+- [x] Curveball prompts ("pizza", "my cat knocking things off the table") become sensible space levels.
+- [x] Talk-to-edit and redesign tested with the real model (CLI). One edit took 26 min once and did not reproduce (75 s on replay); probably slow CLI calls. `createLevel` now has a total deadline (server: `LEVEL_DEADLINE_MS`, 150 s).
+- [ ] Re-run the eval with `ANTHROPIC_API_KEY` once it is available (CLI timings include Claude Code start-up).
+- [ ] Speed: forgiveness redesigns roughly doubled the median time. Options: a cheaper model for the first design, or send the first solved level to the player and improve it in the background.
+- [ ] Levels are still hard for random play (0–10% of random shots win); watch in playtests whether the AI levels feel fair.
 
 ## Known technical notes
 

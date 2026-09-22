@@ -6,6 +6,7 @@ import {
 } from '@og/shared';
 import type { Completion, LlmBackend } from './llm/client';
 import { designLevel, editLevelDesign, editRequest, redesignLevel, type LevelDesign } from './llm/level';
+import { makeForgiving, MIN_ROBUSTNESS } from './forgiving';
 import { SolverError, type Solver } from './solver';
 import { chooseStartValues, roundForControl, valuesFromSpec } from './startValues';
 
@@ -19,6 +20,8 @@ export interface PipelineDeps {
   budget: number;
   timeLimitMs: number;
   signal?: AbortSignal;
+  /** Epoch ms after which no new redesign starts and loosening stops early. */
+  deadline?: number;
 }
 
 interface Attempt {
@@ -40,35 +43,57 @@ interface LoopSpec {
   level: { id: string; par?: number; briefing?: string; tip?: string; player?: string };
 }
 
-/** Design -> verify with the optimizer -> redesign on a miss, then build the playable level. */
+/** A solved attempt turned into a level, with how forgiving it is. */
+interface Built {
+  level: Level;
+  robustness: number;
+  missNotes: string[];
+}
+
+/**
+ * Design -> verify with the optimizer -> redesign on a miss or when the only winning shots are
+ * knife-edge, then return the best playable level.
+ */
 async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promise<LevelEvent> {
   const { maxAttempts, signal } = deps;
   const calls: Completion[] = [];
   const notes: string[] = [];
   let best: Attempt | null = null;
   let last: Attempt | null = null;
+  let lastBuilt: Built | null = null;
+  let bestBuilt: Built | null = null;
   let attempts = 0;
+  const check = (level: Level, shots: number[][]) => deps.solver.checkMany(level, shots, { signal });
 
+  const outOfTime = () => deps.deadline !== undefined && Date.now() > deps.deadline;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (signal?.aborted) throw new SolverError('aborted');
+    if (attempt > 1 && outOfTime()) {
+      notes.push(`Stopped before design ${attempt}: out of time.`);
+      break;
+    }
     let design: LevelDesign;
     if (attempt === 1) {
       emit({ type: 'stage', stage: loop.firstStage, attempt, maxAttempts, message: loop.firstMessage });
       design = await loop.design(calls);
     } else {
       const prev = last!;
+      const fragile = prev.tuned.solved && lastBuilt ? lastBuilt : null;
       emit({
         type: 'stage', stage: 'redesigning', attempt, maxAttempts,
-        message: `No solution found (best ${prev.tuned.result.satisfiedCount}/${prev.tuned.spec.goal.length} steps). Asking for a new design.`,
+        message: fragile
+          ? `Solvable, but only with pixel-perfect aim (${Math.round(100 * fragile.robustness)}% of near misses still win). Asking for a more forgiving design.`
+          : `No solution found (best ${prev.tuned.result.satisfiedCount}/${prev.tuned.spec.goal.length} steps). Asking for a new design.`,
       });
       try {
         design = await redesignLevel(deps.llm, {
           request: loop.request,
           previous: prev.tuned.spec,
-          goalNotes: prev.tuned.result.events.map((e) => e.note),
+          goalNotes: fragile ? fragile.missNotes : prev.tuned.result.events.map((e) => e.note),
           bestScore: prev.tuned.result.score,
           evals: prev.tuned.evals,
           keep: loop.keep,
+          fragile: fragile ? { robustness: fragile.robustness } : undefined,
         }, calls);
       } catch (err) {
         if (signal?.aborted) throw err;
@@ -98,10 +123,21 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
       : `Design ${attempt}: unsolved after ${tuned.evals} shots; ${tuned.result.events.find((e) => !e.satisfied)?.note ?? 'goal missed'}.`);
 
     last = { design, tuned };
+    lastBuilt = null;
     if (!best || progressOf(tuned) > progressOf(best.tuned)) best = last;
-    if (tuned.solved) break;
+    if (!tuned.solved) continue;
+
+    // A proven shot is not enough: players need some slack around it.
+    const level = await buildLevel(last, loop.level);
+    if (!level.solution) continue;
+    const forgiving = await makeForgiving(level, check, deps.deadline);
+    notes.push(`Design ${attempt}: ${forgiving.note}`);
+    lastBuilt = { level: forgiving.level, robustness: forgiving.robustness, missNotes: forgiving.missNotes };
+    if (!bestBuilt || lastBuilt.robustness > bestBuilt.robustness) bestBuilt = lastBuilt;
+    if (lastBuilt.robustness >= MIN_ROBUSTNESS) break;
   }
 
+  if (bestBuilt) return { type: 'level', level: bestBuilt.level, solved: true, attempts, notes, cached: false };
   if (!best) throw new SolverError('no design to build a level from');
   const level = await buildLevel(best, loop.level);
   return { type: 'level', level, solved: !!level.solution, attempts, notes, cached: false };

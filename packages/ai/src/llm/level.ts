@@ -26,6 +26,7 @@ Level rules:
 - Compact system: 3 to 6 bodies, one star at the origin (placement kind "free", zero velocity), orbits within about 10 AU. Moons orbit well inside their planet's Hill radius (a_planet * cbrt(m_planet / (3 * m_star))); a third of it or less. Inflate the radius of small collision targets (moons, asteroids) up to about 5x so hits are possible.
 - Short runs: sim.duration between 0.5 and 8 years; just long enough for the chain to finish. Leave out sim.dt.
 - Give bodies short lowercase ids, evocative names and hex colours.
+- Players aim by hand, so near misses of the right shot should still work: prefer big collision targets, moons on wide orbits and generous flyby distances, and avoid chains that only work with a grazing pass of a heavy planet.
 - If the request is not about space, reinterpret it playfully as a space level instead of refusing.
 
 JSON schema of the system:
@@ -100,10 +101,13 @@ export interface RedesignContext {
   bestScore: number;
   evals: number;
   keep?: { player: string; paths: string[] };
+  /** Set when the previous design was solvable but only with near-perfect aim. */
+  fragile?: { robustness: number };
 }
 
-/** Ask for a structurally different design after the optimizer could not solve the previous one. */
+/** Ask for a structurally different design after the optimizer could not solve the previous one (or only barely). */
 export async function redesignLevel(llm: LlmBackend, ctx: RedesignContext, calls: Completion[]): Promise<LevelDesign> {
+  if (ctx.fragile) return requestValidated(llm, { system: LEVEL_PROMPT, prompt: fragilePrompt(ctx) }, (json) => validateLevelDesign(json, ctx.keep), calls);
   const prompt = `${ctx.request}
 
 A previous design could not be solved: after ${ctx.evals} simulated shots over all tunables the best result completed ${ctx.bestScore.toFixed(2)} of ${ctx.previous.goal.length} goal events. The best attempt's goal checker said:
@@ -114,6 +118,18 @@ ${JSON.stringify(ctx.previous)}
 
 Redesign it so the goal becomes reachable while keeping the idea: for example move targets closer or onto the probe's natural path, loosen flyby distances, enlarge collision targets, widen tunable ranges around more plausible values, or lengthen sim.duration a little. Reply with the full JSON object (system plus briefing, tip and player).`;
   return requestValidated(llm, { system: LEVEL_PROMPT, prompt }, (json) => validateLevelDesign(json, ctx.keep), calls);
+}
+
+function fragilePrompt(ctx: RedesignContext): string {
+  return `${ctx.request}
+
+A previous design was solvable, but only with pixel-perfect aim: moving any launch control by half a percent of its range made the shot miss (only ${Math.round(100 * ctx.fragile!.robustness)}% of such near misses still won, even after enlarging the targets). Players aim by hand, so this is unplayable. The goal checker on near misses said:
+${ctx.goalNotes.map((n, i) => `${i + 1}. ${n}`).join('\n')}
+
+Previous design (with the optimizer's best values):
+${JSON.stringify(ctx.previous)}
+
+Redesign it so that near misses still work while keeping the idea: make collision targets much bigger, put moons on wider orbits, avoid chains that need a grazing pass of a heavy planet (small errors there get amplified), make flyby distances more generous, and keep the flight short. Keep every goal step the request asks for. Reply with the full JSON object (system plus briefing, tip and player).`;
 }
 
 /** Talk-to-edit: apply a plain-language change to an existing level. */

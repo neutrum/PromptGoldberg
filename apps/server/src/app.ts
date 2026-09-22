@@ -29,6 +29,8 @@ export interface Limits {
   maxAttempts: number;
   solveBudget: number;
   solveTimeMs: number;
+  /** Total time for one AI level request before the best level so far is returned. */
+  levelDeadlineMs: number;
   galleryMaxEntries: number;
 }
 
@@ -51,6 +53,7 @@ export function limitsFromEnv(env: NodeJS.ProcessEnv = process.env): Limits {
     maxAttempts: num(env.LEVEL_MAX_ATTEMPTS, 3),
     solveBudget: num(env.SOLVE_BUDGET, 600),
     solveTimeMs: num(env.SOLVE_TIME_MS, 12_000),
+    levelDeadlineMs: num(env.LEVEL_DEADLINE_MS, 150_000),
     galleryMaxEntries: num(env.GALLERY_MAX_ENTRIES, 1000),
   };
 }
@@ -100,6 +103,7 @@ export async function buildApp(opts: AppOptions) {
     const res: CreateLevelResult = await createLevel(request, {
       llm: llm!, solver, signal, onEvent: emit,
       maxAttempts: limits.maxAttempts, budget: limits.solveBudget, timeLimitMs: limits.solveTimeMs,
+      deadlineMs: limits.levelDeadlineMs,
     });
     return { type: 'level', level: res.level, solved: res.solved, attempts: res.attempts, notes: res.notes, cached: false };
   };
