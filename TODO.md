@@ -21,8 +21,8 @@ Hackathon deadline: **Nov 11, 16:30 CEST** (submit a day early). Hosted demo mus
 ## Game feel
 
 - [ ] Generated levels at difficulty 7+ are very hard (almost no random shots succeed); consider easier Endless difficulty steps or more forgiving flyby distances after playtesting.
-- [ ] Procgen starting sliders often sit at the edge of their range; start them nearer the middle.
-- [ ] Race-the-machine counter only updates when the optimizer improves; add a steady evaluation count.
+- [x] Procgen starting sliders start near the middle (was 34% of sliders within 10% of an edge, now 0% over 32 sample levels).
+- [x] Race-the-machine counter updates on every simulation (`onEval`, sent at most every 50 ms).
 - [ ] Pieces feel static but move during flight; consider showing their future orbit arc while placing.
 - [ ] Optional bloom/post-processing and a subtle ambient music loop (generated, to keep licensing clean).
 

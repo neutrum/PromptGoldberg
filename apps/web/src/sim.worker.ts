@@ -42,7 +42,7 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
           budget: req.budget,
           timeLimitMs: req.timeLimitMs,
           seed: (Math.random() * 2 ** 31) | 0,
-          onProgress: (p) => {
+          onEval: (p) => {
             const now = performance.now();
             if (now - lastPost < 50) return;
             lastPost = now;

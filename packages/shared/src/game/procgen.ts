@@ -513,11 +513,19 @@ function attempt(seed: number, difficulty: number, deadline: number): Attempt | 
 
   // --- traces for start candidates, robustness nudges and random play (goal-independent)
   const traceOf = (vals: number[]) => run(shotSpec(designLevel(spec), vals), false).trace;
+  // Sliders start near the middle of their range (easy to move either way); the edge is a last resort.
+  const startAt = (aim: number, power: number, time: number) => [
+    aimC + Math.round(aim * aimW),
+    round(lerp(pLo, pHi, power), 2),
+    round(time * tMax, 2),
+  ];
   const startCandidates = [
-    [aimC, round((pLo + pHi) / 2, 2), 0],
-    [aimC + Math.round(aimW / 2), round(lerp(pLo, pHi, 0.3), 2), round(tMax / 2, 2)],
-    [aimC - Math.round(aimW / 2), round(lerp(pLo, pHi, 0.7), 2), tMax],
-    [aimC - aimW, pLo, 0],
+    startAt(0, 0.5, 0.5),
+    startAt(0.3, 0.35, 0.35),
+    startAt(-0.3, 0.65, 0.65),
+    startAt(0.5, 0.6, 0.25),
+    startAt(-0.5, 0.4, 0.75),
+    startAt(-1, 0, 0),
   ].map((c) => c.slice(0, controls.length));
   const startTraces = startCandidates.map(traceOf);
 

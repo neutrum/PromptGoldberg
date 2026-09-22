@@ -9,7 +9,10 @@ export interface OptimizeOptions {
   /** Wall-clock cap in ms. */
   timeLimitMs?: number;
   seed?: number;
+  /** Called when the best score improves. */
   onProgress?: (p: { evals: number; bestScore: number; bestValues: number[] }) => void;
+  /** Called after every simulation, for live counters. */
+  onEval?: (p: { evals: number; bestScore: number }) => void;
 }
 
 export interface OptimizeResult {
@@ -55,6 +58,7 @@ export function optimize(spec: SystemSpec, opts: OptimizeOptions = {}): Optimize
       best = { u: clamped, score: result.score, result };
       opts.onProgress?.({ evals, bestScore: result.score, bestValues: toValues(clamped) });
     }
+    opts.onEval?.({ evals, bestScore: best.score });
     return result.score;
   };
   const done = () => evals >= budget || Date.now() > deadline || (best !== null && best.result.success);
