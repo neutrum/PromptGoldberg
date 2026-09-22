@@ -10,9 +10,21 @@ describe('createLevel', () => {
   it('turns a prompt into a solved level whose sliders start on a miss', async () => {
     const llm = new FakeLlm([levelReply()]);
     const stages: string[] = [];
+    const order: string[] = [];
     const res = await createLevel({ prompt: 'swing past the giant and reach the ice world' }, {
-      llm, solver, onEvent: (e) => { if (e.type === 'stage') stages.push(e.stage); },
+      llm, solver, onEvent: (e) => {
+        if (e.type === 'stage') stages.push(e.stage);
+        if (e.type === 'stage' || e.type === 'draft') order.push(e.type === 'draft' ? `draft:${e.status}` : e.stage);
+        if (e.type === 'draft') {
+          expect(e.attempt).toBe(1);
+          expect(e.level.spec.bodies.length).toBeGreaterThan(1);
+          if (e.status === 'designed') expect(e.level.solution).toBeUndefined();
+          if (e.status === 'solved') expect(e.level.solution).toBeDefined();
+        }
+      },
     });
+    // Playable before the proof, and again once proven.
+    expect(order).toEqual(['designing', 'draft:designed', 'verifying', 'draft:solved']);
     expect(res.solved).toBe(true);
     expect(res.attempts).toBe(1);
     expect(stages).toEqual(['designing', 'verifying']);

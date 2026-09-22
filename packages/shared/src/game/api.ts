@@ -13,10 +13,22 @@ import type { Level, Piece } from './level';
  */
 export type LevelStage = 'designing' | 'verifying' | 'redesigning' | 'editing';
 
+/**
+ * How far a level version got: `designed` = the AI's design, playable but not yet proven;
+ * `solved` = the optimizer found a winning shot (it may still get loosened or redesigned).
+ */
+export type LevelDraftStatus = 'designed' | 'solved';
+
+/**
+ * Levels arrive progressively so players never wait for the whole pipeline: a `draft` as soon as
+ * each design is valid, another once it is proven solvable, then the final `level`.
+ * Drafts of the same `attempt` are the same design (same bodies); a new attempt is a redesign.
+ */
 export type LevelStreamEvent =
   | { type: 'stage'; stage: LevelStage; attempt: number; maxAttempts: number; message: string }
   | { type: 'progress'; attempt: number; evals: number; bestScore: number; goalLength: number }
-  | { type: 'level'; level: Level; solved: boolean; attempts: number; notes: string[]; cached: boolean }
+  | { type: 'draft'; level: Level; status: LevelDraftStatus; attempt: number }
+  | { type: 'level'; level: Level; solved: boolean; attempts: number; notes: string[]; cached: boolean; attempt?: number }
   | { type: 'error'; error: string };
 
 export interface LevelRequest {

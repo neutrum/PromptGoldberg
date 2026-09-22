@@ -215,3 +215,15 @@ button.link:hover:not(:disabled) { background: none; color: var(--text); }
 
 /* Pure build levels: no sliders, just the launch button. */
 .controls:has(> .launch:only-child) { justify-content: center; }
+
+/* AI level status while better versions arrive */
+.ai-status { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; max-width: 380px; padding: 5px 10px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); }
+.ai-status.working { color: var(--gold); }
+.ai-status.working .machine-bar { flex-basis: 100%; }
+.ai-status.done { color: var(--ok); border-color: rgba(95, 211, 154, 0.35); animation: rise 0.3s ease-out; }
+.ai-status.unproven { color: var(--muted); }
+.ai-status.offer { border-color: var(--gold); box-shadow: 0 0 20px rgba(255, 210, 122, 0.2); animation: rise 0.3s ease-out; }
+.ai-status.offer button { font-size: 12px; padding: 3px 10px; }
+.ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: tut-pulse 1s ease-in-out infinite, blink 1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+@media (max-width: 600px) { .ai-status { max-width: none; } }

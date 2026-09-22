@@ -61,8 +61,9 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
   let best: Attempt | null = null;
   let last: Attempt | null = null;
   let lastBuilt: Built | null = null;
-  let bestBuilt: Built | null = null;
+  let bestBuilt: (Built & { attempt: number }) | null = null;
   let attempts = 0;
+  let bestAttempt = 1;
   const check = (level: Level, shots: number[][]) => deps.solver.checkMany(level, shots, { signal });
 
   const outOfTime = () => deps.deadline !== undefined && Date.now() > deps.deadline;
@@ -103,6 +104,8 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
     }
     attempts = attempt;
     notes.push(...design.notes.map((n) => `Design ${attempt}: ${n}`));
+    // Playable right away; the proof follows.
+    emit({ type: 'draft', level: draftLevel(design, loop.level), status: 'designed', attempt });
 
     emit({
       type: 'stage', stage: 'verifying', attempt, maxAttempts,
@@ -124,23 +127,38 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
 
     last = { design, tuned };
     lastBuilt = null;
-    if (!best || progressOf(tuned) > progressOf(best.tuned)) best = last;
+    if (!best || progressOf(tuned) > progressOf(best.tuned)) {
+      best = last;
+      bestAttempt = attempt;
+    }
     if (!tuned.solved) continue;
 
     // A proven shot is not enough: players need some slack around it.
     const level = await buildLevel(last, loop.level);
     if (!level.solution) continue;
+    emit({ type: 'draft', level, status: 'solved', attempt });
     const forgiving = await makeForgiving(level, check, deps.deadline);
     notes.push(`Design ${attempt}: ${forgiving.note}`);
     lastBuilt = { level: forgiving.level, robustness: forgiving.robustness, missNotes: forgiving.missNotes };
-    if (!bestBuilt || lastBuilt.robustness > bestBuilt.robustness) bestBuilt = lastBuilt;
+    if (!bestBuilt || lastBuilt.robustness > bestBuilt.robustness) bestBuilt = { ...lastBuilt, attempt };
     if (lastBuilt.robustness >= MIN_ROBUSTNESS) break;
   }
 
-  if (bestBuilt) return { type: 'level', level: bestBuilt.level, solved: true, attempts, notes, cached: false };
+  if (bestBuilt) return { type: 'level', level: bestBuilt.level, solved: true, attempts, notes, cached: false, attempt: bestBuilt.attempt };
   if (!best) throw new SolverError('no design to build a level from');
   const level = await buildLevel(best, loop.level);
-  return { type: 'level', level, solved: !!level.solution, attempts, notes, cached: false };
+  return { type: 'level', level, solved: !!level.solution, attempts, notes, cached: false, attempt: bestAttempt };
+}
+
+/** The design as a playable level before any proof: the AI's own slider guesses, no solution. */
+function draftLevel(design: LevelDesign, meta: LoopSpec['level']): Level {
+  const level = levelFromSpec(design.spec, {
+    id: meta.id,
+    briefing: meta.briefing ?? design.briefing,
+    player: meta.player ?? design.player,
+    par: meta.par,
+  });
+  return Level.parse({ ...level, tip: meta.tip ?? design.tip });
 }
 
 /** Level from the best attempt: solution = tuned values, starting sliders = a sensible miss. */

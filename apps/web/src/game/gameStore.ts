@@ -60,6 +60,22 @@ export interface AiLog {
   error: string | null;
 }
 
+/** How far the AI level on screen got: 0 = designed (not proven yet), 1 = proven solvable, 2 = final. */
+export type AiRank = 0 | 1 | 2;
+
+/** The AI level being played while newer versions may still arrive. */
+export interface AiLive {
+  /** Versions are still arriving. */
+  working: boolean;
+  /** Design attempt and rank of the version on screen. */
+  attempt: number;
+  rank: AiRank;
+  /** The version on screen has a proven solution. */
+  proven: boolean;
+  /** A better version of a different design, offered instead of swapped in under an active player. */
+  pending: { level: Level; attempt: number; rank: AiRank } | null;
+}
+
 interface GameState {
   screen: Screen;
   progress: Progress;
@@ -84,6 +100,7 @@ interface GameState {
   machine: MachineState;
   endless: EndlessState | null;
   ai: AiLog;
+  aiLive: AiLive | null;
   toast: string | null;
   /** Outcome to restore when a replayed flight ends (replays never re-score). */
   replayOutcome: ShotOutcome | null;
@@ -102,6 +119,9 @@ interface GameState {
   loadEndlessStage: (e: EndlessState) => Promise<void>;
   createWithAi: (prompt: string) => Promise<void>;
   editWithAi: (instruction: string) => Promise<void>;
+  /** Switch to the better AI version that was offered. */
+  acceptAiVersion: () => void;
+  dismissAiVersion: () => void;
 
   setValue: (index: number, value: number) => void;
   nudge: (index: number, fraction: number) => void;
@@ -163,12 +183,71 @@ export const useGame = create<GameState>((set, get) => {
     get().refreshPreview();
   };
 
+  /**
+   * Show an AI level version. Levels arrive progressively (draft, proven, final), so the player
+   * starts on the first playable draft. Later versions of the same design update it in place
+   * (keeping the player's shots and slider moves); a different design is swapped in only while
+   * nothing has been fired yet, otherwise it is offered. A version never replaces a better one.
+   */
+  const showAiVersion = (level: Level, attempt: number, rank: AiRank, source: Source) => {
+    const g = get();
+    const live = g.aiLive;
+    const proven = !!level.solution;
+    const current = g.level;
+    if (!live || g.source?.kind !== 'ai' || !current) {
+      resetForLevel(level, source);
+      set({ aiLive: { working: true, attempt, rank, proven, pending: null } });
+      return;
+    }
+    if (attempt === live.attempt) {
+      if (rank < live.rank) return;
+      if (g.phase === 'flying') {
+        // Never change the rules mid-flight: apply once the shot is over.
+        const unsub = useGame.subscribe((s) => {
+          if (s.phase === 'flying') return;
+          unsub();
+          showAiVersion(level, attempt, rank, source);
+        });
+        return;
+      }
+      const untouched = g.values.every((v, i) => v === controlValues(current)[i]);
+      set({
+        level,
+        values: untouched ? controlValues(level) : g.values,
+        hint: null,
+        aiLive: { ...live, rank, proven },
+      });
+      if (untouched) useStore.getState().setTime(launchTime(level, get().values));
+      get().refreshPreview();
+      return;
+    }
+    if (rank < live.rank || (rank === live.rank && !proven && live.proven)) return;
+    const untouched = g.values.every((v, i) => v === controlValues(current)[i]) && g.pieces.length === 0;
+    if (g.shots.length === 0 && untouched && g.phase === 'aiming' && g.screen === 'play') {
+      resetForLevel(level, source);
+      set({ aiLive: { ...live, attempt, rank, proven, pending: null } });
+      g.showToast('The AI swapped in a fairer version of this level.');
+    } else {
+      set({ aiLive: { ...live, pending: { level, attempt, rank } } });
+    }
+  };
+
   const aiStream = async (path: '/level' | '/edit', body: unknown, source: (level: Level) => Source) => {
     aiAbort?.abort();
     aiAbort = new AbortController();
-    set({ ai: { busy: true, lines: [], progress: 0, error: null } });
+    set({ ai: { busy: true, lines: [], progress: 0, error: null }, aiLive: null });
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let delivered = false;
+    const accept = (raw: Level, attempt: number, rank: AiRank): boolean => {
+      const parsed = parseLevel(raw);
+      if (!parsed.ok) {
+        set((s) => ({ ai: { ...s.ai, error: `The level came back broken: ${parsed.issues[0]}` } }));
+        return false;
+      }
+      delivered = true;
+      showAiVersion(parsed.level, attempt, rank, source(parsed.level));
+      return true;
+    };
     try {
       await streamLevel(path, body, (e: LevelStreamEvent) => {
         switch (e.type) {
@@ -178,26 +257,26 @@ export const useGame = create<GameState>((set, get) => {
           case 'progress':
             set((s) => ({ ai: { ...s.ai, progress: e.goalLength ? e.bestScore / e.goalLength : 0 } }));
             break;
-          case 'level': {
-            const parsed = parseLevel(e.level);
-            if (!parsed.ok) {
-              set((s) => ({ ai: { ...s.ai, error: `The level came back broken: ${parsed.issues[0]}` } }));
-              return;
+          case 'draft':
+            if (accept(e.level, e.attempt, e.status === 'solved' ? 1 : 0)) {
+              log(e.status === 'solved' ? 'Proven solvable. Checking it is fair to aim at…' : 'Design ready: play it while the AI proves it.');
             }
-            delivered = true;
+            break;
+          case 'level': {
+            if (!accept(e.level, e.attempt ?? get().aiLive?.attempt ?? 1, 2)) return;
             log(e.solved ? `Verified solvable${e.cached ? ' (cached)' : ''}.` : 'Could not prove it solvable; playable anyway.');
-            set({ ai: { ...idleAi } });
-            resetForLevel(parsed.level, source(parsed.level));
+            set((s) => ({ ai: { ...idleAi }, aiLive: s.aiLive && { ...s.aiLive, working: false } }));
             break;
           }
           case 'error':
-            set((s) => ({ ai: { ...s.ai, error: e.error } }));
+            set((s) => ({ ai: { ...s.ai, error: e.error }, aiLive: s.aiLive && { ...s.aiLive, working: false } }));
             break;
         }
       }, aiAbort.signal);
       if (!delivered) set((s) => ({ ai: { ...s.ai, busy: false, error: s.ai.error ?? 'The AI did not return a level.' } }));
+      set((s) => ({ ai: { ...s.ai, busy: false }, aiLive: s.aiLive && { ...s.aiLive, working: false } }));
     } catch (err) {
-      set((s) => ({ ai: { ...s.ai, busy: false, error: err instanceof Error ? err.message : String(err) } }));
+      set((s) => ({ ai: { ...s.ai, busy: false, error: err instanceof Error ? err.message : String(err) }, aiLive: s.aiLive && { ...s.aiLive, working: false } }));
     }
   };
 
@@ -225,14 +304,16 @@ export const useGame = create<GameState>((set, get) => {
     machine: idleMachine,
     endless: null,
     ai: idleAi,
+    aiLive: null,
     toast: null,
     replayOutcome: null,
 
     go(screen) {
       if (screen !== 'play') get().stopMachine();
-      if (screen !== 'create') {
+      // Leaving for anything but the AI level itself stops the AI.
+      if (screen !== 'create' && screen !== 'play') {
         aiAbort?.abort();
-        set({ ai: idleAi });
+        set({ ai: idleAi, aiLive: null });
       }
       set({ screen });
     },
@@ -291,6 +372,18 @@ export const useGame = create<GameState>((set, get) => {
     },
 
     createWithAi: (prompt) => aiStream('/level', { prompt }, () => ({ kind: 'ai', prompt })),
+
+    acceptAiVersion() {
+      const { aiLive, source } = get();
+      if (!aiLive?.pending || source?.kind !== 'ai') return;
+      const { level, attempt, rank } = aiLive.pending;
+      resetForLevel(level, source);
+      set({ aiLive: { ...aiLive, attempt, rank, proven: !!level.solution, pending: null } });
+    },
+
+    dismissAiVersion() {
+      set((s) => ({ aiLive: s.aiLive && { ...s.aiLive, pending: null } }));
+    },
 
     async editWithAi(instruction) {
       const { level, source } = get();

@@ -252,6 +252,36 @@ function ResultCard({ level }: { level: Level }) {
   );
 }
 
+/** Status of an AI level whose better versions may still be arriving. */
+function AiStatus() {
+  const live = useGame((s) => s.aiLive);
+  const ai = useGame((s) => s.ai);
+  const source = useGame((s) => s.source);
+  const { acceptAiVersion, dismissAiVersion } = useGame.getState();
+  if (!live || source?.kind !== 'ai') return null;
+  if (live.pending) {
+    return (
+      <div className="ai-status offer">
+        <span>✨ A {live.pending.level.solution ? 'proven, fairer' : 'new'} version of this level is ready.</span>
+        <button className="primary" onClick={acceptAiVersion}>Switch</button>
+        <button className="link" onClick={dismissAiVersion}>Keep this one</button>
+      </div>
+    );
+  }
+  if (live.working) {
+    return (
+      <div className="ai-status working" title={ai.lines[ai.lines.length - 1] ?? ''}>
+        <span className="ai-dot" />
+        {live.rank === 0 ? 'Draft: the AI is still proving this level can be won' : '✓ Proven winnable · tuning it to be fair'}
+        {live.rank === 0 && <div className="machine-bar"><div style={{ width: `${Math.round(ai.progress * 100)}%` }} /></div>}
+      </div>
+    );
+  }
+  return live.proven
+    ? <div className="ai-status done">✓ Proven winnable by the AI's optimizer</div>
+    : <div className="ai-status unproven">Not proven winnable: the AI could not find a solution</div>;
+}
+
 function AiEdit() {
   const editWithAi = useGame((s) => s.editWithAi);
   const [text, setText] = useState('');
@@ -333,6 +363,7 @@ export function PlayScreen() {
                 <div className="muted">{sourceLabel(source)}</div>
                 <h1 className="level-title">{level.title}</h1>
                 <div className="briefing">{level.briefing}</div>
+                <AiStatus />
               </div>
             </div>
             <GoalChain level={level} />

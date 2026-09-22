@@ -36,7 +36,8 @@ All AI logic is in `packages/ai` behind one call, `createLevel()`. Eval: `npm ru
 - [x] Curveball prompts ("pizza", "my cat knocking things off the table") become sensible space levels.
 - [x] Talk-to-edit and redesign tested with the real model (CLI). One edit took 26 min once and did not reproduce (75 s on replay); probably slow CLI calls. `createLevel` now has a total deadline (server: `LEVEL_DEADLINE_MS`, 150 s).
 - [ ] Re-run the eval with `ANTHROPIC_API_KEY` once it is available (CLI timings include Claude Code start-up).
-- [ ] Speed: forgiveness redesigns roughly doubled the median time. Options: a cheaper model for the first design, or send the first solved level to the player and improve it in the background.
+- [x] Progressive levels: the first playable draft shows after about 15–18 s (end-to-end in the browser); proof and fairness improvements arrive while the player plays.
+- [ ] Faster first draft: a cheaper or faster model for the first design, or stream the LLM reply (API backend) and show bodies as they arrive.
 - [ ] Levels are still hard for random play (0–10% of random shots win); watch in playtests whether the AI levels feel fair.
 
 ## Known technical notes

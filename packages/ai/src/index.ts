@@ -8,7 +8,8 @@
  * One call runs the whole loop: the LLM designs a star system, the optimizer searches the
  * launch controls for a winning shot, the LLM redesigns on a miss, and the best attempt is
  * turned into a playable Level (starting sliders that miss, plus the proven solution).
- * The result is plain data; render it however you like.
+ * The result is plain data; render it however you like. Pass `onEvent` to get playable drafts
+ * while it works, so players can start before the proof is done.
  */
 import type { Level, LevelStreamEvent } from '@og/shared';
 import { createLlm, LlmError, type Completion, type LlmBackend, type LlmBackendName } from './llm/client';
@@ -35,7 +36,11 @@ export interface CreateLevelOptions {
   /** Total time budget in ms (default 180 000): after it, no new redesign starts and the best level so far is returned. */
   deadlineMs?: number;
   signal?: AbortSignal;
-  /** Live progress: stages (designing, verifying, redesigning) and optimizer progress. */
+  /**
+   * Live progress, so a UI never has to wait for the final result: `draft` events carry a playable
+   * level as soon as each design is valid (status 'designed') and again once it is proven
+   * ('solved'); plus stages (designing, verifying, redesigning) and optimizer progress.
+   */
   onEvent?: (event: LevelStreamEvent) => void;
 }
 

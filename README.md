@@ -91,6 +91,8 @@ Copy `.env.example` to `.env` to override (`LLM_BACKEND`, `CLAUDE_MODEL`, `CLAUD
 
 **Repair loop** (`packages/ai/src/pipeline.ts`): the LLM designs a level (system + briefing + tip + player body) -> the optimizer searches all tunables (600 evals / 12 s, in a `worker_threads` worker so the stream keeps flowing) -> on a miss the LLM redesigns from the goal checker's miss notes, up to 3 designs. A solved level must then be forgiving: at least half of ±0.5% nudges to each control must still win (`forgiving.ts`). If not, the goal is loosened (wider flyby windows, bigger collision targets, as long as random shots still mostly miss), and if that is not enough the LLM redesigns it with the near-miss notes. The level's `solution` holds the proven control values; the starting sliders are the LLM's original guess if it misses, otherwise a nudge away from the solution that is checked to miss.
 
+**Progressive levels:** nobody waits for the whole loop. `createLevel`'s `onEvent` (and the SSE stream) sends a playable `draft` as soon as each design is valid (about 15 s) and again once it is proven, then the final `level`. The game opens the first draft right away with a status line ("Draft: the AI is still proving this level…" → "✓ Proven winnable"). Later versions of the same design update it in place, keeping the player's shots. A redesign is swapped in only if the player has not touched it yet; otherwise it is offered with a Switch button. A proven version is never replaced by an unproven one.
+
 Try it without HTTP: `npm run solve -w @og/ai -- "A comet swings past the gas giant and crashes into its moon"`.
 
 Eval on a fixed set of 10 prompts (solve rate, time, how often random shots win, how often small nudges off the solution still win): `npm run eval -w @og/ai -- [--edits] [--out results.json]`.
@@ -101,7 +103,7 @@ Wire types live in `packages/shared/src/game/api.ts`.
 
 | Endpoint | |
 | --- | --- |
-| `POST /api/level {prompt}` | SSE stream of `LevelStreamEvent`: `stage` (designing / verifying / redesigning), `progress`, then `level` (`solved`, `cached`) or `error`. Solved levels are cached by normalized prompt hash under `DATA_DIR/cache`. |
+| `POST /api/level {prompt}` | SSE stream of `LevelStreamEvent`: `stage` (designing / verifying / redesigning), `progress`, `draft` (playable version: `designed`, then `solved`, per design `attempt`), then the final `level` (`solved`, `cached`) or `error`. Solved levels are cached by normalized prompt hash under `DATA_DIR/cache`. |
 | `POST /api/edit {level, instruction}` | Same stream, first stage `editing`. Keeps the player body and its controls. |
 | `POST /api/coach CoachRequest` | `{tip}`: rule-based tip (failed step, closeness, direction toward the known solution, never numbers), rephrased by `CLAUDE_COACH_MODEL` when it answers within 8 s. |
 | `GET /api/gallery?sort=new\|top&limit=N` | `{items: GalleryItem[]}` |
