@@ -10,6 +10,17 @@ export interface CompletionRequest {
   maxTokens?: number;
   /** Overrides CLAUDE_MODEL for this call. */
   model?: string;
+  /** Receives the reply text as it streams in (API backend; the CLI calls it once at the end). */
+  onText?: (delta: string) => void;
+}
+
+/** Where a call's time went, in ms from the request. */
+export interface CompletionTiming {
+  /** First streamed event of any kind (thinking or text). */
+  firstTokenMs?: number;
+  /** First visible reply text, after any thinking. */
+  firstTextMs?: number;
+  totalMs: number;
 }
 
 export interface Completion {
@@ -18,6 +29,10 @@ export interface Completion {
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** Input tokens served from / written to the prompt cache (API backend). */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  timing?: CompletionTiming;
 }
 
 export type LlmBackendName = 'api' | 'cli';
@@ -35,22 +50,38 @@ export class LlmError extends Error {
 
 const MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5';
 
-/** Claude API. Used in production; needs ANTHROPIC_API_KEY. */
+/**
+ * Claude API. Used in production; needs ANTHROPIC_API_KEY. Streams the reply (so callers can
+ * show progress and long replies never hit HTTP timeouts) and caches the system prompt, which
+ * is identical on every level-design call.
+ */
 function apiBackend(): LlmBackend {
   const client = new Anthropic();
   return {
     name: 'api',
-    async complete({ system, prompt, maxTokens = 16000, model = MODEL }) {
+    async complete({ system, prompt, maxTokens = 16000, model = MODEL, onText }) {
+      const started = Date.now();
+      const timing: CompletionTiming = { totalMs: 0 };
       try {
-        const response = await client.beta.messages.create({
+        const stream = client.beta.messages.stream({
           model,
           max_tokens: maxTokens,
           // Re-run policy declines on Anthropic's recommended fallback model instead of failing.
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
-          system,
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: prompt }],
         });
+        for await (const event of stream) {
+          if (event.type !== 'content_block_delta') continue;
+          timing.firstTokenMs ??= Date.now() - started;
+          if (event.delta.type === 'text_delta') {
+            timing.firstTextMs ??= Date.now() - started;
+            onText?.(event.delta.text);
+          }
+        }
+        const response = await stream.finalMessage();
+        timing.totalMs = Date.now() - started;
         if (response.stop_reason === 'refusal') {
           throw new LlmError('The model declined this request.');
         }
@@ -60,8 +91,11 @@ function apiBackend(): LlmBackend {
         return {
           text,
           backend: 'api',
-          inputTokens: response.usage.input_tokens,
+          inputTokens: response.usage.input_tokens + (response.usage.cache_read_input_tokens ?? 0) + (response.usage.cache_creation_input_tokens ?? 0),
           outputTokens: response.usage.output_tokens,
+          cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+          cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
+          timing,
         };
       } catch (err) {
         if (err instanceof LlmError) throw err;
@@ -86,7 +120,7 @@ function cliBackend(): LlmBackend {
   const bin = process.env.CLAUDE_CLI ?? 'claude';
   return {
     name: 'cli',
-    complete({ system, prompt, model = MODEL }) {
+    complete({ system, prompt, model = MODEL, onText }) {
       // Prompts go through a file and stdin: long multi-line args are fragile on Windows.
       const dir = mkdtempSync(join(tmpdir(), 'og-claude-'));
       const systemFile = join(dir, 'system.txt');
@@ -135,6 +169,7 @@ function cliBackend(): LlmBackend {
             reject(new LlmError(`Claude CLI error: ${String(out.result ?? stderr).slice(0, 500)}`));
             return;
           }
+          onText?.(out.result);
           resolve({
             text: out.result,
             backend: 'cli',

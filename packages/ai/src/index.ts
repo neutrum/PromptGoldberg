@@ -50,6 +50,11 @@ export interface LlmUsage {
   inputTokens?: number;
   outputTokens?: number;
   costUsd?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** ms until the first streamed token and the first reply text (API backend). */
+  firstTokenMs?: number;
+  firstTextMs?: number;
 }
 
 export interface CreateLevelResult {
@@ -82,7 +87,11 @@ export async function createLevel(request: LevelRequest, options: CreateLevelOpt
     async complete(req) {
       const started = Date.now();
       const c: Completion = await base.complete(req);
-      usage.push({ backend: c.backend, ms: Date.now() - started, inputTokens: c.inputTokens, outputTokens: c.outputTokens, costUsd: c.costUsd });
+      usage.push({
+        backend: c.backend, ms: Date.now() - started, inputTokens: c.inputTokens, outputTokens: c.outputTokens, costUsd: c.costUsd,
+        cacheReadTokens: c.cacheReadTokens, cacheWriteTokens: c.cacheWriteTokens,
+        firstTokenMs: c.timing?.firstTokenMs, firstTextMs: c.timing?.firstTextMs,
+      });
       return c;
     },
   };

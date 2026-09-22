@@ -27,6 +27,10 @@ const res = await createLevel({ prompt }, {
 });
 console.error(`${secs()}s solved=${res.solved} attempts=${res.attempts} llm calls=${res.usage.length}`);
 for (const n of res.notes) console.error(`  - ${n}`);
+for (const [i, u] of res.usage.entries()) {
+  const t = (ms?: number) => (ms === undefined ? '-' : `${(ms / 1000).toFixed(1)}s`);
+  console.error(`  call ${i + 1}: ${t(u.ms)} total, first token ${t(u.firstTokenMs)}, first text ${t(u.firstTextMs)}; in ${u.inputTokens} (cache read ${u.cacheReadTokens ?? '-'}, write ${u.cacheWriteTokens ?? '-'}), out ${u.outputTokens}`);
+}
 const json = JSON.stringify(res.level, null, 2);
 if (out) writeFileSync(out, json + '\n');
 else console.log(json);
