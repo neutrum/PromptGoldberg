@@ -18,6 +18,10 @@ Hackathon deadline: **Nov 11, 16:30 CEST** (submit a day early). Hosted demo mus
 - [ ] **Level 7 (Bank Shot)** only works for about 1 in 75 random placements; watch whether playtesters find it.
 - [ ] More campaign levels between the harder ones (eclipse, capture, moon collisions).
 
+## Reliability
+
+- [ ] **Worker pool for the solver.** Every solver task starts and kills a fresh worker thread; during long eval runs Node crashed natively twice (exit 0xC0000005, Windows). Reuse a few long-lived workers instead. A crash on the server would restart it and drop in-flight AI requests.
+
 ## Game feel
 
 - [ ] Generated levels at difficulty 7+ are very hard (almost no random shots succeed); consider easier Endless difficulty steps or more forgiving flyby distances after playtesting.
