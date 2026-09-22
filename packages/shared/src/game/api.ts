@@ -39,6 +39,8 @@ export interface SketchBody {
   phase?: number;
   /** The player's probe or comet. */
   launched?: boolean;
+  /** In-plane position (AU) of a body with a free placement, e.g. a portal or bumper. */
+  position?: [number, number];
 }
 
 export type LevelStreamEvent =

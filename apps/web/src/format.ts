@@ -18,6 +18,8 @@ export const EVENT_ICON: Record<SimEvent['type'], string> = {
   collision: '💥',
   escape: '↗',
   eclipse: '◐',
+  warp: '🌀',
+  bounce: '🏓',
 };
 
 export function describeEvent(e: SimEvent, names: Map<string, string>): string {
@@ -26,6 +28,10 @@ export function describeEvent(e: SimEvent, names: Map<string, string>): string {
   switch (e.type) {
     case 'launch':
       return `${n(a)} launched`;
+    case 'warp':
+      return `${n(a)} went through ${n(b)} and came out of ${n(c)}`;
+    case 'bounce':
+      return `${n(a)} bounced off ${n(b)}`;
     case 'flyby':
       return `${n(a)} flew past ${n(b)} at ${formatDistance(e.details.distance)}`;
     case 'capture':

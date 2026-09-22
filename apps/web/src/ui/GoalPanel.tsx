@@ -10,6 +10,8 @@ function describeGoal(g: GoalEvent, n: (id: string) => string): string {
     case 'collision': return `${n(g.a)} collides with ${n(g.b)}`;
     case 'escape': return `${n(g.body)} escapes the system`;
     case 'eclipse': return `${n(g.occluder)} eclipses ${n(g.source)} as seen from ${n(g.observer)}${g.period ? ` every ${formatTime(g.period)}` : ''}`;
+    case 'warp': return `${n(g.body)} flies into the portal ${n(g.portal)}`;
+    case 'bounce': return `${n(g.body)} bounces off ${n(g.target)}`;
   }
 }
 

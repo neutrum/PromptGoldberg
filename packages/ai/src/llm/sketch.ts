@@ -56,6 +56,9 @@ function toSketch(json: string): SketchBody | null {
       a: orbit && typeof placement.a === 'number' ? placement.a : undefined,
       phase: orbit && typeof placement.phase === 'number' ? placement.phase : undefined,
       launched: placement.kind === 'launch',
+      position: placement.kind === 'free' && Array.isArray(placement.position) && placement.position.length >= 2
+        && placement.position.slice(0, 2).every((c) => typeof c === 'number')
+        ? [placement.position[0] as number, placement.position[1] as number] : undefined,
     };
   } catch {
     return null;

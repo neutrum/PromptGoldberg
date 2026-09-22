@@ -46,35 +46,97 @@ function accelerations(s: SimState, acc: Float64Array): void {
       acc[3 * j] -= fj * dx; acc[3 * j + 1] -= fj * dy; acc[3 * j + 2] -= fj * dz;
     }
   }
+  for (let i = 0; i < n; i++) {
+    if (s.fixed[i]) acc[3 * i] = acc[3 * i + 1] = acc[3 * i + 2] = 0;
+  }
 }
+
+/** Bumpers and portals act on contact, so fast bodies must not skip past them within one substep. */
+const hasSurface = (s: SimState, i: number) => s.bounce[i] > 0 || s.link[i] >= 0;
 
 /** Shortest of free-fall and crossing timescales over interacting pairs. */
 function shortestTimescale(s: SimState): number {
   const n = s.ids.length;
-  const { pos, vel, mass, status } = s;
+  const { pos, vel, mass, radius, status } = s;
   let tau = Infinity;
   for (let i = 0; i < n; i++) {
     if (status[i] !== ACTIVE) continue;
     for (let j = i + 1; j < n; j++) {
       if (status[j] !== ACTIVE) continue;
       const m = mass[i] + mass[j];
-      if (m === 0) continue;
+      const surface = hasSurface(s, i) || hasSurface(s, j);
+      if (m === 0 && !surface) continue;
       const dx = pos[3 * j] - pos[3 * i], dy = pos[3 * j + 1] - pos[3 * i + 1], dz = pos[3 * j + 2] - pos[3 * i + 2];
       const vx = vel[3 * j] - vel[3 * i], vy = vel[3 * j + 1] - vel[3 * i + 1], vz = vel[3 * j + 2] - vel[3 * i + 2];
       const r2 = dx * dx + dy * dy + dz * dz;
       const r = Math.sqrt(r2);
-      const freefall = Math.sqrt((r2 * r) / (G * m));
-      // Crossing time only matters while the pair is closing in.
+      const freefall = m > 0 ? Math.sqrt((r2 * r) / (G * m)) : Infinity;
+      // Crossing time only matters while the pair is closing in; near a bumper or portal it is
+      // the time to reach its surface, so the contact is not stepped over.
       const closing = dx * vx + dy * vy + dz * vz < 0;
       const v = Math.sqrt(vx * vx + vy * vy + vz * vz);
-      const crossing = closing && v > 0 ? r / v : Infinity;
+      const gap = surface ? Math.max(r - radius[i] - radius[j], 0.25 * (radius[i] + radius[j])) : r;
+      const crossing = closing && v > 0 ? gap / v : Infinity;
       tau = Math.min(tau, freefall, crossing);
     }
   }
   return tau;
 }
 
-/** Merge touching bodies, conserving mass and momentum. Returns true if any merged. */
+/**
+ * Bounce `mover` off the bouncy `surface`: reflect their relative velocity about the contact
+ * normal (the surface keeps its own motion) and push the mover back onto the surface.
+ * Returns true when they were closing in, i.e. a real bounce happened.
+ */
+function bounceOff(s: SimState, mover: number, surface: number): boolean {
+  const { pos, vel, radius } = s;
+  let nx = pos[3 * mover] - pos[3 * surface], ny = pos[3 * mover + 1] - pos[3 * surface + 1], nz = pos[3 * mover + 2] - pos[3 * surface + 2];
+  const d = Math.hypot(nx, ny, nz) || 1e-12;
+  nx /= d; ny /= d; nz /= d;
+  const rr = (radius[mover] + radius[surface]) * 1.0001;
+  pos[3 * mover] = pos[3 * surface] + nx * rr;
+  pos[3 * mover + 1] = pos[3 * surface + 1] + ny * rr;
+  pos[3 * mover + 2] = pos[3 * surface + 2] + nz * rr;
+  const vn = (vel[3 * mover] - vel[3 * surface]) * nx + (vel[3 * mover + 1] - vel[3 * surface + 1]) * ny + (vel[3 * mover + 2] - vel[3 * surface + 2]) * nz;
+  if (vn >= 0) return false;
+  const k = (1 + s.bounce[surface]) * vn;
+  vel[3 * mover] -= k * nx; vel[3 * mover + 1] -= k * ny; vel[3 * mover + 2] -= k * nz;
+  return true;
+}
+
+/**
+ * Anything (except stars and other portals) that enters a portal comes out of its twin with the
+ * same velocity relative to the portal, just outside its rim along the direction of travel.
+ */
+function resolveWarps(s: SimState, t: number, tracker: EventTracker): boolean {
+  const n = s.ids.length;
+  const { pos, vel, radius, status, link, types } = s;
+  let warped = false;
+  for (let p = 0; p < n; p++) {
+    const q = link[p];
+    if (q < 0 || status[p] !== ACTIVE || status[q] !== ACTIVE) continue;
+    for (let i = 0; i < n; i++) {
+      if (status[i] !== ACTIVE || link[i] >= 0 || types[i] === 'star' || s.fixed[i]) continue;
+      const dx = pos[3 * i] - pos[3 * p], dy = pos[3 * i + 1] - pos[3 * p + 1], dz = pos[3 * i + 2] - pos[3 * p + 2];
+      if (dx * dx + dy * dy + dz * dz > radius[p] * radius[p]) continue;
+      // Velocity relative to the entry portal is kept; the exit direction follows it
+      // (or points away from the portal centre if the body drifted in at zero relative speed).
+      const rel = [vel[3 * i] - vel[3 * p], vel[3 * i + 1] - vel[3 * p + 1], vel[3 * i + 2] - vel[3 * p + 2]];
+      const speed = Math.hypot(rel[0], rel[1], rel[2]);
+      const dir = speed > 0 ? rel.map((c) => c / speed) : [dx, dy, dz].map((c) => c / (Math.hypot(dx, dy, dz) || 1));
+      const out = radius[q] * 1.05 + radius[i];
+      for (let k = 0; k < 3; k++) {
+        pos[3 * i + k] = pos[3 * q + k] + dir[k] * out;
+        vel[3 * i + k] = vel[3 * q + k] + rel[k];
+      }
+      tracker.onWarp(t, i, p, q);
+      warped = true;
+    }
+  }
+  return warped;
+}
+
+/** Merge touching bodies, conserving mass and momentum; bounce off bouncy ones. Returns true if anything changed. */
 function resolveCollisions(s: SimState, t: number, tracker: EventTracker): boolean {
   const n = s.ids.length;
   const { pos, vel, mass, radius, status } = s;
@@ -83,9 +145,19 @@ function resolveCollisions(s: SimState, t: number, tracker: EventTracker): boole
     if (status[i] !== ACTIVE) continue;
     for (let j = i + 1; j < n; j++) {
       if (status[j] !== ACTIVE) continue;
+      // Portals are doorways: they neither merge nor bounce (see resolveWarps).
+      if (s.link[i] >= 0 || s.link[j] >= 0) continue;
       const dx = pos[3 * j] - pos[3 * i], dy = pos[3 * j + 1] - pos[3 * i + 1], dz = pos[3 * j + 2] - pos[3 * i + 2];
       const rr = radius[i] + radius[j];
       if (dx * dx + dy * dy + dz * dz > rr * rr) continue;
+      if (s.bounce[i] > 0 || s.bounce[j] > 0) {
+        // The bouncy one is the surface; if both are, the lighter (or unpinned) one moves.
+        const surface = s.bounce[j] > 0 && (s.bounce[i] === 0 || s.fixed[j] || (!s.fixed[i] && mass[j] >= mass[i])) ? j : i;
+        const mover = surface === i ? j : i;
+        if (!s.fixed[mover] && bounceOff(s, mover, surface)) tracker.onBounce(t, mover, surface);
+        merged = true;
+        continue;
+      }
       const [keep, lose] = mass[i] >= mass[j] ? [i, j] : [j, i];
       const m = mass[keep] + mass[lose];
       for (let k = 0; k < 3; k++) {
@@ -171,7 +243,8 @@ export function simulate(spec: SystemSpec, opts: SimOptions = {}): SimResult {
       accelerations(s, acc);
       for (let k = 0; k < 3 * n; k++) vel[k] += 0.5 * h * acc[k];
       const t = t0 + (sub + 1) * h;
-      if (resolveCollisions(s, t, tracker)) accelerations(s, acc);
+      const touched = resolveCollisions(s, t, tracker);
+      if (resolveWarps(s, t, tracker) || touched) accelerations(s, acc);
       tracker.observe(t, s);
     }
     substeps += count;

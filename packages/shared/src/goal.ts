@@ -151,6 +151,34 @@ function matchEclipse(g: Extract<GoalEvent, { type: 'eclipse' }>, trace: Trace, 
   };
 }
 
+/** Partial credit from how close `body` came to `target`'s rim (radius `rim`). */
+function nearMiss(body: string, target: string, rim: number, trace: Trace, after: number, what: string): Match {
+  const approaches = (trace.pairs[pairKey(body, target)]?.approaches ?? []).filter((a) => a.t >= after);
+  if (!approaches.length) return { partial: 0, note: `${body} never approached ${target}` };
+  const best = approaches.reduce((a, b) => (b.d < a.d ? b : a));
+  return {
+    partial: 0.99 * logCloseness(best.d / Math.max(rim, 1e-9), 3),
+    missT: best.t,
+    note: `${body} missed ${what} ${target} by ${fmt(Math.max(0, best.d - rim))} AU at t=${fmt(best.t)} yr`,
+  };
+}
+
+function matchWarp(g: Extract<GoalEvent, { type: 'warp' }>, trace: Trace, after: number): Match {
+  const hit = trace.warps.find((w) => w.t >= after && w.body === g.body && w.from === g.portal);
+  if (hit) return { t: hit.t, note: `${g.body} flew through ${g.portal} and came out of ${hit.to} at t=${fmt(hit.t)} yr` };
+  const wrong = trace.warps.find((w) => w.t >= after && w.body === g.body);
+  const rim = (trace.bodies[g.portal]?.radius ?? 0) + (trace.bodies[g.body]?.radius ?? 0);
+  const miss = nearMiss(g.body, g.portal, rim, trace, after, 'the portal');
+  return wrong ? { ...miss, note: `${g.body} went through ${wrong.from} instead of ${g.portal}` } : miss;
+}
+
+function matchBounce(g: Extract<GoalEvent, { type: 'bounce' }>, trace: Trace, after: number): Match {
+  const hit = trace.bounces.find((b) => b.t >= after && b.body === g.body && b.target === g.target);
+  if (hit) return { t: hit.t, note: `${g.body} bounced off ${g.target} at t=${fmt(hit.t)} yr` };
+  const rim = (trace.bodies[g.target]?.radius ?? 0) + (trace.bodies[g.body]?.radius ?? 0);
+  return nearMiss(g.body, g.target, rim, trace, after, 'the bumper');
+}
+
 function matchEvent(g: GoalEvent, trace: Trace, after: number): Match {
   switch (g.type) {
     case 'flyby': return matchFlyby(g, trace, after);
@@ -158,6 +186,8 @@ function matchEvent(g: GoalEvent, trace: Trace, after: number): Match {
     case 'collision': return matchCollision(g, trace, after);
     case 'escape': return matchEscape(g, trace, after);
     case 'eclipse': return matchEclipse(g, trace, after);
+    case 'warp': return matchWarp(g, trace, after);
+    case 'bounce': return matchBounce(g, trace, after);
   }
 }
 

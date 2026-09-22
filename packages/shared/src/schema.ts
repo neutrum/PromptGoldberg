@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
-export const BodyType = z.enum(['star', 'planet', 'moon', 'comet', 'probe']);
+export const BodyType = z.enum(['star', 'planet', 'moon', 'comet', 'probe', 'portal', 'bumper']);
 export type BodyType = z.infer<typeof BodyType>;
 
 /** Keplerian orbit relative to a parent body. Angles in degrees. */
@@ -44,6 +44,9 @@ export const BodySpec = z.object({
   radius: z.number().positive().describe('physical radius in AU (Sun 4.65e-3, Jupiter 4.8e-4, Earth 4.3e-5)'),
   color: z.string().optional(),
   placement: Placement,
+  link: z.string().optional().describe('portal only: id of its twin portal. Anything flying into a portal comes out of the twin with the same speed and direction'),
+  bounce: z.number().min(0).max(2).optional().describe('bodies hitting this one bounce off instead of crashing: 1 = perfectly elastic, up to 2 for a pinball kick. Bumpers default to 1'),
+  fixed: z.boolean().optional().describe('stays exactly where it is, unmoved by gravity (typical for bumpers and portals floating in space; give it a free placement)'),
 });
 export type BodySpec = z.infer<typeof BodySpec>;
 
@@ -76,7 +79,18 @@ export const EclipseGoal = z.object({
   period: z.number().positive().optional().describe('if set, eclipses must repeat with this period in years'),
 });
 
-export const GoalEvent = z.discriminatedUnion('type', [FlybyGoal, CaptureGoal, CollisionGoal, EscapeGoal, EclipseGoal]);
+export const WarpGoal = z.object({
+  type: z.literal('warp'),
+  body: z.string(),
+  portal: z.string().describe('the portal it must fly into'),
+});
+export const BounceGoal = z.object({
+  type: z.literal('bounce'),
+  body: z.string(),
+  target: z.string().describe('the bumper (or bouncy body) it must bounce off'),
+});
+
+export const GoalEvent = z.discriminatedUnion('type', [FlybyGoal, CaptureGoal, CollisionGoal, EscapeGoal, EclipseGoal, WarpGoal, BounceGoal]);
 export type GoalEvent = z.infer<typeof GoalEvent>;
 
 export const Tunable = z.object({
@@ -140,8 +154,21 @@ export function checkReferences(spec: SystemSpec): SpecIssue[] {
     }
   }
 
+  spec.bodies.forEach((b, i) => {
+    if (b.type !== 'portal') {
+      if (b.link !== undefined) issues.push({ path: `bodies.${i}.link`, message: 'only portals have a link' });
+      return;
+    }
+    const twin = b.link === undefined ? undefined : byId.get(b.link);
+    if (!twin) issues.push({ path: `bodies.${i}.link`, message: `portal "${b.id}" needs a link to another portal` });
+    else if (twin.type !== 'portal' || twin.id === b.id) issues.push({ path: `bodies.${i}.link`, message: `"${b.link}" is not another portal` });
+  });
+
   spec.goal.forEach((g, i) => {
     for (const [key, id] of Object.entries(goalBodies(g))) ref(`goal.${i}.${key}`, id);
+    if (g.type === 'warp' && byId.get(g.portal) && byId.get(g.portal)!.type !== 'portal') {
+      issues.push({ path: `goal.${i}.portal`, message: `"${g.portal}" is not a portal` });
+    }
   });
 
   spec.tunables.forEach((t, i) => {
@@ -168,6 +195,10 @@ export function goalBodies(g: GoalEvent): Record<string, string> {
       return { body: g.body };
     case 'eclipse':
       return { occluder: g.occluder, source: g.source, observer: g.observer };
+    case 'warp':
+      return { body: g.body, portal: g.portal };
+    case 'bounce':
+      return { body: g.body, target: g.target };
   }
 }
 

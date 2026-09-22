@@ -9,6 +9,7 @@ import { useStore } from '../store';
 import { AimController, PieceArcs, PreviewPath } from './Aim';
 import { Bodies } from './Bodies';
 import { Checkpoints } from './Checkpoints';
+import { Gadgets } from './Gadgets';
 import { Bursts, burst, PlayerGlow } from './Effects';
 import { gameScale, positionAt } from './frames';
 import { GameCamera } from './GameCamera';
@@ -141,6 +142,7 @@ function Level3D({ level }: { level: Level }) {
       {hint && phase !== 'flying' && <HintPieces run={hint} />}
       <Trails run={run} showFull={notPlayer} />
       <Bodies run={run} scale={scale} onBodyClick={onBodyClick} hidden={[level.player]} />
+      <Gadgets run={run} scale={scale} onBodyClick={onBodyClick} />
       <PlayerGlow run={run} level={level} scale={scale} />
       <Checkpoints run={run} level={level} scale={scale} />
       {phase === 'aiming' && <PreviewPath run={run} level={level} />}

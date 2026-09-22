@@ -29,6 +29,12 @@ export interface SimState {
   /** Hill-like sphere of influence, AU. Infinity for stars. */
   influence: Float64Array;
   launches: PendingLaunch[];
+  /** 1 for bodies that never move (pinned in the barycentre frame). */
+  fixed: Uint8Array;
+  /** Restitution of a bouncy surface; 0 means touching bodies merge as usual. */
+  bounce: Float64Array;
+  /** Index of a portal's twin, or -1 for everything that is not a portal. */
+  link: Int32Array;
 }
 
 export interface Timing {
@@ -87,8 +93,17 @@ export function initState(spec: SystemSpec): SimState {
     reference: new Int32Array(n).fill(-1),
     influence: new Float64Array(n),
     launches: [],
+    fixed: new Uint8Array(spec.bodies.map((b) => (b.fixed ? 1 : 0))),
+    bounce: new Float64Array(spec.bodies.map((b) => b.bounce ?? (b.type === 'bumper' ? 1 : 0))),
+    link: new Int32Array(n).fill(-1),
   };
   const index = new Map(spec.bodies.map((b, i) => [b.id, i]));
+  spec.bodies.forEach((b, i) => {
+    if (b.type !== 'portal') return;
+    s.link[i] = b.link !== undefined ? index.get(b.link) ?? -1 : -1;
+    // Portals are doorways, not masses.
+    s.mass[i] = 0;
+  });
 
   for (const i of placementOrder(spec)) {
     const b: BodySpec = spec.bodies[i];
@@ -143,6 +158,10 @@ export function initState(spec: SystemSpec): SimState {
         s.vel[3 * i + k] -= vcom[k] / mTot;
       }
     }
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (s.fixed[i]) s.vel[3 * i] = s.vel[3 * i + 1] = s.vel[3 * i + 2] = 0;
   }
 
   for (let i = 0; i < n; i++) {

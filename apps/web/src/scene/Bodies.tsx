@@ -36,7 +36,8 @@ export function Bodies({ run, scale, onBodyClick, hidden }: {
   return (
     <group>
       {run.spec.bodies.map((b, i) => {
-        if (hidden?.includes(b.id)) return null;
+        // Portals and bumpers are drawn by Gadgets.
+        if (hidden?.includes(b.id) || b.type === 'portal' || b.type === 'bumper') return null;
         const r = radii.get(b.id)!;
         const color = b.color ?? DEFAULT_COLORS[b.type];
         return (

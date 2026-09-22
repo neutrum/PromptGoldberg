@@ -9,11 +9,13 @@ export function goalTarget(g: GoalEvent, player: string): string | null {
     case 'collision': return g.a === player ? g.b : g.a;
     case 'escape': return null;
     case 'eclipse': return g.occluder;
+    case 'warp': return g.portal;
+    case 'bounce': return g.target;
   }
 }
 
 export const GOAL_ICON: Record<GoalEvent['type'], string> = {
-  flyby: '↪', capture: '◎', collision: '💥', escape: '🚀', eclipse: '◐',
+  flyby: '↪', capture: '◎', collision: '💥', escape: '🚀', eclipse: '◐', warp: '🌀', bounce: '🏓',
 };
 
 export function goalShort(g: GoalEvent, player: string, n: (id: string) => string): string {
@@ -23,6 +25,8 @@ export function goalShort(g: GoalEvent, player: string, n: (id: string) => strin
     case 'collision': return g.a === player || g.b === player ? `Hit ${n(g.a === player ? g.b : g.a)}` : `${n(g.a)} hits ${n(g.b)}`;
     case 'escape': return g.body === player ? 'Escape the system' : `${n(g.body)} escapes`;
     case 'eclipse': return `${n(g.occluder)} eclipses ${n(g.source)}`;
+    case 'warp': return g.body === player ? `Enter ${n(g.portal)}` : `${n(g.body)} enters ${n(g.portal)}`;
+    case 'bounce': return g.body === player ? `Bounce off ${n(g.target)}` : `${n(g.body)} bounces off ${n(g.target)}`;
   }
 }
 

@@ -2,7 +2,7 @@ import { ACTIVE, type SimState } from './init';
 import type { BodyType } from './schema';
 import { G } from './units';
 
-export type SimEventType = 'launch' | 'flyby' | 'capture' | 'collision' | 'escape' | 'eclipse';
+export type SimEventType = 'launch' | 'flyby' | 'capture' | 'collision' | 'escape' | 'eclipse' | 'warp' | 'bounce';
 
 /** A human-meaningful moment in a run, shown on the timeline and fed to explanations. */
 export interface SimEvent {
@@ -72,6 +72,10 @@ export interface Trace {
   collisions: CollisionRecord[];
   escapes: Record<string, number>;
   launches: Record<string, number>;
+  /** A body flew into portal `from` and came out of `to`. */
+  warps: { t: number; body: string; from: string; to: string }[];
+  /** A body bounced off a bumper (or other bouncy body). */
+  bounces: { t: number; body: string; target: string }[];
 }
 
 export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -177,7 +181,21 @@ export class EventTracker {
       collisions: [],
       escapes: {},
       launches: {},
+      warps: [],
+      bounces: [],
     };
+  }
+
+  onWarp(t: number, body: number, from: number, to: number): void {
+    if (this.trace.warps.length < MAX_LIST) this.trace.warps.push({ t, body: this.ids[body], from: this.ids[from], to: this.ids[to] });
+    // The jump is not motion: restart close-approach tracking for this body.
+    for (let k = 0; k < this.n; k++) {
+      if (k !== body) this.prevD[this.pairOf(body, k)] = NaN;
+    }
+  }
+
+  onBounce(t: number, body: number, target: number): void {
+    if (this.trace.bounces.length < MAX_LIST) this.trace.bounces.push({ t, body: this.ids[body], target: this.ids[target] });
   }
 
   onLaunch(t: number, index: number): void {
@@ -412,6 +430,12 @@ function buildEvents(trace: Trace): SimEvent[] {
 
   for (const c of trace.collisions) {
     events.push({ type: 'collision', t: c.t, bodies: [c.absorbed, c.survivor], details: {} });
+  }
+  for (const w of trace.warps) {
+    events.push({ type: 'warp', t: w.t, bodies: [w.body, w.from, w.to], details: {} });
+  }
+  for (const b of trace.bounces) {
+    events.push({ type: 'bounce', t: b.t, bodies: [b.body, b.target], details: {} });
   }
   for (const [id, t] of Object.entries(trace.escapes)) {
     events.push({ type: 'escape', t, bodies: [id], details: {} });

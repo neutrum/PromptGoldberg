@@ -19,6 +19,8 @@ export function describeStep(level: Level, g: GoalEvent): string {
       : `make ${n(g.a)} crash into ${n(g.b)}`;
     case 'escape': return `fling ${n(g.body)} out of the system`;
     case 'eclipse': return `line ${n(g.occluder)} up in front of ${n(g.source)}`;
+    case 'warp': return `fly into the portal ${n(g.portal)}`;
+    case 'bounce': return `bounce off ${n(g.target)}`;
   }
 }
 

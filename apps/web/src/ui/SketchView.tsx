@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 
 const DEFAULT_COLOR: Record<string, string> = {
   star: '#ffd27a', planet: '#7aa8ff', moon: '#c9c9d6', asteroid: '#a89f91', comet: '#8ef0e0', probe: '#ffffff',
+  portal: '#b388ff', bumper: '#ff5fa2',
 };
-const SIZE: Record<string, number> = { star: 7, planet: 3.6, moon: 2, asteroid: 1.6, comet: 2, probe: 1.8 };
+const SIZE: Record<string, number> = { star: 7, planet: 3.6, moon: 2, asteroid: 1.6, comet: 2, probe: 1.8, portal: 4, bumper: 3 };
 
 /** Seconds since mount, updated every animation frame. */
 function useClock(): number {
@@ -42,8 +43,11 @@ export function SketchView({ bodies, title, thinking }: { bodies: SketchBody[]; 
   }
   const stars = roots.filter((r) => r.body.type === 'star');
   const center = stars[0];
-  const planets = [...(center?.children ?? []), ...roots.filter((r) => r !== center && r.body.type !== 'star')];
-  const aMax = Math.max(1e-9, ...planets.map((p) => p.body.a ?? 1));
+  // Bodies with a fixed position (portals, bumpers, rogues) are drawn where they are, not on an orbit.
+  const placedAt = (n: Node) => n.body.position !== undefined && Math.hypot(...n.body.position) > 0;
+  const floating = roots.filter((r) => r !== center && r.body.type !== 'star' && placedAt(r));
+  const planets = [...(center?.children ?? []), ...roots.filter((r) => r !== center && r.body.type !== 'star' && !placedAt(r))];
+  const aMax = Math.max(1e-9, ...planets.map((p) => p.body.a ?? 1), ...floating.map((f) => Math.hypot(...f.body.position!)));
   const aMin = Math.max(1e-9, Math.min(...planets.map((p) => p.body.a ?? aMax)));
   const orbitR = (a = aMax) => 22 + 70 * Math.sqrt(a / aMax);
   const period = (a = aMax) => Math.min(140, Math.max(14, 16 * (a / aMin) ** 1.5));
@@ -57,7 +61,9 @@ export function SketchView({ bodies, title, thinking }: { bodies: SketchBody[]; 
       <g key={b.id} transform={`translate(${x.toFixed(2)} ${y.toFixed(2)})`}>
         <g className="sketch-pop">
           {b.type === 'star' && <circle r={r * 2.2} fill={color} opacity={0.18} />}
-          <circle r={r} fill={color} className={b.launched ? 'sketch-probe' : undefined} />
+          {b.type === 'portal'
+            ? <circle r={r} fill="none" stroke={color} strokeWidth={1.4} className="sketch-portal" />
+            : <circle r={r} fill={color} className={b.launched ? 'sketch-probe' : undefined} />}
           <text y={-r - 3} textAnchor="middle" className="sketch-label">{b.launched ? `${b.name} (you)` : b.name}</text>
         </g>
       </g>,
@@ -79,6 +85,12 @@ export function SketchView({ bodies, title, thinking }: { bodies: SketchBody[]; 
     const ang = ((p.body.phase ?? k * 137) + (360 * t) / period(p.body.a)) * (Math.PI / 180);
     orbits.push(<circle key={`o-${p.body.id}`} r={r} className="sketch-orbit" />);
     place(p, r * Math.cos(ang), -r * Math.sin(ang));
+  });
+  floating.forEach((f) => {
+    const [x, y] = f.body.position!;
+    const d = Math.hypot(x, y);
+    const r = orbitR(d);
+    place(f, (r * x) / d, (-r * y) / d);
   });
   if (center) dot(center.body, 0, 0);
   stars.slice(1).forEach((s, k) => place(s, 14 * (k + 1), 0));

@@ -46,7 +46,7 @@ export function systemScale(run: RunData): number {
   return Math.max(max, 0.01);
 }
 
-const TYPE_SIZE: Record<string, number> = { star: 0.04, planet: 0.016, moon: 0.007, comet: 0.006, probe: 0.006 };
+const TYPE_SIZE: Record<string, number> = { star: 0.04, planet: 0.016, moon: 0.007, comet: 0.006, probe: 0.006, portal: 0.02, bumper: 0.012 };
 
 /**
  * Exaggerated display radii: sized by type relative to the system, then shrunk so
@@ -70,6 +70,8 @@ export const DEFAULT_COLORS: Record<string, string> = {
   moon: '#cfcfd8',
   comet: '#9ff5ff',
   probe: '#ffffff',
+  portal: '#b388ff',
+  bumper: '#ff5fa2',
 };
 
 /** Interpolated simulation-frame position of body `i` into `out`; false if it does not exist. */

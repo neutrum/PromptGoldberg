@@ -9,6 +9,7 @@ import { useStore } from '../store';
 import { Bodies } from './Bodies';
 import { Checkpoints } from './Checkpoints';
 import { PlayerGlow } from './Effects';
+import { Gadgets } from './Gadgets';
 import { gameScale } from './frames';
 import { planFlight } from './GameScene';
 import { Trails } from './Trails';
@@ -66,6 +67,7 @@ function Showcase({ run, scale }: { run: RunData; scale: number }) {
     <>
       <Trails run={run} showFull={notPlayer} />
       <Bodies run={run} scale={scale} hidden={[LEVEL.player]} />
+      <Gadgets run={run} scale={scale} />
       <PlayerGlow run={run} level={LEVEL} scale={scale} showcase />
       <Checkpoints run={run} level={LEVEL} scale={scale} showcase={{ done }} />
     </>

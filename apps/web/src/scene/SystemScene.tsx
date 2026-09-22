@@ -2,6 +2,8 @@ import { Stars } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useCurrentAttempt, useStore } from '../store';
 import { Bodies } from './Bodies';
+import { systemScale } from './frames';
+import { Gadgets } from './Gadgets';
 import { CameraRig } from './CameraRig';
 import { Trails } from './Trails';
 
@@ -47,6 +49,7 @@ export function SystemScene() {
               .map((a) => <Trails key={a.id} run={a.run} ghost />)}
           <Trails run={attempt.run} />
           <Bodies run={attempt.run} />
+          <Gadgets run={attempt.run} scale={systemScale(attempt.run)} />
         </>
       )}
     </Canvas>

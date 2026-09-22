@@ -300,3 +300,4 @@ button.link:hover:not(:disabled) { background: none; color: var(--text); }
   .menu.home .menu-inner { margin: 0 auto; padding-top: 40px; }
   .home-scene-caption { left: 16px; right: 16px; text-align: center; }
 }
+.sketch-portal { filter: drop-shadow(0 0 2px #b388ff); }
