@@ -4,13 +4,14 @@ import { useGame } from '../game/gameStore';
 import { getGalleryLevel, listGallery, type GalleryEntry } from '../game/net';
 import { todayKey } from '../game/progress';
 import { galleryLink, copyText } from '../game/share';
+import { HomeScene } from '../scene/HomeScene';
 import { SketchView } from '../ui/SketchView';
 
 function Backdrop() {
   return <div className="backdrop" aria-hidden />;
 }
 
-/** Prompt box + live sketch of the level Claude is writing + progress log. Used on the start and create screens. */
+/** Prompt box + live sketch of the level the AI is writing + progress log. Used on the start and create screens. */
 function CreatePanel({ hero = false }: { hero?: boolean }) {
   const ai = useGame((s) => s.ai);
   const { createWithAi } = useGame.getState();
@@ -42,7 +43,7 @@ function CreatePanel({ hero = false }: { hero?: boolean }) {
           <SketchView bodies={ai.sketch?.bodies ?? []} title={ai.sketch?.title} thinking={ai.busy} />
           <div className="ai-log">
             {ai.lines.map((l, i) => <div key={i} className={i === ai.lines.length - 1 && ai.busy ? 'current' : ''}>{i === ai.lines.length - 1 && ai.busy ? '◌ ' : '✓ '}{l}</div>)}
-            {ai.busy && ai.lines.length === 0 && <div className="current">◌ Contacting Claude…</div>}
+            {ai.busy && ai.lines.length === 0 && <div className="current">◌ Contacting the AI designer…</div>}
             {ai.busy && ai.progress > 0 && <div className="machine-bar"><div style={{ width: `${Math.round(ai.progress * 100)}%` }} /></div>}
           </div>
         </div>
@@ -95,17 +96,17 @@ export function MenuScreen() {
   const newPlayer = campaignStars === 0;
 
   return (
-    <div className="app menu">
-      <Backdrop />
+    <div className="app menu home">
+      <HomeScene />
       <div className="menu-inner">
         <h1 className="logo">Orbital<span>Goldberg</span></h1>
         <p className="tagline">
-          Describe a cosmic chain reaction. <strong>Claude builds the star system</strong>, a physics engine proves it can be won, and you play it.
+          Describe any cosmic chain reaction. <strong>AI builds the star system</strong>, real physics proves it can be won, and you play it.
         </p>
         <CreatePanel hero />
         <ol className="how-it-works" aria-label="How it works">
           <li><b>You describe</b> any idea, even “pizza”</li>
-          <li><b>Claude designs</b> the planets, orbits and goal chain</li>
+          <li><b>The AI designs</b> the planets, orbits and goal chain</li>
           <li><b>The optimizer proves</b> it can be won and is fair to aim at</li>
           <li><b>You play it</b>, remix it by talking, and share it</li>
         </ol>
@@ -202,7 +203,7 @@ export function CreateScreen() {
           <h2>Create with AI</h2>
           {source?.kind === 'ai' && level && !ai.busy && <button onClick={() => go('play')}>Back to “{level.title}”</button>}
         </div>
-        <p className="muted">Describe a cosmic chain reaction. Claude designs the star system, then a physics optimizer fires hundreds of test shots to prove it can be won and is fair to aim at, and asks for a redesign when it isn’t. You can start playing as soon as the design is ready.</p>
+        <p className="muted">Describe a cosmic chain reaction. The AI designs the star system, then a physics optimizer fires hundreds of test shots to prove it can be won and is fair to aim at, and asks for a redesign when it isn’t. You can start playing as soon as the design is ready.</p>
         <CreatePanel />
       </div>
     </div>

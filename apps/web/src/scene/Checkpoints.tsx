@@ -11,12 +11,19 @@ import { displayRadii, positionAt } from './frames';
 
 const COLORS = { done: '#5fffa0', next: '#ffd27a', later: '#6f7fb8', failed: '#ff6b5a' };
 
-/** Numbered rings around each goal step's target body, lit up as the chain progresses. */
-export function Checkpoints({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
-  const phase = useGame((s) => s.phase);
-  const celebrated = useGame((s) => s.celebrated);
-  const outcome = useGame((s) => s.outcome);
-  const flight = useGame((s) => s.flight);
+/**
+ * Numbered rings around each goal step's target body, lit up as the chain progresses.
+ * `showcase` drives them without a game in progress (the start screen's demo flight).
+ */
+export function Checkpoints({ run, level, scale, showcase }: { run: RunData; level: Level; scale: number; showcase?: { done: number } }) {
+  const gamePhase = useGame((s) => s.phase);
+  const gameCelebrated = useGame((s) => s.celebrated);
+  const gameOutcome = useGame((s) => s.outcome);
+  const gameFlight = useGame((s) => s.flight);
+  const phase = showcase ? 'flying' : gamePhase;
+  const celebrated = showcase ? showcase.done : gameCelebrated;
+  const outcome = showcase ? null : gameOutcome;
+  const flight = showcase ? null : gameFlight;
   const radii = useMemo(() => displayRadii(run.spec, scale), [run, scale]);
   const groups = useRef<(THREE.Group | null)[]>([]);
   const tmp = useMemo(() => new THREE.Vector3(), []);

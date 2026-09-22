@@ -102,8 +102,8 @@ export function Bursts({ scale }: { scale: number }) {
 
 const TAIL_FRAMES = 40;
 
-/** The player's probe: a bright pulsing glow, a hot tail, and a label while aiming. */
-export function PlayerGlow({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
+/** The player's probe: a bright pulsing glow, a hot tail, and a label while aiming (never in a `showcase`). */
+export function PlayerGlow({ run, level, scale, showcase = false }: { run: RunData; level: Level; scale: number; showcase?: boolean }) {
   const sprite = useRef<THREE.Sprite>(null);
   const halo = useRef<THREE.Sprite>(null);
   const label = useRef<THREE.Group>(null);
@@ -132,7 +132,7 @@ export function PlayerGlow({ run, level, scale }: { run: RunData; level: Level; 
     const time = useStore.getState().time;
     const exists = positionAt(run, i, time, tmp);
     const launchT = run.trace.launches[level.player];
-    const launched = useGame.getState().phase !== 'aiming' && (launchT === undefined || time >= launchT);
+    const launched = (showcase || useGame.getState().phase !== 'aiming') && (launchT === undefined || time >= launchT);
     for (const s of [sprite.current, halo.current]) if (s) s.visible = exists;
     if (!exists) {
       tail.visible = false;
@@ -145,7 +145,7 @@ export function PlayerGlow({ run, level, scale }: { run: RunData; level: Level; 
     halo.current!.position.copy(tmp);
     halo.current!.scale.setScalar(scale * (launched ? 0.08 : 0.12 * pulse));
     if (label.current) {
-      const show = !launched && canDrag && useGame.getState().phase === 'aiming';
+      const show = !showcase && !launched && canDrag && useGame.getState().phase === 'aiming';
       label.current.visible = show;
       if (labelDiv.current) labelDiv.current.style.display = show ? '' : 'none';
       label.current.position.copy(tmp);

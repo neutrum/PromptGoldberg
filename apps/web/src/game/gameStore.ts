@@ -58,7 +58,7 @@ export interface AiLog {
   lines: string[];
   progress: number;
   error: string | null;
-  /** Bodies Claude has written so far for the design in progress. */
+  /** Bodies the AI has written so far for the design in progress. */
   sketch: { attempt: number; title?: string; bodies: SketchBody[] } | null;
 }
 

@@ -1,0 +1,156 @@
+{
+  "id": "showcase-thread-the-needle",
+  "title": "Thread the Needle",
+  "briefing": "Launch from Hearth and shoot the gap between the twin worlds Castor and Pollux, passing close to both. Carry enough speed out of the gap to leave the star behind forever.",
+  "spec": {
+    "title": "Thread the Needle",
+    "description": "The twin worlds Castor and Pollux share one orbit, riding a narrow gap between them. Fly the probe straight through the gap and keep enough speed to leave the system for good.",
+    "bodies": [
+      {
+        "id": "sol",
+        "name": "Nettle",
+        "type": "star",
+        "mass": 1,
+        "radius": 0.00465,
+        "color": "#ffd98a",
+        "placement": {
+          "kind": "free",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "hearth",
+        "name": "Hearth",
+        "type": "planet",
+        "mass": 3e-06,
+        "radius": 4.26e-05,
+        "color": "#6fb7ff",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sol",
+          "a": 1,
+          "e": 0,
+          "phase": 0,
+          "argPeriapsis": 0,
+          "inclination": 0,
+          "retrograde": false
+        }
+      },
+      {
+        "id": "castor",
+        "name": "Castor",
+        "type": "planet",
+        "mass": 5e-05,
+        "radius": 0.0002,
+        "color": "#dce6f2",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sol",
+          "a": 2.5,
+          "e": 0,
+          "phase": 60,
+          "argPeriapsis": 0,
+          "inclination": 0,
+          "retrograde": false
+        }
+      },
+      {
+        "id": "pollux",
+        "name": "Pollux",
+        "type": "planet",
+        "mass": 5e-05,
+        "radius": 0.0002,
+        "color": "#f2c6a0",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sol",
+          "a": 2.5,
+          "e": 0,
+          "phase": 67,
+          "argPeriapsis": 0,
+          "inclination": 0,
+          "retrograde": false
+        }
+      },
+      {
+        "id": "needle",
+        "name": "Needle",
+        "type": "probe",
+        "mass": 0,
+        "radius": 1e-07,
+        "color": "#ffffff",
+        "placement": {
+          "kind": "launch",
+          "from": "hearth",
+          "speed": 3.25,
+          "angle": 8,
+          "elevation": 0,
+          "time": 0.4
+        }
+      }
+    ],
+    "goal": [
+      {
+        "type": "flyby",
+        "body": "needle",
+        "target": "castor",
+        "maxDistance": 0.2
+      },
+      {
+        "type": "flyby",
+        "body": "needle",
+        "target": "pollux",
+        "maxDistance": 0.2
+      },
+      {
+        "type": "escape",
+        "body": "needle"
+      }
+    ],
+    "tunables": [],
+    "sim": {
+      "duration": 6,
+      "samples": 3000
+    }
+  },
+  "player": "needle",
+  "controls": [
+    {
+      "path": "bodies.needle.placement.speed",
+      "label": "Power",
+      "min": 1.8,
+      "max": 4.6
+    },
+    {
+      "path": "bodies.needle.placement.angle",
+      "label": "Aim",
+      "min": -40,
+      "max": 40
+    },
+    {
+      "path": "bodies.needle.placement.time",
+      "label": "Launch time",
+      "min": 0,
+      "max": 2.5
+    }
+  ],
+  "par": 3,
+  "solution": {
+    "values": [
+      3.565258211269975,
+      -1.619770098477602,
+      0.006863771704956889
+    ],
+    "pieces": []
+  },
+  "tip": "The twins drift along their shared orbit while you climb outward, so aim for the gap where it will be, and launch with the planet's motion to keep your outbound speed high."
+}

@@ -28,7 +28,7 @@ interface Node {
 }
 
 /**
- * The star system as Claude writes it: each body appears the moment its JSON is complete and
+ * The star system as the AI writes it: each body appears the moment its JSON is complete and
  * circles its parent (orbit radius on a square-root scale so inner and outer worlds both fit).
  */
 export function SketchView({ bodies, title, thinking }: { bodies: SketchBody[]; title?: string; thinking?: boolean }) {
@@ -94,8 +94,8 @@ export function SketchView({ bodies, title, thinking }: { bodies: SketchBody[]; 
         {title && <strong>{title}</strong>}
         <span className="muted">
           {bodies.length === 0
-            ? (thinking ? 'Claude is imagining your system…' : '')
-            : `Claude has placed ${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}${thinking ? '…' : ''}`}
+            ? (thinking ? 'The AI is imagining your system…' : '')
+            : `The AI has placed ${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}${thinking ? '…' : ''}`}
         </span>
       </div>
     </div>
