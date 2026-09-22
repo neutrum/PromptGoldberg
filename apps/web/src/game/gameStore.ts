@@ -1,6 +1,6 @@
 import {
   CAMPAIGN, controlValues, dailySeed, endlessDifficulty, getTunable, parseLevel, shotSpec, starsFor,
-  clampControl, type Level, type LevelStreamEvent, type Piece, type PieceKind,
+  clampControl, type Level, type LevelStreamEvent, type Piece, type PieceKind, type SketchBody,
 } from '@og/shared';
 import { create } from 'zustand';
 import { computePool, generateInWorker, runPreview, runSimulation, solveInWorker, type RunData } from '../simClient';
@@ -58,6 +58,8 @@ export interface AiLog {
   lines: string[];
   progress: number;
   error: string | null;
+  /** Bodies Claude has written so far for the design in progress. */
+  sketch: { attempt: number; title?: string; bodies: SketchBody[] } | null;
 }
 
 /** How far the AI level on screen got: 0 = designed (not proven yet), 1 = proven solvable, 2 = final. */
@@ -146,7 +148,7 @@ interface GameState {
 }
 
 const idleMachine: MachineState = { status: 'idle', evals: 0, best: 0, values: null };
-const idleAi: AiLog = { busy: false, lines: [], progress: 0, error: null };
+const idleAi: AiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null };
 
 const ENDLESS_START_SHOTS = 8;
 
@@ -235,7 +237,7 @@ export const useGame = create<GameState>((set, get) => {
   const aiStream = async (path: '/level' | '/edit', body: unknown, source: (level: Level) => Source) => {
     aiAbort?.abort();
     aiAbort = new AbortController();
-    set({ ai: { busy: true, lines: [], progress: 0, error: null }, aiLive: null });
+    set({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, aiLive: null });
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let delivered = false;
     const accept = (raw: Level, attempt: number, rank: AiRank): boolean => {
@@ -256,6 +258,9 @@ export const useGame = create<GameState>((set, get) => {
             break;
           case 'progress':
             set((s) => ({ ai: { ...s.ai, progress: e.goalLength ? e.bestScore / e.goalLength : 0 } }));
+            break;
+          case 'sketch':
+            set((s) => ({ ai: { ...s.ai, sketch: { attempt: e.attempt, title: e.title, bodies: e.bodies } } }));
             break;
           case 'draft':
             if (accept(e.level, e.attempt, e.status === 'solved' ? 1 : 0)) {

@@ -25,7 +25,10 @@ export class FakeLlm implements LlmBackend {
     this.requests.push(req);
     const next = this.replies.length > 1 ? this.replies.shift()! : this.replies[0];
     if (next instanceof Error) throw next;
-    return { text: typeof next === 'function' ? next(req) : next, backend: 'api' as const };
+    const text = typeof next === 'function' ? next(req) : next;
+    // Stream it in a few chunks, like the API backend.
+    for (let i = 0; i < text.length; i += 200) req.onText?.(text.slice(i, i + 200));
+    return { text, backend: 'api' as const };
   }
 }
 

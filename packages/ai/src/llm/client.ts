@@ -12,6 +12,8 @@ export interface CompletionRequest {
   model?: string;
   /** Receives the reply text as it streams in (API backend; the CLI calls it once at the end). */
   onText?: (delta: string) => void;
+  /** Overrides CLAUDE_EFFORT for this call (API backend). */
+  effort?: Effort;
 }
 
 /** Where a call's time went, in ms from the request. */
@@ -49,6 +51,10 @@ export class LlmError extends Error {
 }
 
 const MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5';
+/** How much Claude thinks before answering (API backend): low | medium | high | xhigh | max. Unset = the model default (high). */
+const EFFORT = process.env.CLAUDE_EFFORT as Effort | undefined;
+
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /**
  * Claude API. Used in production; needs ANTHROPIC_API_KEY. Streams the reply (so callers can
@@ -59,7 +65,7 @@ function apiBackend(): LlmBackend {
   const client = new Anthropic();
   return {
     name: 'api',
-    async complete({ system, prompt, maxTokens = 16000, model = MODEL, onText }) {
+    async complete({ system, prompt, maxTokens = 16000, model = MODEL, onText, effort = EFFORT }) {
       const started = Date.now();
       const timing: CompletionTiming = { totalMs: 0 };
       try {
@@ -71,6 +77,7 @@ function apiBackend(): LlmBackend {
           fallbacks: 'default',
           system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: prompt }],
+          ...(effort ? { output_config: { effort } } : {}),
         });
         for await (const event of stream) {
           if (event.type !== 'content_block_delta') continue;

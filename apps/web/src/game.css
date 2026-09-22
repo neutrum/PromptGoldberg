@@ -227,3 +227,52 @@ button.link:hover:not(:disabled) { background: none; color: var(--text); }
 .ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: tut-pulse 1s ease-in-out infinite, blink 1s ease-in-out infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
 @media (max-width: 600px) { .ai-status { max-width: none; } }
+
+/* AI-first start screen */
+.tagline strong { color: var(--gold); font-weight: 600; }
+.create-panel { display: flex; flex-direction: column; gap: 10px; }
+.create-panel form { display: flex; gap: 10px; align-items: stretch; }
+.create-panel textarea { flex: 1; min-width: 0; margin: 0; font-size: 17px; resize: none; }
+.create-panel.hero textarea { border-color: rgba(255, 210, 122, 0.45); box-shadow: 0 0 40px rgba(255, 210, 122, 0.1); }
+.create-panel .create-btn { flex: none; white-space: nowrap; }
+.create-panel .create-btn:disabled { opacity: 0.55; transform: none; }
+.create-live { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; align-items: center; padding: 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); animation: rise 0.3s ease-out; }
+.how-it-works { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; counter-reset: step; }
+.how-it-works li { counter-increment: step; position: relative; padding: 10px 12px 10px 38px; font-size: 13px; color: var(--muted); border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); }
+.how-it-works li::before { content: counter(step); position: absolute; left: 10px; top: 10px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #2a1400; background: var(--gold); }
+.how-it-works b { color: var(--text); }
+.home-section { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.home-section h3 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; }
+.menu-grid.compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.menu-grid.compact .menu-card { padding: 12px 14px; }
+.menu-grid.compact .menu-icon { font-size: 22px; }
+.menu-grid.compact .menu-name { font-size: 15px; }
+.menu-footer { gap: 16px; align-items: center; }
+
+/* Live sketch of the system Claude is writing */
+.sketch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sketch svg { width: 100%; max-width: 300px; aspect-ratio: 1; overflow: visible; }
+.sketch-orbit { fill: none; stroke: rgba(160, 180, 255, 0.22); stroke-width: 0.5; stroke-dasharray: 2 2; }
+.sketch-pop { transform-box: fill-box; transform-origin: center; animation: sketch-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes sketch-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.sketch-label { font-size: 6px; fill: var(--text); opacity: 0.8; paint-order: stroke; stroke: #04050c; stroke-width: 1.5px; }
+.sketch-probe { filter: drop-shadow(0 0 2px #fff); animation: blink 1s ease-in-out infinite; }
+.sketch-thinking { fill: var(--gold); opacity: 0.6; animation: blink 1.2s ease-in-out infinite; transform-box: fill-box; }
+.sketch-caption { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.sketch-caption strong { color: var(--gold); }
+
+@media (max-width: 600px) {
+  .create-panel form { flex-direction: column; }
+  .create-panel .create-btn { width: 100%; }
+  .create-live { grid-template-columns: 1fr; }
+  .how-it-works { grid-template-columns: 1fr 1fr; }
+}
+
+/* View buttons */
+.view-controls { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; padding: 5px; z-index: 2; }
+.view-controls button { width: 36px; height: 36px; padding: 0; font-size: 17px; line-height: 1; border-radius: 8px; }
+@media (max-width: 600px) {
+  .view-controls { left: auto; right: 6px; top: 40%; }
+  .view-controls button { width: 40px; height: 40px; }
+}

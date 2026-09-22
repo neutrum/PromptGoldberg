@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { useGame } from '../game/gameStore';
 import type { RunData } from '../simClient';
 import { useStore } from '../store';
+import { useCamera } from './cameraControls';
 import { takeShake } from './Effects';
 import { positionAt } from './frames';
 
@@ -31,8 +32,9 @@ function freeArea(canvas: HTMLCanvasElement): { zoom: number; lift: number } {
 }
 
 /**
- * Overview while aiming; during a flight the view glides after the player, zooming in once
- * at launch and then respecting whatever zoom and angle the user picks.
+ * Frames the action by itself (overview while aiming, gliding after the probe in flight) until
+ * the player drags or zooms; from then on the view stays where they put it. The view buttons
+ * (fit, zoom in/out) and every launch hand framing back to the camera.
  */
 export function GameCamera({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
   const controls = useRef<OrbitControlsImpl>(null);
@@ -46,6 +48,7 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
     camera.near = scale * 1e-4;
     camera.far = scale * 2000;
     camera.updateProjectionMatrix();
+    useCamera.getState().setAuto(true);
     view.current = freeArea(gl.domElement);
     camera.position.set(0, scale * 2.1, scale * 0.95).multiplyScalar(view.current.zoom);
     controls.current?.target.set(0, 0, 0);
@@ -54,15 +57,47 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
 
   useEffect(() => () => { camera.clearViewOffset(); }, [camera]);
 
+  // Dragging the view (not just zooming, not aiming, which stops the event) takes it over.
+  useEffect(() => {
+    const el = gl.domElement;
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+    const onMove = (e: PointerEvent) => {
+      if (down && e.buttons && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) {
+        useCamera.getState().setAuto(false);
+        down = null;
+      }
+    };
+    const onUp = () => { down = null; };
+    el.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [gl]);
+
   useFrame((state, dt) => {
     const c = controls.current;
     if (!c) return;
     const tr = transition.current;
+    const cam = useCamera.getState();
     if (tr.phase !== phase) {
       tr.phase = phase;
       tr.since = state.clock.elapsedTime;
       tr.fromDist = camera.position.distanceTo(c.target);
+      // A launch is the show: follow it, even if the player had moved the view while aiming.
+      if (phase === 'flying') cam.setAuto(true);
     }
+    const command = cam.take();
+    if (command === 'fit') tr.since = state.clock.elapsedTime;
+    if (command === 'in' || command === 'out') {
+      const offset = camera.position.clone().sub(c.target);
+      camera.position.copy(c.target).addScaledVector(offset, command === 'in' ? 0.7 : 1 / 0.7);
+    }
+    const auto = useCamera.getState().auto;
     const age = state.clock.elapsedTime - tr.since;
     const k = 1 - Math.exp(-dt * 5);
 
@@ -80,12 +115,14 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
     } else {
       desired.set(0, 0, 0);
     }
-    delta.copy(desired).sub(c.target).multiplyScalar(age < 1.2 ? k : 1 - Math.exp(-dt * 12));
-    c.target.add(delta);
-    camera.position.add(delta);
+    if (auto) {
+      delta.copy(desired).sub(c.target).multiplyScalar(age < 1.2 ? k : 1 - Math.exp(-dt * 12));
+      c.target.add(delta);
+      camera.position.add(delta);
+    }
 
-    // One-off zoom after a phase change, then hands off to the user.
-    if (age < 1.2) {
+    // One-off zoom after a phase change or "fit", then hands off to the user.
+    if (auto && age < 1.2) {
       const goal = phase === 'flying' ? scale * 0.55 * Math.sqrt(v.zoom) : phase === 'aiming' ? scale * 2.3 * v.zoom : null;
       if (goal !== null) {
         const offset = camera.position.clone().sub(c.target);
@@ -100,5 +137,17 @@ export function GameCamera({ run, level, scale }: { run: RunData; level: Level; 
     c.update();
   });
 
-  return <OrbitControls ref={controls} makeDefault enableDamping={false} maxDistance={scale * 20} minDistance={scale * 0.002} />;
+  return (
+    <OrbitControls
+      ref={controls}
+      makeDefault
+      enableDamping={false}
+      maxDistance={scale * 20}
+      minDistance={scale * 0.002}
+      // Map-like: drag moves the view across the system plane, wheel/pinch zooms, right-drag or two fingers tilt.
+      mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }}
+      touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }}
+      screenSpacePanning={false}
+    />
+  );
 }

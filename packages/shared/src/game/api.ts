@@ -20,13 +20,31 @@ export type LevelStage = 'designing' | 'verifying' | 'redesigning' | 'editing';
 export type LevelDraftStatus = 'designed' | 'solved';
 
 /**
- * Levels arrive progressively so players never wait for the whole pipeline: a `draft` as soon as
+ * Levels arrive progressively so players never wait for the whole pipeline: `sketch` events while
+ * Claude is still writing a design (the bodies written so far), a `draft` as soon as
  * each design is valid, another once it is proven solvable, then the final `level`.
  * Drafts of the same `attempt` are the same design (same bodies); a new attempt is a redesign.
  */
+/** A body as soon as Claude has written it: enough to draw the system before it is playable. */
+export interface SketchBody {
+  id: string;
+  name: string;
+  type: string;
+  color?: string;
+  /** Body it orbits (orbit placement) or launches from (the player). */
+  parent?: string;
+  /** Orbit radius in AU. */
+  a?: number;
+  /** Position on the orbit at t=0, degrees. */
+  phase?: number;
+  /** The player's probe or comet. */
+  launched?: boolean;
+}
+
 export type LevelStreamEvent =
   | { type: 'stage'; stage: LevelStage; attempt: number; maxAttempts: number; message: string }
   | { type: 'progress'; attempt: number; evals: number; bestScore: number; goalLength: number }
+  | { type: 'sketch'; attempt: number; title?: string; bodies: SketchBody[] }
   | { type: 'draft'; level: Level; status: LevelDraftStatus; attempt: number }
   | { type: 'level'; level: Level; solved: boolean; attempts: number; notes: string[]; cached: boolean; attempt?: number }
   | { type: 'error'; error: string };

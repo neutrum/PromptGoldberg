@@ -15,6 +15,7 @@ describe('createLevel', () => {
       llm, solver, onEvent: (e) => {
         if (e.type === 'stage') stages.push(e.stage);
         if (e.type === 'stage' || e.type === 'draft') order.push(e.type === 'draft' ? `draft:${e.status}` : e.stage);
+        if (e.type === 'sketch' && order[order.length - 1] !== 'sketch') order.push('sketch');
         if (e.type === 'draft') {
           expect(e.attempt).toBe(1);
           expect(e.level.spec.bodies.length).toBeGreaterThan(1);
@@ -24,7 +25,7 @@ describe('createLevel', () => {
       },
     });
     // Playable before the proof, and again once proven.
-    expect(order).toEqual(['designing', 'draft:designed', 'verifying', 'draft:solved']);
+    expect(order).toEqual(['designing', 'sketch', 'draft:designed', 'verifying', 'draft:solved']);
     expect(res.solved).toBe(true);
     expect(res.attempts).toBe(1);
     expect(stages).toEqual(['designing', 'verifying']);

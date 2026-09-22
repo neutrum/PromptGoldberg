@@ -85,12 +85,14 @@ export function validateLevelDesign(json: unknown, keep?: { player: string; path
   return { ok: true, value: { spec, notes, briefing: text(briefing, 400), tip: text(tip, 200), player: body!.id } };
 }
 
-export async function designLevel(llm: LlmBackend, userPrompt: string, calls: Completion[]): Promise<LevelDesign> {
+export async function designLevel(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<LevelDesign> {
   return requestValidated(
     llm,
     { system: LEVEL_PROMPT, prompt: `Design a level for this description:\n\n${userPrompt}` },
     (json) => validateLevelDesign(json),
     calls,
+    1,
+    onProgress,
   );
 }
 
@@ -106,8 +108,8 @@ export interface RedesignContext {
 }
 
 /** Ask for a structurally different design after the optimizer could not solve the previous one (or only barely). */
-export async function redesignLevel(llm: LlmBackend, ctx: RedesignContext, calls: Completion[]): Promise<LevelDesign> {
-  if (ctx.fragile) return requestValidated(llm, { system: LEVEL_PROMPT, prompt: fragilePrompt(ctx) }, (json) => validateLevelDesign(json, ctx.keep), calls);
+export async function redesignLevel(llm: LlmBackend, ctx: RedesignContext, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<LevelDesign> {
+  if (ctx.fragile) return requestValidated(llm, { system: LEVEL_PROMPT, prompt: fragilePrompt(ctx) }, (json) => validateLevelDesign(json, ctx.keep), calls, 1, onProgress);
   const prompt = `${ctx.request}
 
 A previous design could not be solved: after ${ctx.evals} simulated shots over all tunables the best result completed ${ctx.bestScore.toFixed(2)} of ${ctx.previous.goal.length} goal events. The best attempt's goal checker said:
@@ -117,7 +119,7 @@ Previous design (with the optimizer's best values):
 ${JSON.stringify(ctx.previous)}
 
 Redesign it so the goal becomes reachable while keeping the idea: for example move targets closer or onto the probe's natural path, loosen flyby distances, enlarge collision targets, widen tunable ranges around more plausible values, or lengthen sim.duration a little. Reply with the full JSON object (system plus briefing, tip and player).`;
-  return requestValidated(llm, { system: LEVEL_PROMPT, prompt }, (json) => validateLevelDesign(json, ctx.keep), calls);
+  return requestValidated(llm, { system: LEVEL_PROMPT, prompt }, (json) => validateLevelDesign(json, ctx.keep), calls, 1, onProgress);
 }
 
 function fragilePrompt(ctx: RedesignContext): string {
@@ -133,7 +135,7 @@ Redesign it so that near misses still work while keeping the idea: make collisio
 }
 
 /** Talk-to-edit: apply a plain-language change to an existing level. */
-export async function editLevelDesign(llm: LlmBackend, level: Level, instruction: string, calls: Completion[]): Promise<LevelDesign> {
+export async function editLevelDesign(llm: LlmBackend, level: Level, instruction: string, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<LevelDesign> {
   const keep = { player: level.player, paths: level.controls.map((c) => c.path) };
   const spec = { ...level.spec, tunables: level.controls.map((c) => ({ path: c.path, min: c.min, max: c.max })) };
   const prompt = `${editRequest(level, instruction)}
@@ -142,7 +144,7 @@ Current level:
 ${JSON.stringify({ ...spec, briefing: level.briefing, tip: level.tip, player: level.player })}
 
 Apply the change and keep everything else as it is where possible. Keep the player body "${level.player}" and its launch tunables. Update the briefing if the goal changed. Reply with the full JSON object (system plus briefing, tip and player).`;
-  return requestValidated(llm, { system: LEVEL_PROMPT, prompt }, (json) => validateLevelDesign(json, keep), calls);
+  return requestValidated(llm, { system: LEVEL_PROMPT, prompt }, (json) => validateLevelDesign(json, keep), calls, 1, onProgress);
 }
 
 export const editRequest = (level: Level, instruction: string) =>

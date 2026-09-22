@@ -61,10 +61,17 @@ export async function requestValidated<T>(
   validate: (json: unknown) => Validation<T>,
   calls: Completion[],
   retries = 1,
+  /** Receives the reply text so far on each streamed chunk (restarts on a retry). */
+  onProgress?: (textSoFar: string) => void,
 ): Promise<T> {
   let prompt = req.prompt;
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const reply = await llm.complete({ system: req.system, prompt, maxTokens: req.maxTokens });
+    let soFar = '';
+    const onText = onProgress && ((delta: string) => {
+      soFar += delta;
+      onProgress(soFar);
+    });
+    const reply = await llm.complete({ system: req.system, prompt, maxTokens: req.maxTokens, onText });
     calls.push(reply);
 
     let problems: string;

@@ -6,6 +6,7 @@ import { GOAL_ICON, goalShort } from '../game/hints';
 import { copyText, galleryLink, levelLink } from '../game/share';
 import { formatTime } from '../format';
 import { GameScene } from '../scene/GameScene';
+import { useCamera } from '../scene/cameraControls';
 import { isTouch, useNarrow } from '../ui/device';
 import { Tutorial } from './Tutorial';
 
@@ -252,6 +253,23 @@ function ResultCard({ level }: { level: Level }) {
   );
 }
 
+/** Zoom, show the whole system, follow the probe. Dragging the scene moves the view. */
+function ViewControls() {
+  const auto = useCamera((s) => s.auto);
+  const phase = useGame((s) => s.phase);
+  const send = useCamera((s) => s.send);
+  const inFlight = phase === 'flying' || phase === 'result';
+  return (
+    <div className="view-controls panel" aria-label="View">
+      <button onClick={() => send('in')} title="Zoom in (+)">＋</button>
+      <button onClick={() => send('out')} title="Zoom out (−)">－</button>
+      <button className={auto && !inFlight ? 'active' : ''} onClick={() => send('fit')} title={inFlight ? 'Follow the probe (F)' : 'Show the whole system (F)'}>
+        {inFlight ? '🎯' : '⌂'}
+      </button>
+    </div>
+  );
+}
+
 /** Status of an AI level whose better versions may still be arriving. */
 function AiStatus() {
   const live = useGame((s) => s.aiLive);
@@ -331,6 +349,9 @@ export function PlayScreen() {
         case 'KeyQ': nudge(idx('.time'), -0.01); break;
         case 'KeyE': nudge(idx('.time'), 0.01); break;
         case 'Escape': g.setPlacing(null); break;
+        case 'KeyF': useCamera.getState().send('fit'); break;
+        case 'Equal': case 'NumpadAdd': useCamera.getState().send('in'); break;
+        case 'Minus': case 'NumpadSubtract': useCamera.getState().send('out'); break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -380,6 +401,7 @@ export function PlayScreen() {
 
           {!narrow && side}
 
+          <ViewControls />
           <footer className="hud-bottom">
             {phase === 'result' && <ResultCard level={level} />}
             {phase === 'flying' && (isTouch
@@ -392,8 +414,8 @@ export function PlayScreen() {
               {level.controls.length === 0
                 ? 'The shot is fixed: build the machine with pieces, then launch'
                 : isTouch
-                  ? 'Drag back from the glowing probe to aim · pinch to zoom · two fingers to pan'
-                  : 'Drag back from the glowing probe to aim · ←→ aim · ↑↓ power · Q/E timing · Shift for fine steps'}
+                  ? 'Drag back from the glowing probe to aim · drag elsewhere to move the view · pinch to zoom'
+                  : 'Drag back from the probe to aim · drag elsewhere to move the view · scroll to zoom · right-drag to tilt · ←→ aim · ↑↓ power · Q/E timing'}
             </div>
           </footer>
           {phase !== 'loading' && <Tutorial key={level.id + level.title} level={level} />}

@@ -7,6 +7,7 @@ import {
 import type { Completion, LlmBackend } from './llm/client';
 import { designLevel, editLevelDesign, editRequest, redesignLevel, type LevelDesign } from './llm/level';
 import { makeForgiving, MIN_ROBUSTNESS } from './forgiving';
+import { sketchFrom } from './llm/sketch';
 import { SolverError, type Solver } from './solver';
 import { chooseStartValues, roundForControl, valuesFromSpec } from './startValues';
 
@@ -36,7 +37,7 @@ export const newLevelId = (prefix: string) => `${prefix}-${randomBytes(4).toStri
 interface LoopSpec {
   firstStage: LevelStage;
   firstMessage: string;
-  design: (calls: Completion[]) => Promise<LevelDesign>;
+  design: (calls: Completion[], onProgress: (textSoFar: string) => void) => Promise<LevelDesign>;
   /** Request text given to redesigns. */
   request: string;
   keep?: { player: string; paths: string[] };
@@ -65,6 +66,18 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
   let attempts = 0;
   let bestAttempt = 1;
   const check = (level: Level, shots: number[][]) => deps.solver.checkMany(level, shots, { signal });
+  /** Sends the bodies written so far whenever another one is complete. */
+  const sketcher = (attempt: number) => {
+    let sent = -1;
+    let title: string | undefined;
+    return (text: string) => {
+      const sketch = sketchFrom(text);
+      if (sketch.bodies.length === sent && sketch.title === title) return;
+      sent = sketch.bodies.length;
+      title = sketch.title;
+      emit({ type: 'sketch', attempt, ...sketch });
+    };
+  };
 
   const outOfTime = () => deps.deadline !== undefined && Date.now() > deps.deadline;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -76,7 +89,7 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
     let design: LevelDesign;
     if (attempt === 1) {
       emit({ type: 'stage', stage: loop.firstStage, attempt, maxAttempts, message: loop.firstMessage });
-      design = await loop.design(calls);
+      design = await loop.design(calls, sketcher(attempt));
     } else {
       const prev = last!;
       const fragile = prev.tuned.solved && lastBuilt ? lastBuilt : null;
@@ -95,7 +108,7 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
           evals: prev.tuned.evals,
           keep: loop.keep,
           fragile: fragile ? { robustness: fragile.robustness } : undefined,
-        }, calls);
+        }, calls, sketcher(attempt));
       } catch (err) {
         if (signal?.aborted) throw err;
         notes.push(`Redesign ${attempt} failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -196,7 +209,7 @@ export function generateLevel(deps: PipelineDeps, prompt: string, emit: Emit): P
   return repairLoop(deps, emit, {
     firstStage: 'designing',
     firstMessage: 'Designing a star system for your idea.',
-    design: (calls) => designLevel(deps.llm, prompt, calls),
+    design: (calls, onProgress) => designLevel(deps.llm, prompt, calls, onProgress),
     request: `Design a level for this description:\n\n${prompt}`,
     level: { id: newLevelId('ai') },
   });
@@ -207,7 +220,7 @@ export function editLevel(deps: PipelineDeps, level: Level, instruction: string,
   return repairLoop(deps, emit, {
     firstStage: 'editing',
     firstMessage: `Applying your change: ${instruction}`,
-    design: (calls) => editLevelDesign(deps.llm, level, instruction, calls),
+    design: (calls, onProgress) => editLevelDesign(deps.llm, level, instruction, calls, onProgress),
     request: editRequest(level, instruction),
     keep,
     level: { id: newLevelId('edit'), par: level.par, player: level.player },
