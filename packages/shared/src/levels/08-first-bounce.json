@@ -1,0 +1,155 @@
+{
+  "id": "first-bounce",
+  "title": "First Bounce",
+  "briefing": "A bumper floats out there: hit it and you bounce straight off. Ring it, and let the rebound drop you onto the blue giant Cobalt.",
+  "tip": "The bumper never moves, but Cobalt does. Pick a launch moment so the giant is arriving where the rebound points.",
+  "par": 4,
+  "player": "probe",
+  "controls": [
+    {
+      "path": "bodies.probe.placement.speed",
+      "label": "Power",
+      "min": 1.2,
+      "max": 3.6
+    },
+    {
+      "path": "bodies.probe.placement.angle",
+      "label": "Aim",
+      "min": -15,
+      "max": 85
+    },
+    {
+      "path": "bodies.probe.placement.time",
+      "label": "Launch time",
+      "min": 0,
+      "max": 0.8
+    }
+  ],
+  "solution": {
+    "values": [
+      1.83586,
+      78.0972,
+      0.772998
+    ],
+    "pieces": []
+  },
+  "spec": {
+    "title": "First Bounce",
+    "description": "Introduces bumpers: bodies bounce off them instead of crashing.",
+    "tunables": [],
+    "sim": {
+      "duration": 3,
+      "samples": 2500
+    },
+    "bodies": [
+      {
+        "id": "sun",
+        "name": "Ember",
+        "type": "star",
+        "mass": 1,
+        "radius": 0.00465,
+        "color": "#ffcf6b",
+        "placement": {
+          "kind": "free",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "haven",
+        "name": "Haven",
+        "type": "planet",
+        "mass": 0.000003,
+        "radius": 0.000043,
+        "color": "#7fd3a0",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sun",
+          "a": 1,
+          "e": 0,
+          "phase": 0,
+          "argPeriapsis": 0,
+          "inclination": 0,
+          "retrograde": false
+        }
+      },
+      {
+        "id": "cobalt",
+        "name": "Cobalt",
+        "type": "planet",
+        "mass": 0.00095,
+        "radius": 0.036,
+        "color": "#4a8cff",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sun",
+          "a": 2.3,
+          "e": 0,
+          "phase": 226.07,
+          "argPeriapsis": 0,
+          "inclination": 0,
+          "retrograde": false
+        }
+      },
+      {
+        "id": "plate",
+        "name": "Bumper Plate",
+        "type": "bumper",
+        "mass": 0,
+        "radius": 0.22,
+        "color": "#ff7a5c",
+        "placement": {
+          "kind": "free",
+          "position": [
+            1.15,
+            1.05,
+            0
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ]
+        },
+        "bounce": 1.2,
+        "fixed": true
+      },
+      {
+        "id": "probe",
+        "name": "Pinball",
+        "type": "probe",
+        "mass": 0,
+        "radius": 1e-7,
+        "color": "#ffffff",
+        "placement": {
+          "kind": "launch",
+          "from": "haven",
+          "speed": 2.4,
+          "angle": 35,
+          "elevation": 0,
+          "time": 0.1
+        }
+      }
+    ],
+    "goal": [
+      {
+        "type": "bounce",
+        "body": "probe",
+        "target": "plate"
+      },
+      {
+        "type": "collision",
+        "a": "probe",
+        "b": "cobalt"
+      }
+    ]
+  }
+}

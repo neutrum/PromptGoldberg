@@ -9,12 +9,18 @@ const NUDGES: [number, number][] = [
 ];
 
 describe('campaign', () => {
-  it('has ten levels with unique ids and rising par', () => {
-    expect(CAMPAIGN).toHaveLength(10);
+  it('has twelve levels with unique ids and rising par', () => {
+    expect(CAMPAIGN).toHaveLength(12);
     expect(new Set(CAMPAIGN.map((l) => l.id)).size).toBe(CAMPAIGN.length);
     CAMPAIGN.forEach((l, i) => {
       if (i > 0) expect(l.par).toBeGreaterThanOrEqual(CAMPAIGN[i - 1].par);
     });
+  });
+
+  it('introduces each gadget with its own level', () => {
+    const uses = (type: string) => CAMPAIGN.findIndex((l) => l.spec.bodies.some((b) => b.type === type));
+    expect(uses('bumper')).toBeGreaterThanOrEqual(0);
+    expect(uses('portal')).toBeGreaterThan(uses('bumper'));
   });
 
   it('introduces pieces early and brings them back', () => {
