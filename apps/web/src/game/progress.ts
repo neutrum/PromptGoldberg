@@ -12,11 +12,15 @@ export interface Progress {
   author: string;
   /** Tutorials already finished, by id ('aim', 'pieces'). */
   tutorial: Record<string, boolean>;
+  /** Coach marks switched off entirely (start-screen toggle or ?tutorial=off). */
+  tutorialsOff: boolean;
+  /** Hide the predicted path and aim by feel (only the first part of the flight is shown). */
+  blindAim: boolean;
 }
 
 const KEY = 'orbital-goldberg:progress:v1';
 
-const empty = (): Progress => ({ levels: {}, daily: {}, endlessBest: 0, muted: false, author: '', tutorial: {} });
+const empty = (): Progress => ({ levels: {}, daily: {}, endlessBest: 0, muted: false, author: '', tutorial: {}, tutorialsOff: false, blindAim: false });
 
 export function loadProgress(): Progress {
   try {

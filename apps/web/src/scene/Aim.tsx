@@ -7,7 +7,7 @@ import type { RunData } from '../simClient';
 import { useStore } from '../store';
 import { frameAt, positionAt, simPositionAt, simVelocityAt } from './frames';
 
-/** Share of the flight after launch that the dotted preview reveals. */
+/** Share of the flight the dotted preview reveals when the full path is hidden ("blind aim"). */
 export const PREVIEW_FRACTION = 0.3;
 
 const RAD = 180 / Math.PI;
@@ -17,8 +17,8 @@ const grabRadius = (e: PointerEvent) => (e.pointerType === 'mouse' ? 56 : 80);
 /** Pull distance (CSS px) for full power; shorter on small screens so a thumb can reach it. */
 const fullPull = () => Math.min(220, Math.max(130, 0.42 * Math.min(window.innerWidth, window.innerHeight)));
 
-/** Dashed line along body `i`'s path between two times. */
-function DashedPath({ run, i, t0, t1, color, opacity = 0.85 }: { run: RunData; i: number; t0: number; t1: number; color: string; opacity?: number }) {
+/** Dashed line along body `i`'s path between two times, optionally fading out towards the end. */
+function DashedPath({ run, i, t0, t1, color, opacity = 0.85, fade = false }: { run: RunData; i: number; t0: number; t1: number; color: string; opacity?: number; fade?: boolean }) {
   const line = useMemo(() => {
     const f0 = Math.max(0, Math.floor(frameAt(run, t0)));
     const f1 = Math.min(run.frameCount - 1, Math.ceil(frameAt(run, t1)));
@@ -31,30 +31,43 @@ function DashedPath({ run, i, t0, t1, color, opacity = 0.85 }: { run: RunData; i
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
     const len = pts.reduce((s, p, k) => (k ? s + p.distanceTo(pts[k - 1]) : 0), 0);
     const mat = new THREE.LineDashedMaterial({ color, dashSize: len / 60, gapSize: len / 90, transparent: true, opacity, depthWrite: false });
+    if (fade && pts.length > 1) {
+      // Bright where the shot starts, faint far ahead: the whole arc is readable at a glance.
+      const c = new THREE.Color(color);
+      const colors = new Float32Array(pts.length * 3);
+      pts.forEach((_, k) => {
+        const f = 1 - 0.75 * (k / (pts.length - 1));
+        colors[3 * k] = c.r * f; colors[3 * k + 1] = c.g * f; colors[3 * k + 2] = c.b * f;
+      });
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      mat.vertexColors = true;
+    }
     const l = new THREE.Line(geo, mat);
     l.computeLineDistances();
     l.frustumCulled = false;
     return l;
-  }, [run, i, t0, t1, color, opacity]);
+  }, [run, i, t0, t1, color, opacity, fade]);
   useEffect(() => () => { line.geometry.dispose(); (line.material as THREE.Material).dispose(); }, [line]);
   return <primitive object={line} />;
 }
 
-/** The part of the flight the dashed preview reveals. */
-function previewWindow(run: RunData, level: Level): [number, number] {
+/** The part of the flight the dashed preview reveals: all of it, or just the start when aiming blind. */
+function previewWindow(run: RunData, level: Level, blind = false): [number, number] {
   const launchT = run.trace.launches[level.player] ?? 0;
-  return [launchT, launchT + PREVIEW_FRACTION * (run.duration - launchT)];
+  return [launchT, blind ? launchT + PREVIEW_FRACTION * (run.duration - launchT) : run.duration];
 }
 
-/** Dashed path of the first part of the shot. */
+/** Dashed path the shot will take, updated live while aiming. */
 export function PreviewPath({ run, level }: { run: RunData; level: Level }) {
-  const [t0, t1] = previewWindow(run, level);
-  return <DashedPath run={run} i={run.ids.indexOf(level.player)} t0={t0} t1={t1} color="#ffffff" />;
+  const blind = useGame((s) => s.progress.blindAim);
+  const [t0, t1] = previewWindow(run, level, blind);
+  return <DashedPath run={run} i={run.ids.indexOf(level.player)} t0={t0} t1={t1} color="#ffffff" fade={!blind} />;
 }
 
 /** Where each placed piece travels while the probe flies its dashed preview, so pieces read as moving. */
 export function PieceArcs({ run, level, scale }: { run: RunData; level: Level; scale: number }) {
-  const [t0, t1] = previewWindow(run, level);
+  // Pieces only show the near part of their orbit, so the picture stays readable.
+  const [t0, t1] = previewWindow(run, level, true);
   const pieces = run.spec.bodies.filter((b) => /^piece\d+$/.test(b.id));
   const end = new THREE.Vector3();
   return (

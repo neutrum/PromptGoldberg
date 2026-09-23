@@ -23,6 +23,13 @@ export function galleryLink(id: string): string {
 
 export type HashTarget = { kind: 'level'; level: Level } | { kind: 'gallery'; id: string } | null;
 
+/** `?tutorial=off` (or `#tutorial=off`) turns the coach marks off for this browser. */
+export function readTutorialSwitch(): boolean | null {
+  const value = new URLSearchParams(location.search).get('tutorial')
+    ?? new URLSearchParams(location.hash.slice(1)).get('tutorial');
+  return value === null ? null : value !== 'off';
+}
+
 export function readHash(): HashTarget {
   const params = new URLSearchParams(location.hash.slice(1));
   try {

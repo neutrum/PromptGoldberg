@@ -112,6 +112,10 @@ interface GameState {
   setAuthor: (name: string) => void;
   finishTutorial: (id: string) => void;
   replayTutorials: () => void;
+  /** Turn the coach marks off or back on for good. */
+  setTutorials: (on: boolean) => void;
+  /** Aim by feel: hide the predicted path. */
+  toggleBlindAim: () => void;
   showToast: (text: string) => void;
 
   openLevel: (level: Level, source: Source) => void;
@@ -329,8 +333,18 @@ export const useGame = create<GameState>((set, get) => {
     finishTutorial(id) {
       saveP((p) => { p.tutorial = { ...p.tutorial, [id]: true }; });
     },
+    toggleBlindAim() {
+      saveP((p) => { p.blindAim = !p.blindAim; });
+      get().refreshPreview();
+    },
+    setTutorials(on) {
+      saveP((p) => {
+        p.tutorialsOff = !on;
+        if (on) p.tutorial = {};
+      });
+    },
     replayTutorials() {
-      saveP((p) => { p.tutorial = {}; });
+      saveP((p) => { p.tutorial = {}; p.tutorialsOff = false; });
       const { level, source } = get();
       if (level && source && get().phase === 'result') get().aimAgain();
     },
@@ -400,6 +414,8 @@ export const useGame = create<GameState>((set, get) => {
     setValue(index, value) {
       const { level, values, phase } = get();
       if (!level || (phase !== 'aiming' && phase !== 'result')) return;
+      // Touching a control after a miss is a retry: clear the result and keep aiming.
+      if (phase === 'result') get().aimAgain();
       const v = clampControl(level.controls[index], value);
       if (v === values[index]) return;
       const next = [...values];

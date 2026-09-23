@@ -88,7 +88,8 @@ const TUTORIALS: Record<TutorialId, Step[]> = { aim: AIM, pieces: PIECES };
 
 const canDrag = (level: Level) => level.controls.some((c) => /\.(speed|angle)$/.test(c.path));
 
-function wanted(level: Level, seen: Record<string, boolean>): TutorialId | null {
+function wanted(level: Level, seen: Record<string, boolean>, off: boolean): TutorialId | null {
+  if (off) return null;
   if (canDrag(level) && !seen.aim) return 'aim';
   if (level.pieces && !seen.pieces && (seen.aim || !canDrag(level))) return 'pieces';
   return null;
@@ -108,6 +109,7 @@ function anchorPoint(anchor: Anchor, side: Step['side']): { x: number; y: number
 /** Coach marks that react to what the player actually does. */
 export function Tutorial({ level }: { level: Level }) {
   const seen = useGame((s) => s.progress.tutorial);
+  const off = useGame((s) => s.progress.tutorialsOff);
   const phase = useGame((s) => s.phase);
   const [active, setActive] = useState<{ id: TutorialId; step: number; start: StartState } | null>(null);
   const bubble = useRef<HTMLDivElement>(null);
@@ -115,9 +117,9 @@ export function Tutorial({ level }: { level: Level }) {
   // Start a tutorial when the player reaches a level that needs one.
   useEffect(() => {
     if (active || phase !== 'aiming') return;
-    const id = wanted(level, seen);
+    const id = wanted(level, seen, off);
     if (id) setActive({ id, step: 0, start: { values: [...useGame.getState().values] } });
-  }, [level, seen, phase, active]);
+  }, [level, seen, off, phase, active]);
 
   const finish = (id: TutorialId) => {
     useGame.getState().finishTutorial(id);

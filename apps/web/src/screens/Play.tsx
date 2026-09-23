@@ -258,6 +258,8 @@ function ResultCard({ level }: { level: Level }) {
 function ViewControls() {
   const auto = useCamera((s) => s.auto);
   const phase = useGame((s) => s.phase);
+  const blind = useGame((s) => s.progress.blindAim);
+  const toggleBlindAim = useGame((s) => s.toggleBlindAim);
   const send = useCamera((s) => s.send);
   const inFlight = phase === 'flying' || phase === 'result';
   return (
@@ -266,6 +268,9 @@ function ViewControls() {
       <button onClick={() => send('out')} title="Zoom out (−)">－</button>
       <button className={auto && !inFlight ? 'active' : ''} onClick={() => send('fit')} title={inFlight ? 'Follow the probe (F)' : 'Show the whole system (F)'}>
         {inFlight ? '🎯' : '⌂'}
+      </button>
+      <button className={blind ? '' : 'active'} onClick={toggleBlindAim} title={blind ? 'Show the predicted path (P)' : 'Hide the predicted path and aim by feel (P)'}>
+        {blind ? '👁' : '〰'}
       </button>
     </div>
   );
@@ -351,6 +356,7 @@ export function PlayScreen() {
         case 'KeyE': nudge(idx('.time'), 0.01); break;
         case 'Escape': g.setPlacing(null); break;
         case 'KeyF': useCamera.getState().send('fit'); break;
+        case 'KeyP': g.toggleBlindAim(); break;
         case 'Equal': case 'NumpadAdd': useCamera.getState().send('in'); break;
         case 'Minus': case 'NumpadSubtract': useCamera.getState().send('out'); break;
       }

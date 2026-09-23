@@ -301,3 +301,7 @@ button.link:hover:not(:disabled) { background: none; color: var(--text); }
   .home-scene-caption { left: 16px; right: 16px; text-align: center; }
 }
 .sketch-portal { filter: drop-shadow(0 0 2px #b388ff); }
+
+/* Prompt idea chips */
+.menu .examples { align-items: center; }
+.menu .examples .dice { color: var(--gold); border-color: rgba(255, 210, 122, 0.4); }

@@ -16,6 +16,8 @@ function CreatePanel({ hero = false }: { hero?: boolean }) {
   const ai = useGame((s) => s.ai);
   const { createWithAi } = useGame.getState();
   const [prompt, setPrompt] = useState('');
+  const [shown, setShown] = useState(() => Math.floor(Math.random() * IDEAS.length));
+  const ideas = Array.from({ length: IDEA_BATCH }, (_, k) => IDEAS[(shown + k) % IDEAS.length]);
   const submit = () => { if (prompt.trim() && !ai.busy) void createWithAi(prompt.trim()); };
 
   return (
@@ -35,7 +37,10 @@ function CreatePanel({ hero = false }: { hero?: boolean }) {
       </form>
       {!ai.busy && (
         <div className="examples">
-          {EXAMPLES.map((ex) => <button key={ex} onClick={() => setPrompt(ex)}>{ex}</button>)}
+          <span className="muted">Try:</span>
+          {ideas.map((ex) => <button key={ex} onClick={() => setPrompt(ex)}>{ex}</button>)}
+          <button className="dice" title="Other ideas" onClick={() => setShown((n) => (n + IDEA_BATCH) % IDEAS.length)}>🎲</button>
+          <button className="dice" title="Fill in a random idea" onClick={() => setPrompt(IDEAS[Math.floor(Math.random() * IDEAS.length)])}>Surprise me</button>
         </div>
       )}
       {(ai.busy || ai.sketch) && (
@@ -141,6 +146,9 @@ export function MenuScreen() {
 
         <div className="menu-footer">
           <button className="icon" onClick={toggleMute}>{progress.muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
+          <button className="icon" onClick={() => useGame.getState().setTutorials(progress.tutorialsOff)}>
+            {progress.tutorialsOff ? '🎓 Tutorials off' : '🎓 Tutorials on'}
+          </button>
           <button className="link" onClick={() => go('sandbox')}>Sandbox (raw simulator)</button>
         </div>
       </div>
@@ -161,13 +169,13 @@ export function CampaignScreen() {
         </div>
         <div className="level-grid">
           {CAMPAIGN.map((l, i) => {
+            // Every level is playable: players (and judges) can jump straight to the one they want.
             const rec = progress.levels[l.id];
-            const unlocked = i === 0 || !!progress.levels[CAMPAIGN[i - 1].id];
             return (
-              <button key={l.id} className={`level-card ${rec ? 'cleared' : ''}`} disabled={!unlocked} onClick={() => playCampaign(i)}>
+              <button key={l.id} className={`level-card ${rec ? 'cleared' : ''}`} onClick={() => playCampaign(i)}>
                 <span className="level-num">{i + 1}</span>
-                <span className="level-name">{unlocked ? l.title : '🔒 Locked'}</span>
-                {unlocked && <span className="level-brief">{l.briefing}</span>}
+                <span className="level-name">{l.title}</span>
+                <span className="level-brief">{l.briefing}</span>
                 <span className="level-stars">
                   {[0, 1, 2].map((k) => <span key={k} className={k < (rec?.stars ?? 0) ? 'on' : 'off'}>★</span>)}
                   {rec && <span className="muted"> best {rec.bestShots}</span>}
@@ -181,12 +189,22 @@ export function CampaignScreen() {
   );
 }
 
-const EXAMPLES = [
+/** Anything works as a prompt, so the chips show the range: plain words, chains, gadgets, moods. */
+const IDEAS = [
+  'spider web', 'pinball', 'pizza', 'hopscotch', 'billiards', 'lighthouse', 'a cat on a shelf',
   'A comet swings past the gas giant and crashes into its icy moon.',
   'Send a probe to the outer planet using two slingshots.',
   'Thread a probe between twin planets and escape the system.',
-  'A rogue planet passes through and steals a moon.',
+  'Knock a moon out of orbit and let it hit the next planet.',
+  'A wormhole maze with barely any gravity to help you.',
+  'Bounce between two bumpers, then escape the system.',
+  'A lonely probe visiting a dying star.',
+  'Delivery run through an asteroid mess.',
+  'An easy one for a five-year-old.',
+  'Brutally hard: three flybys with tight windows.',
 ];
+/** Four shown at a time; the dice swaps in another four. */
+const IDEA_BATCH = 4;
 
 export function CreateScreen() {
   const ai = useGame((s) => s.ai);

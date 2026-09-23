@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useGame } from './game/gameStore';
 import { getGalleryLevel } from './game/net';
-import { clearHash, readHash } from './game/share';
+import { clearHash, readHash, readTutorialSwitch } from './game/share';
 import { CampaignScreen, CreateScreen, GalleryScreen, MenuScreen } from './screens/Menus';
 import { PlayScreen } from './screens/Play';
 import { SandboxScreen } from './screens/Sandbox';
@@ -10,8 +10,10 @@ export function App() {
   const screen = useGame((s) => s.screen);
   const toast = useGame((s) => s.toast);
 
-  // Shared links open straight into the level.
+  // Shared links open straight into the level; ?tutorial=off skips the coach marks.
   useEffect(() => {
+    const tutorials = readTutorialSwitch();
+    if (tutorials !== null) useGame.getState().setTutorials(tutorials);
     const target = readHash();
     if (!target) return;
     const { openLevel, showToast } = useGame.getState();

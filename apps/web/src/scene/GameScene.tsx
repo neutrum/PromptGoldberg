@@ -17,7 +17,7 @@ import { Trails } from './Trails';
 import * as THREE from 'three';
 
 /** Real seconds a flight takes before slow motion. */
-const FLIGHT_SECONDS = 11;
+const FLIGHT_SECONDS = 6;
 
 interface FlightPlan {
   start: number;
