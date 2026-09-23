@@ -126,14 +126,21 @@ function PiecesPanel({ level }: { level: Level }) {
             onClick={() => setPlacing(placing === k ? null : k)}
             title={`${isTouch ? 'Tap' : 'Click'} in space to place it on an orbit`}
           >
-            <span className="piece-dot" style={{ background: PIECE_BODIES[k].color }} /> {k === 'giant' ? 'Gas giant' : 'Planet'}
+            <span className="piece-dot" style={{ background: PIECE_BODIES[k].color }} /> {PIECE_BODIES[k].label}
           </button>
         ))}
       </div>
-      {placing && <div className="muted">{isTouch ? 'Tap or drag' : 'Click'} in space to drop it. It orbits the star from there.</div>}
+      {placing && (
+        <div className="muted">
+          {isTouch ? 'Tap or drag' : 'Click'} in space to drop it.{' '}
+          {PIECE_BODIES[placing].paired ? 'Portals come in pairs: place two and they link up.'
+            : PIECE_BODIES[placing].fixed ? 'It stays exactly where you put it.'
+            : 'It orbits the star from there.'}
+        </div>
+      )}
       {pieces.map((p, i) => (
         <div key={i} className="piece-item">
-          <span className="piece-dot" style={{ background: PIECE_BODIES[p.kind].color }} /> {p.kind} at {p.r.toFixed(2)} AU
+          <span className="piece-dot" style={{ background: PIECE_BODIES[p.kind].color }} /> {PIECE_BODIES[p.kind].label} at {p.r.toFixed(2)} AU
           <button disabled={phase === 'flying'} onClick={() => removePiece(i)}>✕</button>
         </div>
       ))}

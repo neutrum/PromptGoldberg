@@ -9,8 +9,8 @@ const NUDGES: [number, number][] = [
 ];
 
 describe('campaign', () => {
-  it('has twelve levels with unique ids and rising par', () => {
-    expect(CAMPAIGN).toHaveLength(12);
+  it('has thirteen levels with unique ids and rising par', () => {
+    expect(CAMPAIGN).toHaveLength(13);
     expect(new Set(CAMPAIGN.map((l) => l.id)).size).toBe(CAMPAIGN.length);
     CAMPAIGN.forEach((l, i) => {
       if (i > 0) expect(l.par).toBeGreaterThanOrEqual(CAMPAIGN[i - 1].par);

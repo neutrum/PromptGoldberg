@@ -1,0 +1,111 @@
+{
+  "id": "portal-workshop",
+  "title": "Portal Workshop",
+  "briefing": "The shot is fixed and sails past Rime into the dark. Place a portal pair: one mouth in the probe's way, the other where you want it to come out.",
+  "tip": "The probe leaves the second portal in the same direction it entered the first. Put the exit a little short of Rime, pointing at it.",
+  "par": 5,
+  "player": "probe",
+  "controls": [],
+  "pieces": {
+    "kinds": [
+      "portal"
+    ],
+    "max": 2
+  },
+  "spec": {
+    "title": "Portal Workshop",
+    "description": "A fixed shot that misses until the player links a portal pair from its path to the target.",
+    "bodies": [
+      {
+        "id": "sun",
+        "name": "Kettle",
+        "type": "star",
+        "mass": 0.8,
+        "radius": 0.004,
+        "color": "#ffd27a",
+        "placement": {
+          "kind": "free",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "id": "harbor",
+        "name": "Harbor",
+        "type": "planet",
+        "mass": 3e-06,
+        "radius": 4.3e-05,
+        "color": "#7fd3a0",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sun",
+          "a": 1,
+          "phase": 0
+        }
+      },
+      {
+        "id": "rime",
+        "name": "Rime",
+        "type": "planet",
+        "mass": 0.0006,
+        "radius": 0.02,
+        "color": "#8ad8ff",
+        "placement": {
+          "kind": "orbit",
+          "parent": "sun",
+          "a": 2.1,
+          "phase": 150
+        }
+      },
+      {
+        "id": "probe",
+        "name": "Dart",
+        "type": "probe",
+        "mass": 0,
+        "radius": 1e-07,
+        "color": "#ffffff",
+        "placement": {
+          "kind": "launch",
+          "from": "harbor",
+          "speed": 2.2,
+          "angle": 55,
+          "time": 0
+        }
+      }
+    ],
+    "goal": [
+      {
+        "type": "flyby",
+        "body": "probe",
+        "target": "rime",
+        "maxDistance": 0.35
+      }
+    ],
+    "sim": {
+      "duration": 2.4
+    }
+  },
+  "solution": {
+    "values": [],
+    "pieces": [
+      {
+        "kind": "portal",
+        "r": 1.43,
+        "angle": 47.3
+      },
+      {
+        "kind": "portal",
+        "r": 1.7,
+        "angle": 178
+      }
+    ]
+  }
+}

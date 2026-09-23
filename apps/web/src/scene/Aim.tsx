@@ -154,6 +154,7 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
   const band = useRef<THREE.Line>(null);
   const arrow = useRef<THREE.Group>(null);
   const ghost = useRef<THREE.Group>(null);
+  const spot = useRef<THREE.Mesh>(null);
 
   const planePoint = (e: PointerEvent, out: THREE.Vector3): boolean => {
     const rect = gl.domElement.getBoundingClientRect();
@@ -205,8 +206,10 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
       const x = p.x - ap[0], y = -p.z - ap[1];
       const r = Math.hypot(x, y);
       if (r < scale * 0.03) return;
-      const period = orbitalPeriod(r, anchor.mass + PIECE_BODIES[game.placing].mass);
-      const angle = ((Math.atan2(y, x) * RAD - (360 * time) / period) % 360 + 360) % 360;
+      const def = PIECE_BODIES[game.placing];
+      // Orbiting pieces are placed where they will be at launch; pinned gadgets simply stay put.
+      const spin = def.fixed ? 0 : (360 * time) / orbitalPeriod(r, anchor.mass + def.mass);
+      const angle = ((Math.atan2(y, x) * RAD - spin) % 360 + 360) % 360;
       game.placePiece({ kind: game.placing, r, angle });
     };
 
@@ -328,8 +331,17 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
     }
     if (ghost.current) {
       const placingNow = useGame.getState().placing;
-      ghost.current.visible = !!placingNow && aiming && hoverLive.current;
-      if (placingNow) {
+      const pinned = placingNow ? PIECE_BODIES[placingNow].fixed : false;
+      ghost.current.visible = !!placingNow && aiming && hoverLive.current && !pinned;
+      if (spot.current) {
+        // Pinned gadgets (bumpers, portals) land exactly where the cursor is.
+        spot.current.visible = !!placingNow && aiming && hoverLive.current && !!pinned;
+        if (placingNow && pinned) {
+          spot.current.position.set(hover.current.x, 0, hover.current.z);
+          spot.current.scale.setScalar(PIECE_BODIES[placingNow].radius);
+        }
+      }
+      if (placingNow && !pinned) {
         const anchor = anchorBody(run.spec);
         const ap = [0, 0, 0];
         simPositionAt(run, run.ids.indexOf(anchor.id), Math.min(time, run.duration), ap);
@@ -358,6 +370,11 @@ export function AimController({ run, level, scale }: { run: RunData; level: Leve
       <group ref={ghost} visible={false}>
         <primitive object={guide} />
       </group>
+      {/* Where a pinned gadget (bumper, portal) would land. */}
+      <mesh ref={spot} visible={false} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.88, 1, 48]} />
+        <meshBasicMaterial color="#8ef0b4" transparent opacity={0.6} side={THREE.DoubleSide} depthWrite={false} toneMapped={false} />
+      </mesh>
     </group>
   );
 }

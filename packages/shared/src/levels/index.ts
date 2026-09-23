@@ -10,7 +10,8 @@ import firstBounce from './08-first-bounce.json';
 import moonThief from './09-moon-thief.json';
 import buildASlingshot from './10-build-a-slingshot.json';
 import throughTheGate from './11-through-the-gate.json';
-import shadowRun from './12-shadow-run.json';
+import portalWorkshop from './12-portal-workshop.json';
+import shadowRun from './13-shadow-run.json';
 
 /**
  * The hand-made campaign, in play order. Every level is verified by test/levels.test.ts:
@@ -29,5 +30,6 @@ export const CAMPAIGN: Level[] = [
   moonThief,
   buildASlingshot,
   throughTheGate,
+  portalWorkshop,
   shadowRun,
 ].map((raw) => Level.parse(raw));

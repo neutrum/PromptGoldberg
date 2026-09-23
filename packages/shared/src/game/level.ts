@@ -15,10 +15,10 @@ export const Control = z.object({
 });
 export type Control = z.infer<typeof Control>;
 
-export const PieceKind = z.enum(['planet', 'giant']);
+export const PieceKind = z.enum(['planet', 'giant', 'bumper', 'portal']);
 export type PieceKind = z.infer<typeof PieceKind>;
 
-/** A body the player drops into the system: a circular orbit around the main star. */
+/** A body the player drops into the system: orbiting the main star, or pinned in place for gadgets. */
 export const Piece = z.object({
   kind: PieceKind,
   /** Orbit radius, AU. */
@@ -28,9 +28,25 @@ export const Piece = z.object({
 });
 export type Piece = z.infer<typeof Piece>;
 
-export const PIECE_BODIES: Record<PieceKind, { name: string; mass: number; radius: number; color: string }> = {
-  planet: { name: 'Placed planet', mass: 3e-4, radius: 4e-4, color: '#8ef0b4' },
-  giant: { name: 'Placed giant', mass: 2e-3, radius: 7e-4, color: '#f08ee0' },
+export interface PieceDef {
+  name: string;
+  label: string;
+  mass: number;
+  radius: number;
+  color: string;
+  type: BodySpec['type'];
+  /** Pinned where it is dropped instead of orbiting the star. */
+  fixed?: boolean;
+  bounce?: number;
+  /** Placed in pairs that link to each other (portals); an unpaired one does nothing. */
+  paired?: boolean;
+}
+
+export const PIECE_BODIES: Record<PieceKind, PieceDef> = {
+  planet: { name: 'Placed planet', label: 'Planet', mass: 3e-4, radius: 4e-4, color: '#8ef0b4', type: 'planet' },
+  giant: { name: 'Placed giant', label: 'Gas giant', mass: 2e-3, radius: 7e-4, color: '#f08ee0', type: 'planet' },
+  bumper: { name: 'Bumper', label: 'Bumper', mass: 0, radius: 0.16, color: '#ff5fa2', type: 'bumper', fixed: true, bounce: 1.2 },
+  portal: { name: 'Portal', label: 'Portal pair', mass: 0, radius: 0.18, color: '#b388ff', type: 'portal', fixed: true, paired: true },
 };
 
 export const Level = z.object({
@@ -73,25 +89,52 @@ export function anchorBody(spec: SystemSpec): BodySpec {
 
 export function pieceBody(spec: SystemSpec, piece: Piece, index: number): BodySpec {
   const def = PIECE_BODIES[piece.kind];
-  return {
+  const body: BodySpec = {
     id: `piece${index + 1}`,
     name: `${def.name} ${index + 1}`,
-    type: 'planet',
+    type: def.type,
     mass: def.mass,
     radius: def.radius,
     color: def.color,
-    placement: {
-      kind: 'orbit', parent: anchorBody(spec).id, a: piece.r, e: 0, phase: piece.angle,
-      argPeriapsis: 0, inclination: 0, retrograde: false,
-    },
+    placement: def.fixed
+      ? { kind: 'free', position: [piece.r * Math.cos(RAD * piece.angle), piece.r * Math.sin(RAD * piece.angle), 0], velocity: [0, 0, 0] }
+      : { kind: 'orbit', parent: anchorBody(spec).id, a: piece.r, e: 0, phase: piece.angle, argPeriapsis: 0, inclination: 0, retrograde: false },
   };
+  if (def.fixed) body.fixed = true;
+  if (def.bounce !== undefined) body.bounce = def.bounce;
+  return body;
+}
+
+const RAD = Math.PI / 180;
+
+/** Links paired pieces (portals) two by two, in the order they were placed. */
+function linkPairs(bodies: BodySpec[], pieces: Piece[]): void {
+  const waiting: Record<string, BodySpec | null> = {};
+  pieces.forEach((p, i) => {
+    if (!PIECE_BODIES[p.kind].paired) return;
+    const body = bodies[i];
+    const open = waiting[p.kind];
+    if (open) {
+      open.link = body.id;
+      body.link = open.id;
+      waiting[p.kind] = null;
+    } else {
+      waiting[p.kind] = body;
+    }
+  });
+  // A portal with no twin yet would be an invalid spec: leave it out until its pair is placed.
+  for (const open of Object.values(waiting)) {
+    if (open) bodies.splice(bodies.indexOf(open), 1);
+  }
 }
 
 /** The spec for one shot: controls applied, pieces added, tunables cleared. */
 export function shotSpec(level: Level, values: number[], pieces: Piece[] = []): SystemSpec {
   const tunables: Tunable[] = level.controls.map((c) => ({ path: c.path, min: c.min, max: c.max }));
   const spec = applyTunables(level.spec, tunables, values.map((v, i) => clampControl(level.controls[i], v)));
-  spec.bodies.push(...pieces.map((p, i) => pieceBody(level.spec, p, i)));
+  const placed = pieces.map((p, i) => pieceBody(level.spec, p, i));
+  linkPairs(placed, pieces);
+  spec.bodies.push(...placed);
   spec.tunables = [];
   return spec;
 }
