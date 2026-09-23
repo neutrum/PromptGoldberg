@@ -1,5 +1,5 @@
 import { parentPort } from 'node:worker_threads';
-import { checkShot, optimize, simulate, evaluateGoal } from '@og/shared';
+import { checkShot, makeRng, optimize, searchPieces, simulate, evaluateGoal } from '@og/shared';
 import type { SolveTask, WorkerMessage } from './solver';
 
 /** Runs optimizer and check tasks off the main thread. One task per worker. */
@@ -24,6 +24,8 @@ parentPort!.once('message', (task: SolveTask) => {
       post({ type: 'done', result: checkShot(task.level, task.values, task.pieces).goal });
     } else if (task.kind === 'checkMany') {
       post({ type: 'done', result: task.shots.map((v) => checkShot(task.level, v).goal) });
+    } else if (task.kind === 'searchPieces') {
+      post({ type: 'done', result: searchPieces(task.level, task.values, { count: task.count, rng: makeRng(task.seed) }) });
     } else {
       post({ type: 'done', result: evaluateGoal(task.spec.goal, simulate(task.spec, { record: false }).trace) });
     }

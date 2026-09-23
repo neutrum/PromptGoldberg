@@ -46,7 +46,7 @@ export const PIECE_BODIES: Record<PieceKind, PieceDef> = {
   planet: { name: 'Placed planet', label: 'Planet', mass: 3e-4, radius: 4e-4, color: '#8ef0b4', type: 'planet' },
   giant: { name: 'Placed giant', label: 'Gas giant', mass: 2e-3, radius: 7e-4, color: '#f08ee0', type: 'planet' },
   bumper: { name: 'Bumper', label: 'Bumper', mass: 0, radius: 0.16, color: '#ff5fa2', type: 'bumper', fixed: true, bounce: 1.2 },
-  portal: { name: 'Portal', label: 'Portal pair', mass: 0, radius: 0.18, color: '#b388ff', type: 'portal', fixed: true, paired: true },
+  portal: { name: 'Portal', label: 'Portal pair', mass: 0, radius: 0.25, color: '#b388ff', type: 'portal', fixed: true, paired: true },
 };
 
 export const Level = z.object({

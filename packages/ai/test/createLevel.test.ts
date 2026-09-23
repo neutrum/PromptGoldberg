@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkShot, controlValues } from '@og/shared';
 import { createLevel, createSolver, LlmError, SolverError } from '../src';
-import { FakeLlm, levelReply } from './helpers';
+import { FakeLlm, impossibleSpec, levelReply } from './helpers';
 
 // Inline solver: no worker threads, so tests stay fast and deterministic.
 const solver = createSolver('inline');
@@ -57,6 +57,34 @@ describe('createLevel', () => {
     expect(res.solved).toBe(true);
     expect(res.attempts).toBe(2);
     expect(llm.requests[1].prompt).toContain('too slow to simulate');
+  });
+
+  it('builds a parts-bin puzzle when the design asks for one', async () => {
+    const placed = [{ kind: 'portal' as const, r: 1.2, angle: 30 }, { kind: 'portal' as const, r: 2, angle: 200 }];
+    const withSearch: typeof solver = {
+      ...solver,
+      get mode() { return solver.mode; },
+      searchPieces: async () => ({ pieces: placed, score: 1, success: true, robustness: 0.75, evals: 42 }),
+    };
+    // A shot that cannot reach its goal on its own: the parts have to do the work.
+    const llm = new FakeLlm([levelReply(impossibleSpec(), { pieces: { kinds: ['portal'], max: 2 } })]);
+    const drafts: string[] = [];
+    const res = await createLevel({ prompt: 'a wormhole workshop' }, {
+      llm, solver: withSearch, onEvent: (e) => { if (e.type === 'draft') drafts.push(e.status); },
+    });
+    expect(res.solved).toBe(true);
+    expect(res.level.controls).toEqual([]);
+    expect(res.level.pieces).toEqual({ kinds: ['portal'], max: 2 });
+    expect(res.level.solution?.pieces).toEqual(placed);
+    expect(drafts).toEqual(['designed', 'solved']);
+    expect(res.notes.join(' ')).toMatch(/75% of slightly off drops/);
+  });
+
+  it('rejects a build puzzle whose fixed shot already wins', async () => {
+    const llm = new FakeLlm([levelReply(undefined, { pieces: { kinds: ['portal'], max: 2 } })]);
+    const res = await createLevel({ prompt: 'a wormhole workshop' }, { llm, solver, maxAttempts: 1 });
+    expect(res.solved).toBe(false);
+    expect(res.notes.join(' ')).toMatch(/already wins with no parts/);
   });
 
   it('fails clearly when no LLM backend is available', async () => {

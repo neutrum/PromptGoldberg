@@ -2,14 +2,15 @@ import { availableParallelism } from 'node:os';
 import { setImmediate as yieldToLoop } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 import {
-  checkShot, evaluateGoal, optimize, simulate,
-  type GoalResult, type Level, type OptimizeResult, type Piece, type SystemSpec,
+  checkShot, evaluateGoal, makeRng, optimize, searchPieces, simulate,
+  type GoalResult, type Level, type OptimizeResult, type Piece, type PieceSearchResult, type SystemSpec,
 } from '@og/shared';
 
 export type SolveTask =
   | { kind: 'optimize'; spec: SystemSpec; budget: number; timeLimitMs: number; seed: number }
   | { kind: 'check'; level: Level; values: number[]; pieces: Piece[] }
   | { kind: 'checkMany'; level: Level; shots: number[][] }
+  | { kind: 'searchPieces'; level: Level; values: number[]; count: number; seed: number }
   | { kind: 'evaluate'; spec: SystemSpec };
 
 export type WorkerMessage =
@@ -37,6 +38,8 @@ export interface Solver {
   evaluate(spec: SystemSpec, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<GoalResult>;
   /** Many shots of one level in a single task (one worker instead of one per shot). */
   checkMany(level: Level, shots: number[][], opts?: { signal?: AbortSignal }): Promise<GoalResult[]>;
+  /** Search placements of `count` parts from the level's bin that clear its goal. */
+  searchPieces(level: Level, values: number[], count: number, opts?: { seed?: number; timeoutMs?: number; signal?: AbortSignal }): Promise<PieceSearchResult>;
 }
 
 const WORKER_URL = new URL('./solveWorker.ts', import.meta.url);
@@ -147,6 +150,13 @@ export function createSolver(mode: SolverMode = 'auto', maxConcurrent = Math.max
     check(level, values, pieces, opts = {}) {
       return attempt({ kind: 'check', level, values, pieces }, () => checkShot(level, values, pieces).goal, {
         timeoutMs: opts.timeoutMs ?? 10_000, signal: opts.signal,
+      });
+    },
+    searchPieces(level, values, count, opts = {}) {
+      const seed = opts.seed ?? 1;
+      const task: SolveTask = { kind: 'searchPieces', level, values, count, seed };
+      return attempt(task, () => searchPieces(level, values, { count, rng: makeRng(seed) }), {
+        timeoutMs: opts.timeoutMs ?? 30_000, signal: opts.signal,
       });
     },
     checkMany(level, shots, opts = {}) {

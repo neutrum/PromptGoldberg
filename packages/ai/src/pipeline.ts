@@ -86,6 +86,7 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
   let bestBuilt: (Built & { attempt: number }) | null = null;
   let attempts = 0;
   let bestAttempt = 1;
+  let fallback: Level | null = null;
   const check = (level: Level, shots: number[][]) => deps.solver.checkMany(level, shots, { signal });
   /** Sends the bodies written so far whenever another one is complete. */
   const sketcher = (attempt: number) => {
@@ -117,7 +118,7 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
       emit({
         type: 'stage', stage: 'redesigning', attempt, maxAttempts,
         message: fragile
-          ? `Solvable, but only with pixel-perfect aim (${Math.round(100 * fragile.robustness)}% of near misses still win). Asking for a more forgiving design.`
+          ? `Solvable, but only just (${Math.round(100 * fragile.robustness)}% of near misses still win). Asking for a more forgiving design.`
           : `No solution found (best ${prev.tuned.result.satisfiedCount}/${prev.tuned.spec.goal.length} steps). Asking for a new design.`,
       });
       try {
@@ -138,8 +139,26 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
     }
     attempts = attempt;
     notes.push(...design.notes.map((n) => `Design ${attempt}: ${n}`));
-    // Playable right away; the proof follows.
-    emit({ type: 'draft', level: draftLevel(design, loop.level), status: 'designed', attempt });
+    // Playable right away; the proof follows. (Build puzzles emit their own draft below.)
+    if (!design.pieces) emit({ type: 'draft', level: draftLevel(design, loop.level), status: 'designed', attempt });
+
+    if (design.pieces) {
+      // Build puzzle: the shot is fixed and the player drops parts in, so search placements.
+      emit({ type: 'stage', stage: 'verifying', attempt, maxAttempts, message: `Trying placements of the ${design.pieces.kinds.join(' and ')} the player will get.` });
+      emit({ type: 'draft', level: withBin(draftLevel(design, loop.level), design), status: 'designed', attempt });
+      const { built, note } = await verifyBuild(deps, design, loop.level, attempt);
+      notes.push(note);
+      // Even an unproven build puzzle is playable, so keep the latest as a fallback.
+      fallback = withBin(draftLevel(design, loop.level), design);
+      last = { design, tuned: { spec: design.spec, values: [], result: tooSlow(design.spec.goal.length), evals: 0, solved: !!built } };
+      lastBuilt = built;
+      if (built) {
+        emit({ type: 'draft', level: built.level, status: 'solved', attempt });
+        if (!bestBuilt || built.robustness > bestBuilt.robustness) bestBuilt = { ...built, attempt };
+        if (built.robustness >= MIN_ROBUSTNESS) break;
+      }
+      continue;
+    }
 
     emit({
       type: 'stage', stage: 'verifying', attempt, maxAttempts,
@@ -186,9 +205,44 @@ async function repairLoop(deps: PipelineDeps, emit: Emit, loop: LoopSpec): Promi
   }
 
   if (bestBuilt) return { type: 'level', level: bestBuilt.level, solved: true, attempts, notes, cached: false, attempt: bestBuilt.attempt };
-  if (!best) throw new SolverError('no design to build a level from');
+  if (!best) {
+    if (fallback) return { type: 'level', level: fallback, solved: false, attempts, notes, cached: false, attempt: attempts };
+    throw new SolverError('no design to build a level from');
+  }
   const level = await buildLevel(best, loop.level, shotChecker(deps.solver, signal));
   return { type: 'level', level, solved: !!level.solution, attempts, notes, cached: false, attempt: bestAttempt };
+}
+
+/** A build puzzle's level: fixed shot, plus the bin of parts the player may drop in. */
+function withBin(level: Level, design: LevelDesign): Level {
+  return Level.parse({ ...level, controls: [], pieces: design.pieces });
+}
+
+/**
+ * Verify a build puzzle: the bare shot must miss, then search placements of the player's parts
+ * for one that wins and still wins when the drop is a little off.
+ */
+async function verifyBuild(deps: PipelineDeps, design: LevelDesign, meta: LoopSpec['level'], attempt: number): Promise<{ built: Built | null; note: string }> {
+  const level = withBin(draftLevel(design, meta), design);
+  const bare = await deps.solver.check(level, [], [], { signal: deps.signal });
+  if (bare.success) {
+    return { built: null, note: `Design ${attempt}: the fixed shot already wins with no parts placed; the puzzle needs a shot that misses.` };
+  }
+  const found = await deps.solver.searchPieces(level, [], design.pieces!.max, { seed: attempt, signal: deps.signal });
+  if (!found.success) {
+    const miss = bare.events.find((e) => !e.satisfied)?.note ?? 'goal missed';
+    return { built: null, note: `Design ${attempt}: no placement of the parts wins after ${found.evals} tries; ${miss}.` };
+  }
+  const solved = Level.parse({ ...level, solution: { values: [], pieces: found.pieces } });
+  const pct = Math.round(100 * found.robustness);
+  return {
+    built: {
+      level: solved,
+      robustness: found.robustness,
+      missNotes: [`only ${pct}% of slightly off drops still win`],
+    },
+    note: `Design ${attempt}: solved by placing ${found.pieces.length} part(s) after ${found.evals} tries; ${pct}% of slightly off drops still win.`,
+  };
 }
 
 /** The design as a playable level before any proof: the AI's own slider guesses, no solution. */

@@ -8,6 +8,7 @@ export * from './tunables';
 export * from './optimizer';
 export * from './fixups';
 export * from './game/level';
+export * from './game/pieceSearch';
 export * from './game/api';
 export * from './levels';
 export * from './game/procgen';

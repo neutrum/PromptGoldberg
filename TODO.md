@@ -46,5 +46,6 @@ All AI logic is in `packages/ai` behind one call, `createLevel()`. Eval: `npm ru
 
 ## Known technical notes
 
+- Changing a part's size or mass in `PIECE_BODIES` invalidates stored solutions of build levels made with the old value (campaign levels are covered by tests; gallery levels are not).
 - Stored level solutions break if `sim.duration` changes (the timestep changes with it); after editing any level, re-run `npx tsx packages/shared/scripts/solve-level.ts <file> --write`.
 - Placed pieces can nudge light planets off their orbits; prefer goals that don't depend on a light moving target.

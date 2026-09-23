@@ -1,4 +1,4 @@
-import { fixupSpec, levelFromSpec, parseSpec, type Level, type SystemSpec } from '@og/shared';
+import { PieceKind, fixupSpec, levelFromSpec, parseSpec, type Level, type SystemSpec } from '@og/shared';
 import slingshot from '@og/shared/fixtures/slingshot.json' with { type: 'json' };
 import type { Completion, LlmBackend } from './client';
 import { SCHEMA, formatIssues, requestValidated, type Validation } from './design';
@@ -12,10 +12,11 @@ const EXAMPLE = {
 
 const LEVEL_PROMPT = `You design puzzle levels for Orbital Goldberg, a gravity puzzle game. The player sets launch controls for ONE probe or comet, fires it through a small star system simulated with real N-body gravity, and must make an ordered chain of goal events happen. A numeric optimizer then proves the level is solvable by searching the launch controls, so aim for a plausible setup with roughly right numbers rather than exact values.
 
-Output one JSON object: the system (matching the schema below) plus three extra top-level fields:
+Output one JSON object: the system (matching the schema below) plus these extra top-level fields:
 - "briefing": 1 to 2 short sentences for the player, in game terms (what to hit, reach or swing past). No numbers.
 - "tip": one short hint for a stuck player (e.g. about timing or where a planet will be). No numbers.
 - "player": the id of the launched body the player controls.
+- "pieces" (optional): a parts bin, e.g. {"kinds": ["portal"], "max": 2}. When you include it the level becomes a BUILD puzzle: the launch is fixed (add NO tunables at all, and pick launch numbers whose shot clearly misses the goal), and the player wins by dropping parts into the system. Kinds: "portal" (a linked pair; always use max 2 so both mouths can be placed), "bumper", "giant" (a heavy planet) or "planet". Build puzzles are the most fun with portals, so prefer {"kinds": ["portal"], "max": 2}. Leave "pieces" out for a normal aiming level.
 
 Units: distance in AU, time in years, mass in solar masses. Reference values: Sun mass 1, radius 0.00465. Jupiter mass 9.5e-4, radius 4.8e-4. Earth mass 3e-6, radius 4.3e-5. Moon mass 3.7e-8, radius 1.2e-5. One day is 0.002738 yr. 1 AU/yr is about 4.74 km/s. Circular orbital speed at 1 AU around the Sun is 6.28 AU/yr.
 
@@ -43,7 +44,20 @@ export interface LevelDesign {
   briefing?: string;
   tip?: string;
   player?: string;
+  /** Present when the design is a build puzzle: what the player may drop in. */
+  pieces?: { kinds: PieceKind[]; max: number };
   notes: string[];
+}
+
+/** A parts bin from the design, if it asked for one and it makes sense. */
+function parseBin(value: unknown): { kinds: PieceKind[]; max: number } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as { kinds?: unknown; max?: unknown };
+  const kinds = Array.isArray(raw.kinds) ? raw.kinds.filter((k): k is PieceKind => PieceKind.safeParse(k).success) : [];
+  if (!kinds.length) return undefined;
+  // Portals only work in pairs, so their bin always holds two.
+  const max = kinds.includes('portal') ? 2 : Math.min(3, Math.max(1, Math.round(Number(raw.max) || 1)));
+  return { kinds: [...new Set(kinds)], max };
 }
 
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
@@ -51,7 +65,8 @@ const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v
 /** Split the extra level fields from the system, validate and fix up, and check it makes a playable level. */
 export function validateLevelDesign(json: unknown, keep?: { player: string; paths: string[] }): Validation<LevelDesign> {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { ok: false, problems: '- expected a JSON object' };
-  const { briefing, tip, player, spec: nested, ...rest } = json as Record<string, unknown>;
+  const { briefing, tip, player, pieces, spec: nested, ...rest } = json as Record<string, unknown>;
+  const bin = parseBin(pieces);
   const raw = nested && typeof nested === 'object' ? nested : rest;
   const parsed = parseSpec(raw);
   if (!parsed.ok) return { ok: false, problems: formatIssues(parsed.issues) };
@@ -72,7 +87,10 @@ export function validateLevelDesign(json: unknown, keep?: { player: string; path
       if (fresh) spec.tunables.push(fresh);
     }
   }
-  if (body && !spec.tunables.some((t) => t.path.startsWith(`bodies.${body.id}.`))) {
+  if (bin) {
+    // A build puzzle's shot is fixed: the puzzle is where the parts go.
+    spec.tunables = [];
+  } else if (body && !spec.tunables.some((t) => t.path.startsWith(`bodies.${body.id}.`))) {
     problems.push(`- add tunables for the player's launch controls (bodies.${body.id}.placement.speed/angle/time)`);
   }
   if (!problems.length) {
@@ -83,7 +101,7 @@ export function validateLevelDesign(json: unknown, keep?: { player: string; path
     }
   }
   if (problems.length) return { ok: false, problems: problems.join('\n') };
-  return { ok: true, value: { spec, notes, briefing: text(briefing, 400), tip: text(tip, 200), player: body!.id } };
+  return { ok: true, value: { spec, notes, briefing: text(briefing, 400), tip: text(tip, 200), player: body!.id, pieces: bin } };
 }
 
 export async function designLevel(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<LevelDesign> {

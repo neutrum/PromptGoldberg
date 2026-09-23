@@ -1,7 +1,8 @@
-// Tools for build-a-piece levels, shared by solve-level.ts: random placement sampling,
-// robustness around a placement, layout sanity checks and a search for piece placements.
-import { anchorBody, checkShot, shotSpec, simulate, type Level, type Piece, type PieceKind } from '../src';
-import type { BodySpec } from '../src/schema';
+// Tools for build levels: random placement sampling, robustness around a placement, layout
+// sanity checks and a search for piece placements. Used by the AI pipeline and solve-level.ts.
+import { simulate } from '../sim';
+import type { BodySpec } from '../schema';
+import { anchorBody, checkShot, shotSpec, type Level, type Piece, type PieceKind } from './level';
 
 export type Rng = () => number;
 

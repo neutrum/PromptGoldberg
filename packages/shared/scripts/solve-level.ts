@@ -7,7 +7,7 @@
 //        [--no-pieces] [--search-pieces] [--restarts N] [--write]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { checkShot, controlValues, parseLevel, solveLevel, type Piece } from '../src';
-import { disturbance, layoutIssues, makeRng, placementRate, robustness, searchPieces, systemRadius } from './piece-search';
+import { disturbance, layoutIssues, makeRng, placementRate, robustness, searchPieces, systemRadius } from '../src';
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith('--') && !/^-?[\d.]+$/.test(a));
