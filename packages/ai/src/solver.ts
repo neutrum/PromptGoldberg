@@ -44,52 +44,106 @@ export interface Solver {
 
 const WORKER_URL = new URL('./solveWorker.ts', import.meta.url);
 
-/** Small FIFO semaphore so parallel requests cannot pin every core. */
-class Semaphore {
-  private queue: (() => void)[] = [];
-  constructor(private free: number) {}
-  async run<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.free > 0) this.free--;
-    else await new Promise<void>((r) => this.queue.push(r));
-    try {
-      return await fn();
-    } finally {
-      const next = this.queue.shift();
-      if (next) next();
-      else this.free++;
-    }
-  }
-}
-
 class WorkerStartError extends Error {}
 
-function runInWorker<T>(task: SolveTask, opts: { timeoutMs: number; signal?: AbortSignal; onProgress?: OptimizeJob['onProgress'] }): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (opts.signal?.aborted) return reject(new SolverError('aborted'));
+interface RunOptions {
+  timeoutMs: number;
+  signal?: AbortSignal;
+  onProgress?: OptimizeJob['onProgress'];
+}
+
+/**
+ * A few long-lived worker threads, reused across tasks. Starting and killing a worker per task
+ * churned through thousands of threads on a busy run and crashed Node natively, so a worker is
+ * only retired when its task times out or is aborted: a synchronous simulation cannot be stopped
+ * any other way, and a worker that may still be computing must never be handed the next task.
+ * Idle workers are unref'd, so they never keep a process alive.
+ */
+class WorkerPool {
+  private idle: Worker[] = [];
+  private proven = new WeakSet<Worker>();
+  private running = 0;
+  private waiting: (() => void)[] = [];
+
+  constructor(private max: number) {}
+
+  private spawn(): Worker {
     const worker = new Worker(WORKER_URL);
-    let started = false;
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      opts.signal?.removeEventListener('abort', onAbort);
-      void worker.terminate();
-      fn();
-    };
-    const onAbort = () => finish(() => reject(new SolverError('aborted')));
-    const timer = setTimeout(() => finish(() => reject(new SolverError('simulation took too long'))), opts.timeoutMs);
-    opts.signal?.addEventListener('abort', onAbort);
-    worker.on('message', (m: WorkerMessage) => {
-      started = true;
-      if (m.type === 'progress') opts.onProgress?.(m);
-      else if (m.type === 'done') finish(() => resolve(m.result as T));
-      else finish(() => reject(new SolverError(m.message)));
+    worker.unref();
+    worker.on('exit', () => {
+      const i = this.idle.indexOf(worker);
+      if (i >= 0) this.idle.splice(i, 1);
     });
-    worker.on('error', (err) => finish(() => reject(started ? new SolverError(err.message) : new WorkerStartError(err.message))));
-    worker.on('exit', (code) => finish(() => reject(new SolverError(`solver worker exited with code ${code}`))));
-    worker.postMessage(task);
-  });
+    return worker;
+  }
+
+  private async slot(): Promise<void> {
+    if (this.running < this.max) {
+      this.running++;
+      return;
+    }
+    await new Promise<void>((resolve) => this.waiting.push(resolve));
+    this.running++;
+  }
+
+  private freeSlot(): void {
+    this.running--;
+    this.waiting.shift()?.();
+  }
+
+  async run<T>(task: SolveTask, opts: RunOptions): Promise<T> {
+    if (opts.signal?.aborted) throw new SolverError('aborted');
+    await this.slot();
+    const worker = this.idle.pop() ?? this.spawn();
+    worker.ref();
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        let settled = false;
+        // The signal may have fired while this task waited for a free worker.
+        if (opts.signal?.aborted) {
+          worker.unref();
+          this.idle.push(worker);
+          reject(new SolverError('aborted'));
+          return;
+        }
+        const finish = (fn: () => void, reusable: boolean) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          worker.off('message', onMessage);
+          worker.off('error', onError);
+          worker.off('exit', onExit);
+          opts.signal?.removeEventListener('abort', onAbort);
+          if (reusable) {
+            worker.unref();
+            this.idle.push(worker);
+          } else {
+            void worker.terminate();
+          }
+          fn();
+        };
+        const onMessage = (m: WorkerMessage) => {
+          if (m.type === 'progress') opts.onProgress?.(m);
+          else if (m.type === 'done') {
+            this.proven.add(worker);
+            finish(() => resolve(m.result as T), true);
+          } else finish(() => reject(new SolverError(m.message)), false);
+        };
+        // A worker that never completed a task probably cannot load (e.g. no TypeScript loader).
+        const onError = (err: Error) => finish(() => reject(this.proven.has(worker) ? new SolverError(err.message) : new WorkerStartError(err.message)), false);
+        const onExit = (code: number) => finish(() => reject(new SolverError(`solver worker exited with code ${code}`)), false);
+        const onAbort = () => finish(() => reject(new SolverError('aborted')), false);
+        const timer = setTimeout(() => finish(() => reject(new SolverError('simulation took too long')), false), opts.timeoutMs);
+        worker.on('message', onMessage);
+        worker.on('error', onError);
+        worker.on('exit', onExit);
+        opts.signal?.addEventListener('abort', onAbort);
+        worker.postMessage(task);
+      });
+    } finally {
+      this.freeSlot();
+    }
+  }
 }
 
 /**
@@ -119,22 +173,20 @@ async function optimizeInline(spec: SystemSpec, job: OptimizeJob, chunk = 60): P
 }
 
 export function createSolver(mode: SolverMode = 'auto', maxConcurrent = Math.max(1, availableParallelism() - 1)): Solver {
-  const gate = new Semaphore(maxConcurrent);
+  const pool = new WorkerPool(maxConcurrent);
   let useWorker = mode !== 'inline';
 
-  async function attempt<T>(task: SolveTask, inline: () => T | Promise<T>, opts: Parameters<typeof runInWorker>[1]): Promise<T> {
-    return gate.run(async () => {
-      if (useWorker) {
-        try {
-          return await runInWorker<T>(task, opts);
-        } catch (err) {
-          if (!(err instanceof WorkerStartError) || mode === 'worker') throw err;
-          // The worker could not load (e.g. no TypeScript loader): fall back for good.
-          useWorker = false;
-        }
+  async function attempt<T>(task: SolveTask, inline: () => T | Promise<T>, opts: RunOptions): Promise<T> {
+    if (useWorker) {
+      try {
+        return await pool.run<T>(task, opts);
+      } catch (err) {
+        if (!(err instanceof WorkerStartError) || mode === 'worker') throw err;
+        // The workers cannot load here: fall back to running in this thread for good.
+        useWorker = false;
       }
-      return inline();
-    });
+    }
+    return inline();
   }
 
   return {

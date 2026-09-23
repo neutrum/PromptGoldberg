@@ -2,8 +2,8 @@ import { parentPort } from 'node:worker_threads';
 import { checkShot, makeRng, optimize, searchPieces, simulate, evaluateGoal } from '@og/shared';
 import type { SolveTask, WorkerMessage } from './solver';
 
-/** Runs optimizer and check tasks off the main thread. One task per worker. */
-parentPort!.once('message', (task: SolveTask) => {
+/** Runs optimizer and check tasks off the main thread; stays alive for the next task. */
+parentPort!.on('message', (task: SolveTask) => {
   const post = (m: WorkerMessage) => parentPort!.postMessage(m);
   try {
     if (task.kind === 'optimize') {

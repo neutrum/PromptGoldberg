@@ -20,7 +20,7 @@ Hackathon deadline: **Nov 11, 16:30 CEST** (submit a day early). Hosted demo mus
 
 ## Reliability
 
-- [ ] **Worker pool for the solver.** Every solver task starts and kills a fresh worker thread; during long eval runs Node crashed natively twice (exit 0xC0000005, Windows). Reuse a few long-lived workers instead. A crash on the server would restart it and drop in-flight AI requests.
+- [x] **Worker pool for the solver.** A few long-lived workers are reused; a worker is retired only when its task times out or is aborted (a synchronous simulation cannot be stopped otherwise). Idle workers are unref'd so they never hold a process open. Verified: 120 sequential + 60 parallel checks on one solver, timeouts and aborts (including while queued) recover, and the process exits cleanly.
 
 ## Game feel
 
