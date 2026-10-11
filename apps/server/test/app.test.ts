@@ -179,3 +179,19 @@ describe('gallery endpoints', () => {
     expect((await app.inject({ method: 'GET', url: '/api/health' })).json().gallery).toBe(1);
   });
 });
+
+describe('POST /api/machine/puzzle', () => {
+  it('breaks a working machine into a fix-it puzzle without the LLM', async () => {
+    const sample = (await import('@og/machine/fixtures/ramp-dominoes-bell.json', { with: { type: 'json' } })).default;
+    const app = await setup(null);
+    const res = await app.inject({ method: 'POST', url: '/api/machine/puzzle', payload: { machine: sample, kind: 'connect', seed: 7 } });
+    expect(res.statusCode).toBe(200);
+    const { puzzle } = res.json();
+    expect(puzzle.kind).toBe('connect');
+    expect(puzzle.missing.length).toBeGreaterThan(0);
+    expect(puzzle.spec.parts.length + puzzle.missing.length).toBe(sample.parts.length);
+
+    const bad = await app.inject({ method: 'POST', url: '/api/machine/puzzle', payload: { machine: sample, kind: 'nope' } });
+    expect(bad.statusCode).toBe(400);
+  });
+});

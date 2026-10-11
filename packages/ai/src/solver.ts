@@ -133,7 +133,9 @@ export class WorkerPool {
         const onError = (err: Error) => finish(() => reject(this.proven.has(worker) ? new SolverError(err.message) : new WorkerStartError(err.message)), false);
         const onExit = (code: number) => finish(() => reject(new SolverError(`solver worker exited with code ${code}`)), false);
         const onAbort = () => finish(() => reject(new SolverError('aborted')), false);
-        const timer = setTimeout(() => finish(() => reject(new SolverError('simulation took too long')), false), opts.timeoutMs);
+        // A worker that never answered anything is treated like one that failed to start, so the
+        // caller can fall back to inline physics instead of timing out on every request.
+        const timer = setTimeout(() => finish(() => reject(this.proven.has(worker) ? new SolverError('simulation took too long') : new WorkerStartError('physics worker did not respond')), false), opts.timeoutMs);
         worker.on('message', onMessage);
         worker.on('error', onError);
         worker.on('exit', onExit);

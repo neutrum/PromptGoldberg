@@ -54,6 +54,20 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 
 - [ ] Playtest fixes; two-day prompt-chip pass on Orbital Goldberg for entry #2; submit both Nov 10; confirm the focus category on Discord.
 
+## Lessons from The Incredible Machine (1992, Dynamix; research 2026-10-11)
+
+What it was: a goal in one line ("put the ball in the basket"), a board with fixed parts, a parts bin at the side with a few parts in limited numbers, Run/Stop, deterministic physics (no random numbers), 87 puzzles that introduce one part at a time, then a free-form mode. About 45 parts; nine months and ~$36k to build; a million copies by 2000. Successor: Contraption Maker (2014, same designers), 200+ puzzles, Steam Workshop sharing.
+
+What to copy:
+- The frame: goal sentence + fixed parts + bin. That is now the default play ("connect"): the AI's goal parts stay, everything else goes into the bin. Any build the physics accepts wins; the AI's layout is only one solution.
+- Scarcity makes it solvable: the bin is small on purpose. Keep hands at 2–5 parts; add 1–2 decoy parts for the hard tier later.
+- Teach one part at a time: the first cards should each introduce one part (ramp, then fan, then cannon...). Order the card deck that way.
+- Surplus parts are fine; a win with parts left over feels clever. (Already allowed: Run works before every part is down.)
+- Environment knobs (gravity, wind) were their late-game variety; cheap for us later (a "low gravity" prompt flag).
+- Humour carried it (Pokey the cat, Mort the mouse). Our version: captions from the AI, a named cat/pizza card, silly goal names.
+- Score was time and puzzles; players ignored it. Keep tries, not time.
+- What we add that it never had: the sentence. Nobody hand-authors the 87 puzzles; the judge types one and gets a level.
+
 ## Cut list
 
 No multiplayer, no live voice agent, no Meshy at runtime, no splats, no WFC, no new orbital content, no AI-generated art.

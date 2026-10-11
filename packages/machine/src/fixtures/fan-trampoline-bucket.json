@@ -1,16 +1,62 @@
 {
   "title": "Fan, trampoline, bucket",
   "parts": [
-    { "id": "ball", "kind": "ball", "x": 6, "y": 3, "z": 12 },
-    { "id": "ramp", "kind": "ramp", "x": 6, "y": 2, "z": 12, "yaw": 0 },
-    { "id": "deck", "kind": "platform", "x": 8, "y": 2, "z": 12, "yaw": 0, "length": 3 },
-    { "id": "tramp", "kind": "trampoline", "x": 11, "y": 0, "z": 12 },
-    { "id": "fan", "kind": "fan", "x": 9, "y": 2, "z": 12, "yaw": 0 },
-    { "id": "bucket", "kind": "bucket", "x": 14, "y": 0, "z": 12 }
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 6,
+      "y": 3,
+      "z": 12
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 6,
+      "y": 2,
+      "z": 12,
+      "yaw": 0
+    },
+    {
+      "id": "deck",
+      "kind": "platform",
+      "x": 6,
+      "y": 2,
+      "z": 12,
+      "yaw": 0,
+      "length": 5
+    },
+    {
+      "id": "tramp",
+      "kind": "trampoline",
+      "x": 11,
+      "y": 0,
+      "z": 12
+    },
+    {
+      "id": "fan",
+      "kind": "fan",
+      "x": 9,
+      "y": 2,
+      "z": 12,
+      "yaw": 0
+    },
+    {
+      "id": "bucket",
+      "kind": "bucket",
+      "x": 14,
+      "y": 0,
+      "z": 12
+    }
   ],
   "goal": [
-    { "type": "touch", "part": "tramp" },
-    { "type": "bucket", "part": "bucket" }
+    {
+      "type": "touch",
+      "part": "tramp"
+    },
+    {
+      "type": "bucket",
+      "part": "bucket"
+    }
   ],
   "duration": 12
 }

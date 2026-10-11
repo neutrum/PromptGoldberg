@@ -36,7 +36,7 @@ describe('simulation', () => {
       const nudged = nudgeMachine(spec, { budget: 150, timeLimitMs: 20_000 });
       expect(nudged.solved, `${file}: ${nudged.result.steps.map((s) => s.note).join('; ')}`).toBe(true);
     }
-  });
+  }, 30000);
 
   it('rejects machines without exactly one ball or with bad goal references', () => {
     const spec = load('ramp-dominoes-bell.json');
@@ -83,6 +83,23 @@ describe('fix-it puzzles', () => {
     expect(wrong.id).toBe(right.id);
     expect(wrong.x !== right.x || wrong.z !== right.z).toBe(true);
     expect(evaluateMachine(spec.goal, simulateSync(withPlacements(puzzle!, puzzle!.start), { record: false })).success).toBe(false);
+    expect(evaluateMachine(spec.goal, simulateSync(withPlacements(puzzle!, puzzle!.missing), { record: false })).success).toBe(true);
+  });
+});
+
+describe('connect puzzles', () => {
+  it('keeps the ball, shelves and goal parts and hands out the rest', async () => {
+    const { makeConnectPuzzle, withPlacements } = await import('../src/puzzle');
+    const spec = load('seesaw-cannon-bell.json');
+    const puzzle = makeConnectPuzzle(spec);
+    expect(puzzle).not.toBeNull();
+    expect(puzzle!.kind).toBe('connect');
+    const kept = puzzle!.spec.parts.map((p) => p.kind);
+    expect(kept).toContain('ball');
+    expect(kept).toContain('bell');
+    expect(puzzle!.missing.length).toBeGreaterThan(0);
+    for (const m of puzzle!.missing) expect(['ball', 'platform']).not.toContain(m.kind);
+    expect(evaluateMachine(spec.goal, simulateSync(puzzle!.spec, { record: false })).success).toBe(false);
     expect(evaluateMachine(spec.goal, simulateSync(withPlacements(puzzle!, puzzle!.missing), { record: false })).success).toBe(true);
   });
 });

@@ -7,7 +7,7 @@ import {
 import { LevelCache } from './cache';
 import { DailyStore } from './daily';
 import { GalleryStore } from './gallery';
-import { parseMachine, type MachineStreamEvent } from '@og/machine';
+import { parseMachine, PUZZLE_KINDS, type MachineStreamEvent, type PuzzleKind } from '@og/machine';
 import {
   coachTip, createLevel, createMachine, createPhysics, createSolver, designSystem, LlmError, SolverError,
   type CreateLevelResult, type CreateMachineResult, type LevelRequest, type LlmBackend, type MachineRequest, type Physics, type Solver, type SolverMode,
@@ -79,9 +79,12 @@ export async function buildApp(opts: AppOptions) {
   const physics = opts.physics ?? createPhysics(typeof opts.solver === 'string' ? opts.solver : 'auto');
   const gallery = await GalleryStore.open(opts.dataDir, limits.galleryMaxEntries);
   const cache = new LevelCache(join(opts.dataDir, 'cache'));
-  const daily = new DailyStore(join(opts.dataDir, 'daily'), opts.llm && ((request) => createMachine(request, {
-    llm: llm!, physics, maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs,
-  })));
+  const daily = new DailyStore(
+    join(opts.dataDir, 'daily'),
+    opts.llm && ((request) => createMachine(request, { llm: llm!, physics, maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs })),
+    // The daily ends with "build the chain", so the machine must have connecting parts to hand out.
+    async (machine) => (await physics.puzzle(machine, 'connect', 1)) !== null,
+  );
   const llmLimiter = new RateLimiter(limits.perMinute, limits.perDay);
   const coachLimiter = new RateLimiter(limits.coachPerMinute, limits.coachPerMinute * 60 * 24);
   const publishLimiter = new RateLimiter(limits.publishPerMinute, limits.publishPerDay);
@@ -270,6 +273,21 @@ export async function buildApp(opts: AppOptions) {
     const result = await daily.get();
     if (Date.now() - started > 1000) req.log.info({ ms: Date.now() - started, generated: result.generated }, 'daily machine generated');
     return result;
+  });
+
+  /** Break a working machine for fix-it play. Pure physics, no LLM; dozens of short runs in the worker pool. */
+  app.post<{ Body: { machine?: unknown; kind?: unknown; seed?: unknown } }>('/api/machine/puzzle', async (req, reply) => {
+    const limited = resultLimiter.take(req.ip);
+    if (limited) return reply.code(429).send({ error: limited.error });
+    const kind = req.body?.kind;
+    if (!PUZZLE_KINDS.includes(kind as PuzzleKind)) return reply.code(400).send({ error: `kind must be one of ${PUZZLE_KINDS.join(', ')}` });
+    const parsed = parseMachine(req.body?.machine);
+    if (!parsed.ok) return reply.code(400).send({ error: `The machine is invalid: ${parsed.issues.slice(0, 3).map((i) => i.message).join('; ')}` });
+    const seed = Number.isFinite(Number(req.body?.seed)) ? Math.floor(Number(req.body?.seed)) : 1;
+    const started = Date.now();
+    const puzzle = await physics.puzzle(parsed.spec, kind as PuzzleKind, seed);
+    req.log.info({ ms: Date.now() - started, kind, physics: physics.mode, found: !!puzzle }, 'puzzle generated');
+    return { puzzle };
   });
 
   app.post<{ Body: { machine?: unknown; instruction?: unknown } }>('/api/machine/edit', async (req, reply) => {

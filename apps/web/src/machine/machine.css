@@ -49,6 +49,11 @@
 .welcome-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
 .welcome-actions button { font-size: 15px; padding: 10px 16px; }
 
+/* Puzzle / Watch switch */
+.mswitch { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.mswitch button { border: none; border-radius: 0; background: var(--panel); color: var(--muted); font-size: 13px; }
+.mswitch button.active { background: rgba(255, 210, 122, 0.18); color: #ffd27a; }
+
 /* Coach nudges above the prompt bar */
 .coach-pop { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 10px; background: rgba(255, 210, 122, 0.12); border: 1px solid rgba(255, 210, 122, 0.4); font-size: 14px; }
 .coach-pop button { white-space: nowrap; }
@@ -62,6 +67,8 @@
 
 .mbin { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; align-items: center; }
 .mbin button { font-size: 13px; }
-.mbin button.active { border-color: #ffd27a; color: #ffd27a; }
+.mbin button.active { border-color: #ffd27a; color: #ffd27a; background: rgba(255, 210, 122, 0.12); }
+.mbin button.part.down { opacity: 0.55; text-decoration: line-through; }
+.mfix .small { font-size: 12px; margin-bottom: 8px; }
 .mbreak { margin-top: 8px; margin-bottom: 0; }
 .mnote { color: #ff8a80; font-size: 13px; margin-bottom: 8px; }

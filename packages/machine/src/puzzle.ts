@@ -2,17 +2,19 @@
  * Fix-it puzzles: take a machine that works and break it for the player to repair.
  * The proven machine is the solution, so a puzzle is always solvable and a hint is free.
  *
- * Kinds: 'missing' pulls one part out, 'missing2' pulls two, 'moved' leaves every part in but
- * shifts one to a nearby wrong cell, so the player has to spot which one.
+ * Kinds: 'connect' keeps the ball, the shelves and the goal parts where they are and hands the
+ * player every connecting part (ramps, fans, cannons...) to build the chain with; 'missing' pulls
+ * one part out, 'missing2' pulls two, 'moved' leaves every part in but shifts one to a nearby
+ * wrong cell, so the player has to spot which one.
  */
 import { evaluateMachine } from './goal';
 import { dropAt, isSupported } from './placement';
 import type { MachineSpec, Part, PartKind } from './schema';
 import { simulateSync } from './sim';
 
-export type PuzzleKind = 'missing' | 'missing2' | 'moved';
+export type PuzzleKind = 'connect' | 'missing' | 'missing2' | 'moved';
 
-export const PUZZLE_KINDS: PuzzleKind[] = ['missing', 'missing2', 'moved'];
+export const PUZZLE_KINDS: PuzzleKind[] = ['connect', 'missing', 'missing2', 'moved'];
 
 export interface Puzzle {
   kind: PuzzleKind;
@@ -128,9 +130,29 @@ export function makeMovedPuzzle(solution: MachineSpec, opts: { seed?: number; av
   return best?.puzzle ?? null;
 }
 
+/**
+ * The goal parts and the shelves stay; everything that connects them goes to the player. Any
+ * arrangement the physics accepts counts, so the AI's layout is one solution among many.
+ */
+export function makeConnectPuzzle(solution: MachineSpec): Puzzle | null {
+  if (fails(solution) !== null) return null;
+  const goalIds = new Set(solution.goal.map((g) => g.part));
+  const loose = removable(solution).filter((p) => p.kind !== 'platform' && !goalIds.has(p.id));
+  if (!loose.length) return null;
+  const ids = new Set(loose.map((p) => p.id));
+  const spec: MachineSpec = { ...solution, parts: solution.parts.filter((p) => !ids.has(p.id)) };
+  const failedAt = fails(spec);
+  if (failedAt === null) return null; // Works without them: nothing to connect.
+  // Hand the parts out in chain order, so the bin reads like a recipe.
+  const order = new Map(solution.parts.map((p, i) => [p.id, i]));
+  loose.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  return { kind: 'connect', spec, missing: loose, start: [], solution, failedAt };
+}
+
 /** A puzzle of the given kind, or null when the machine cannot be broken that way. */
 export function makePuzzleOfKind(solution: MachineSpec, kind: PuzzleKind, opts: { seed?: number } = {}): Puzzle | null {
   switch (kind) {
+    case 'connect': return makeConnectPuzzle(solution);
     case 'missing': return makePuzzle(solution, 1);
     case 'missing2': return makePuzzle(solution, 2);
     case 'moved': return makeMovedPuzzle(solution, opts);

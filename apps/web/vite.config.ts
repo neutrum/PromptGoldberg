@@ -6,7 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8787',
+      // 127.0.0.1, not localhost: the API listens on IPv4 only, and Node tries ::1 first, which costs ~2 s per request.
+      '/api': 'http://127.0.0.1:8787',
     },
   },
   worker: {

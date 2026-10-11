@@ -1,7 +1,7 @@
 import { availableParallelism } from 'node:os';
 import {
-  evaluateMachine, initPhysics, nudgeMachine, simulateSync,
-  type MachineEvent, type MachineResult, type MachineSpec,
+  evaluateMachine, initPhysics, makePuzzleOfKind, nudgeMachine, simulateSync,
+  type MachineEvent, type MachineResult, type MachineSpec, type Puzzle, type PuzzleKind,
 } from '@og/machine';
 import { SolverError, WorkerPool, WorkerStartError } from '../solver';
 import type { PhysicsTask } from './physicsWorker';
@@ -31,6 +31,8 @@ export interface Physics {
   readonly mode: 'worker' | 'inline';
   check(spec: MachineSpec, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<CheckOutcome>;
   nudge(spec: MachineSpec, job: NudgeJob): Promise<NudgeOutcome>;
+  /** Break a working machine for the player (dozens of short runs; cheap here, slow in a browser). */
+  puzzle(spec: MachineSpec, kind: PuzzleKind, seed: number, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<Puzzle | null>;
 }
 
 const WORKER_URL = new URL('./physicsWorker.ts', import.meta.url);
@@ -69,6 +71,12 @@ export function createPhysics(mode: 'worker' | 'inline' | 'auto' = 'auto', maxCo
         const res = nudgeMachine(spec, { budget: job.budget, timeLimitMs: job.timeLimitMs, seed: job.seed, onProgress: job.onProgress });
         return { spec: res.spec, result: res.result, evals: res.evals, solved: res.solved, moved: res.moved, events: res.run.events };
       }, { timeoutMs: job.timeLimitMs + 20_000, signal: job.signal, onProgress: job.onProgress });
+    },
+    puzzle(spec, kind, seed, opts = {}) {
+      return attempt({ kind: 'puzzle', spec, puzzleKind: kind, seed }, async () => {
+        await initPhysics();
+        return makePuzzleOfKind(spec, kind, { seed });
+      }, { timeoutMs: opts.timeoutMs ?? 30_000, signal: opts.signal });
     },
   };
 }

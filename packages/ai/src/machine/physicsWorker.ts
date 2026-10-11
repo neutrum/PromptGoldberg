@@ -1,10 +1,11 @@
 import { parentPort } from 'node:worker_threads';
-import { evaluateMachine, initPhysics, nudgeMachine, simulateSync, type MachineSpec } from '@og/machine';
+import { evaluateMachine, initPhysics, makePuzzleOfKind, nudgeMachine, simulateSync, type MachineSpec, type PuzzleKind } from '@og/machine';
 import type { WorkerMessage } from '../solver';
 
 export type PhysicsTask =
   | { kind: 'check'; spec: MachineSpec }
-  | { kind: 'nudge'; spec: MachineSpec; budget: number; timeLimitMs: number; seed: number };
+  | { kind: 'nudge'; spec: MachineSpec; budget: number; timeLimitMs: number; seed: number }
+  | { kind: 'puzzle'; spec: MachineSpec; puzzleKind: PuzzleKind; seed: number };
 
 /** Runs machine simulations off the main thread; stays alive for the next task. */
 const ready = initPhysics();
@@ -15,6 +16,8 @@ parentPort!.on('message', async (task: PhysicsTask) => {
     if (task.kind === 'check') {
       const run = simulateSync(task.spec, { record: false });
       post({ type: 'done', result: { result: evaluateMachine(task.spec.goal, run), events: run.events } });
+    } else if (task.kind === 'puzzle') {
+      post({ type: 'done', result: makePuzzleOfKind(task.spec, task.puzzleKind, { seed: task.seed }) });
     } else {
       let last = 0;
       const res = nudgeMachine(task.spec, {

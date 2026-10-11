@@ -19,12 +19,16 @@ self.onmessage = async (e: MessageEvent<MachineWorkerRequest>) => {
   }
   try {
     await ready;
+    const t0 = performance.now();
     if (e.data.puzzle) {
-      self.postMessage({ id, ok: true, puzzle: makePuzzleOfKind(parsed.spec, e.data.puzzle.kind, { seed: e.data.puzzle.seed }) } satisfies MachineWorkerResponse);
+      const puzzle = makePuzzleOfKind(parsed.spec, e.data.puzzle.kind, { seed: e.data.puzzle.seed });
+      if (import.meta.env.DEV) console.log(`[machine.worker] puzzle ${e.data.puzzle.kind}: ${(performance.now() - t0).toFixed(0)} ms`);
+      self.postMessage({ id, ok: true, puzzle } satisfies MachineWorkerResponse);
       return;
     }
     const run = simulateSync(parsed.spec, { record: true });
     const result = evaluateMachine(parsed.spec.goal, run);
+    if (import.meta.env.DEV) console.log(`[machine.worker] simulate: ${(performance.now() - t0).toFixed(0)} ms, ${run.frameCount} frames`);
     self.postMessage({ id, ok: true, run, result, hash: traceHash(run) } satisfies MachineWorkerResponse, [run.frames.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err instanceof Error ? err.message : String(err) } satisfies MachineWorkerResponse);

@@ -288,7 +288,7 @@ function Machine3D() {
   const parts = useMemo(() => (fix ? [...fix.puzzle.spec.parts, ...fix.placed] : run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? []), [fix, run, machine, sketch]);
   const bodies = useMemo(() => (run ? run.bodies : assemble(parts).bodies), [run, parts]);
   const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
-  const picking = fix && fix.picking !== null && !fix.solved ? fix.puzzle.missing[fix.picking] : null;
+  const picking = fix && fix.picking !== null && !fix.solved ? fix.hand[fix.picking] : null;
   const hints = useMemo(() => (fix?.hint ? assemble(fix.puzzle.missing).bodies : []), [fix?.hint, fix?.puzzle]);
   const framed = fix ? [...fix.puzzle.spec.parts, ...fix.puzzle.missing] : parts;
   // Parts the player put down (or found moved) can be picked up again by clicking them.

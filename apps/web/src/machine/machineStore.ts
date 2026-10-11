@@ -4,7 +4,7 @@ import {
 } from '@og/machine';
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
-import { getDailyMachine, makePuzzleInWorker, simulateInWorker, streamMachine } from './machineClient';
+import { getDailyMachine, makePuzzle, simulateInWorker, streamMachine } from './machineClient';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -26,7 +26,9 @@ export type Mode = 'build' | 'fix';
 export interface FixState {
   puzzle: Puzzle;
   kind: PuzzleKind;
-  /** The parts the player has put back (same ids as the missing ones). */
+  /** The parts in the player's hand: the puzzle's missing parts, with the facing the player gave them. */
+  hand: Part[];
+  /** The parts the player has put down (same ids as the hand). */
   placed: Part[];
   /** Index into puzzle.missing of the part being placed, or null. */
   picking: number | null;
@@ -50,6 +52,9 @@ interface MachineState {
   /** Machines the AI has delivered this session, for the first-time coach. */
   builds: number;
   edits: number;
+  /** Puzzle play: a built machine arrives with a part held back for the player to place. Off = just watch it. */
+  puzzle: boolean;
+  setPuzzle: (on: boolean) => void;
 
   run: MachineRun | null;
   result: MachineResult | null;
@@ -85,6 +90,8 @@ interface MachineState {
   placeAt: (x: number, z: number) => boolean;
   /** Lift a placed part back into the hand. */
   pickPlaced: (id: string) => void;
+  /** Turn the part in hand a quarter turn (or a placed part, which is lifted first). */
+  rotatePicked: () => void;
   clearPlaced: () => void;
   runFix: () => Promise<void>;
   showHint: () => void;
@@ -94,6 +101,12 @@ interface MachineState {
 const idleAi: MachineAiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null };
 
 const BEST_KEY = 'pg.daily.best';
+const PUZZLE_KEY = 'pg.puzzle';
+/** The daily ladder: easy, sneaky, then build the whole chain. */
+export const DAILY_LADDER: PuzzleKind[] = ['missing', 'moved', 'connect'];
+function loadPuzzleMode(): boolean {
+  try { return localStorage.getItem(PUZZLE_KEY) !== '0'; } catch { return true; }
+}
 function loadBest(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}') as Record<string, number>; } catch { return {}; }
 }
@@ -142,6 +155,11 @@ export const useMachine = create<MachineState>((set, get) => {
       delivered = true;
       // Never replace a proven version with an unproven one of the same design.
       if (rank < get().rank && get().machine?.title === parsed.spec.title) return;
+      if (get().puzzle && rank === 2 && get().proven) {
+        // Puzzle play: the finished machine goes straight into fix-it with a part held back.
+        set({ machine: parsed.spec, rank, proven: true, moved, mode: 'build', fix: null });
+        if (await get().startFix('connect')) return;
+      }
       await get().load(parsed.spec, { rank, proven: rank >= 1, moved });
     };
     try {
@@ -158,10 +176,17 @@ export const useMachine = create<MachineState>((set, get) => {
             break;
           case 'draft':
             log(e.status === 'solved' ? 'The physics proved it works.' : 'Design ready. Running it…');
+            // In puzzle play the working version stays hidden until the player completes it.
+            if (get().puzzle) {
+              const parsed = parseMachine(e.machine);
+              if (parsed.ok) set((s) => ({ ai: { ...s.ai, sketch: { attempt: s.ai.sketch?.attempt ?? 1, title: parsed.spec.title, parts: parsed.spec.parts } } }));
+              break;
+            }
             void accept(e.machine, e.status === 'solved' ? 1 : 0);
             break;
           case 'machine':
             log(e.solved ? `Verified: the machine works${e.moved.length ? ` after nudging ${e.moved.length} part${e.moved.length > 1 ? 's' : ''}` : ''}.` : 'Could not make it work; here is the closest attempt.');
+            set({ proven: e.solved });
             void accept(e.machine, 2, e.moved).then(() => set((s) => ({
               ai: { ...idleAi, lines: s.ai.lines }, working: false, proven: e.solved,
               builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
@@ -191,6 +216,11 @@ export const useMachine = create<MachineState>((set, get) => {
     fix: null,
     builds: 0,
     edits: 0,
+    puzzle: loadPuzzleMode(),
+    setPuzzle(on) {
+      set({ puzzle: on });
+      try { localStorage.setItem(PUZZLE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
+    },
     daily: { date: '', loading: false, best: loadBest(), stage: 0, tries: 0 },
     run: null,
     result: null,
@@ -267,11 +297,11 @@ export const useMachine = create<MachineState>((set, get) => {
     async nextDailyStage() {
       const { daily } = get();
       // Stages go missing, two missing, moved; a stage the machine cannot offer is skipped.
-      for (let stage = daily.stage + 1; stage <= PUZZLE_KINDS.length; stage++) {
+      for (let stage = daily.stage + 1; stage <= DAILY_LADDER.length; stage++) {
         set((s) => ({ daily: { ...s.daily, stage } }));
-        if (await get().startFix(PUZZLE_KINDS[stage - 1])) return;
+        if (await get().startFix(DAILY_LADDER[stage - 1])) return;
       }
-      set((s) => ({ daily: { ...s.daily, stage: PUZZLE_KINDS.length + 1 } }));
+      set((s) => ({ daily: { ...s.daily, stage: DAILY_LADDER.length + 1 } }));
     },
 
     async startFix(kind = 'missing') {
@@ -279,12 +309,18 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!machine || !proven) return false;
       set({ phase: 'simulating', error: null });
       const seed = daily.date ? Number(daily.date.replace(/-/g, '')) : Math.floor(Math.random() * 1e9);
-      const puzzle = await makePuzzleInWorker(machine, kind, seed);
+      let puzzle: Puzzle | null = null;
+      try {
+        puzzle = await makePuzzle(machine, kind, seed);
+      } catch (err) {
+        set({ phase: 'idle', error: err instanceof Error ? err.message : String(err) });
+        return false;
+      }
       if (!puzzle) {
         set({ phase: 'idle', error: kind === 'missing' ? 'This machine has no part that can be taken out; try another one.' : 'This machine cannot be broken that way; try another kind.' });
         return false;
       }
-      set({ mode: 'fix', fix: { puzzle, kind, placed: puzzle.start, picking: puzzle.start.length ? null : 0, tries: 0, solved: false, hint: false } });
+      set({ mode: 'fix', fix: { puzzle, kind, hand: puzzle.missing.map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, tries: 0, solved: false, hint: false } });
       // Show the broken machine fail first, so the player sees what is wrong.
       await simulate(withPlacements(puzzle, puzzle.start));
       return true;
@@ -297,21 +333,33 @@ export const useMachine = create<MachineState>((set, get) => {
     placeAt(x, z) {
       const { fix } = get();
       if (!fix || fix.picking === null || fix.solved) return false;
-      const original = fix.puzzle.missing[fix.picking];
+      const original = fix.hand[fix.picking];
       const others = fix.placed.filter((p) => p.id !== original.id);
       // Lands on the floor or the platform under the cursor; a taken cell refuses it.
       const part = dropAt([...fix.puzzle.spec.parts, ...others], original, x, z);
       if (!part) return false;
       const placed = [...others, part];
-      const next = fix.puzzle.missing.findIndex((m) => !placed.some((p) => p.id === m.id));
+      const next = fix.hand.findIndex((m) => !placed.some((p) => p.id === m.id));
       set({ fix: { ...fix, placed, picking: next >= 0 ? next : null }, run: null, result: null, phase: 'idle' });
       return true;
+    },
+
+    rotatePicked() {
+      const { fix } = get();
+      if (!fix || fix.solved) return;
+      let { picking } = fix;
+      let placed = fix.placed;
+      if (picking === null) return;
+      const id = fix.hand[picking].id;
+      if (placed.some((p) => p.id === id)) placed = placed.filter((p) => p.id !== id);
+      const hand = fix.hand.map((h, i) => (i === picking ? { ...h, yaw: (((h.yaw + 90) % 360) as Part['yaw']) } : h));
+      set({ fix: { ...fix, hand, placed, picking }, run: null, result: null, phase: 'idle' });
     },
 
     pickPlaced(id) {
       const { fix } = get();
       if (!fix || fix.solved) return;
-      const index = fix.puzzle.missing.findIndex((m) => m.id === id);
+      const index = fix.hand.findIndex((m) => m.id === id);
       if (index < 0) return;
       set({ fix: { ...fix, placed: fix.placed.filter((p) => p.id !== id), picking: index }, run: null, result: null, phase: 'idle' });
     },
@@ -319,7 +367,7 @@ export const useMachine = create<MachineState>((set, get) => {
     clearPlaced() {
       const { fix } = get();
       if (!fix || fix.solved) return;
-      set({ fix: { ...fix, placed: [], picking: 0 }, run: null, result: null, phase: 'idle' });
+      set({ fix: { ...fix, placed: [], picking: 0, hand: fix.puzzle.missing.map((m) => ({ ...m })) }, run: null, result: null, phase: 'idle' });
     },
 
     async runFix() {
@@ -333,7 +381,7 @@ export const useMachine = create<MachineState>((set, get) => {
         const { daily, fix: done } = get();
         if (daily.date && done) {
           const tries = daily.tries + done.tries;
-          const last = daily.stage >= PUZZLE_KINDS.length;
+          const last = daily.stage >= DAILY_LADDER.length;
           const best = last && (!daily.best[daily.date] || tries < daily.best[daily.date]) ? { ...daily.best, [daily.date]: tries } : daily.best;
           if (best !== daily.best) { try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch { /* private mode */ } }
           set({ daily: { ...daily, tries, best } });

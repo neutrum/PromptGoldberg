@@ -41,13 +41,29 @@ export function simulateInWorker(spec: MachineSpec): Promise<MachinePlayback> {
   });
 }
 
-/** Break a working machine for the player to repair: a part missing, two missing, or one moved. */
+/** Break a working machine in the browser worker (slow on weak machines: dozens of runs). */
 export function makePuzzleInWorker(solution: MachineSpec, kind: PuzzleKind, seed?: number): Promise<Puzzle | null> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve: resolve as (r: unknown) => void, reject });
     get().postMessage({ id, spec: solution, puzzle: { kind, seed } } satisfies MachineWorkerRequest);
   });
+}
+
+/** Break a working machine: the server does it in a fraction of a second; the worker is the fallback. */
+export async function makePuzzle(solution: MachineSpec, kind: PuzzleKind, seed: number): Promise<Puzzle | null> {
+  try {
+    const res = await fetch('/api/machine/puzzle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ machine: solution, kind, seed }),
+    });
+    if (res.ok) return ((await res.json()) as { puzzle: Puzzle | null }).puzzle;
+    if (res.status < 500) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Request failed (${res.status})`);
+  } catch (err) {
+    if (err instanceof Error && !/fetch|network|failed \(5/i.test(err.message) && !(err instanceof TypeError)) throw err;
+  }
+  return makePuzzleInWorker(solution, kind, seed);
 }
 
 const unreachable = 'The AI server is not reachable. Start it with "npm run dev:server".';

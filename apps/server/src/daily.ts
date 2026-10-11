@@ -38,7 +38,12 @@ const dayIndex = (date: string) => Math.floor(Date.parse(date) / 86_400_000);
 export class DailyStore {
   private inflight = new Map<string, Promise<DailyMachine>>();
 
-  constructor(private dir: string, private create: ((request: MachineRequest) => Promise<CreateMachineResult>) | null) {}
+  /** `playable` says whether a machine can be turned into the day's puzzles; a machine that cannot is skipped. */
+  constructor(
+    private dir: string,
+    private create: ((request: MachineRequest) => Promise<CreateMachineResult>) | null,
+    private playable: (machine: MachineSpec) => Promise<boolean> = async () => true,
+  ) {}
 
   private file(date: string) {
     return join(this.dir, `${date}.json`);
@@ -64,11 +69,11 @@ export class DailyStore {
   private async generate(date: string): Promise<DailyMachine> {
     const start = dayIndex(date) % DAILY_PROMPTS.length;
     if (this.create) {
-      for (let k = 0; k < 2; k++) {
+      for (let k = 0; k < 3; k++) {
         const prompt = DAILY_PROMPTS[(start + k) % DAILY_PROMPTS.length];
         try {
           const res = await this.create({ prompt });
-          if (res.solved) return { date, prompt, machine: res.machine, generated: true };
+          if (res.solved && (await this.playable(res.machine))) return { date, prompt, machine: res.machine, generated: true };
         } catch {
           // Try the next prompt; the fallback below always works.
         }
