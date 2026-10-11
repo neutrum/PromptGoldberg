@@ -44,3 +44,15 @@ describe('simulation', () => {
     expect(parseMachine({ ...spec, goal: [{ type: 'bucket', part: 'bell' }] }).ok).toBe(false);
   });
 });
+
+describe('fix-it puzzles', () => {
+  it('removes a part so the machine fails, and the solution still works', async () => {
+    const { makePuzzle, withPlacements } = await import('../src/puzzle');
+    const spec = load('ramp-dominoes-bell.json');
+    const puzzle = makePuzzle(spec);
+    expect(puzzle).not.toBeNull();
+    expect(puzzle!.missing).toHaveLength(1);
+    expect(evaluateMachine(puzzle!.spec.goal, simulateSync(puzzle!.spec, { record: false })).success).toBe(false);
+    expect(evaluateMachine(spec.goal, simulateSync(withPlacements(puzzle!, puzzle!.missing), { record: false })).success).toBe(true);
+  });
+});

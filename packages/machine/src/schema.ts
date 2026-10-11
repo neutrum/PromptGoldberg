@@ -55,8 +55,13 @@ export interface SpecIssue {
   message: string;
 }
 
+export interface CheckOptions {
+  /** Accept goals that name parts which are not there (a fix-it puzzle with its part pulled out). */
+  allowMissingGoalParts?: boolean;
+}
+
 /** What zod cannot check: ids, references, exactly one ball. */
-export function checkMachine(spec: MachineSpec): SpecIssue[] {
+export function checkMachine(spec: MachineSpec, opts: CheckOptions = {}): SpecIssue[] {
   const issues: SpecIssue[] = [];
   const ids = new Set<string>();
   spec.parts.forEach((p, i) => {
@@ -78,7 +83,7 @@ export function checkMachine(spec: MachineSpec): SpecIssue[] {
   spec.goal.forEach((g, i) => {
     const part = byId.get(g.part);
     if (!part) {
-      issues.push({ path: `goal.${i}.part`, message: `unknown part "${g.part}"` });
+      if (!opts.allowMissingGoalParts) issues.push({ path: `goal.${i}.part`, message: `unknown part "${g.part}"` });
       return;
     }
     const want: Record<MachineGoal['type'], PartKind[] | null> = { bucket: ['bucket'], bell: ['bell'], topple: ['dominoes'], touch: null };
@@ -91,9 +96,9 @@ export function checkMachine(spec: MachineSpec): SpecIssue[] {
 
 export type ParseResult = { ok: true; spec: MachineSpec } | { ok: false; issues: SpecIssue[] };
 
-export function parseMachine(input: unknown): ParseResult {
+export function parseMachine(input: unknown, opts: CheckOptions = {}): ParseResult {
   const r = MachineSpec.safeParse(input);
   if (!r.success) return { ok: false, issues: r.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) };
-  const issues = checkMachine(r.data);
+  const issues = checkMachine(r.data, opts);
   return issues.length ? { ok: false, issues } : { ok: true, spec: r.data };
 }

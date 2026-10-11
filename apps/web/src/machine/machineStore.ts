@@ -1,6 +1,9 @@
-import { parseMachine, type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part } from '@og/machine';
+import {
+  parseMachine, withPlacements,
+  type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle,
+} from '@og/machine';
 import { create } from 'zustand';
-import { simulateInWorker, streamMachine } from './machineClient';
+import { makePuzzleInWorker, simulateInWorker, streamMachine } from './machineClient';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -16,6 +19,20 @@ export type MachineRank = 0 | 1 | 2;
 
 export type PlayPhase = 'idle' | 'simulating' | 'playing' | 'done';
 
+/** Build: the AI makes machines and you watch or change them. Fix: a part is missing and you put it back. */
+export type Mode = 'build' | 'fix';
+
+export interface FixState {
+  puzzle: Puzzle;
+  /** The parts the player has put back (same ids as the missing ones). */
+  placed: Part[];
+  /** Index into puzzle.missing of the part being placed, or null. */
+  picking: number | null;
+  tries: number;
+  solved: boolean;
+  hint: boolean;
+}
+
 interface MachineState {
   prompt: string;
   machine: MachineSpec | null;
@@ -25,6 +42,9 @@ interface MachineState {
   proven: boolean;
   moved: { id: string; cells: number }[];
   ai: MachineAiLog;
+
+  mode: Mode;
+  fix: FixState | null;
 
   run: MachineRun | null;
   result: MachineResult | null;
@@ -47,6 +67,15 @@ interface MachineState {
   celebrate: (step: number) => void;
   finish: () => void;
   stopAi: () => void;
+
+  /** Break the proven machine and hand the player the missing parts. */
+  startFix: () => Promise<void>;
+  pick: (index: number | null) => void;
+  placeAt: (x: number, z: number) => void;
+  clearPlaced: () => void;
+  runFix: () => Promise<void>;
+  showHint: () => void;
+  leaveFix: () => void;
 }
 
 const idleAi: MachineAiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null };
@@ -64,10 +93,26 @@ function playbackEnd(run: MachineRun, result: MachineResult): number {
 }
 
 export const useMachine = create<MachineState>((set, get) => {
+  /** Simulate and play a machine without changing which machine is "the" machine. */
+  const simulate = async (spec: MachineSpec): Promise<MachineResult | null> => {
+    const seq = ++loadSeq;
+    set({ phase: 'simulating', error: null, run: null, result: null, time: 0, celebrated: 0 });
+    try {
+      const { run, result, hash } = await simulateInWorker(spec);
+      if (seq !== loadSeq) return null;
+      set({ run, result, hash, phase: 'playing', time: 0, celebrated: 0, endTime: playbackEnd(run, result) });
+      return result;
+    } catch (err) {
+      if (seq !== loadSeq) return null;
+      set({ phase: 'idle', error: err instanceof Error ? err.message : String(err) });
+      return null;
+    }
+  };
+
   const aiStream = async (path: '/machine' | '/machine/edit', body: unknown) => {
     aiAbort?.abort();
     aiAbort = new AbortController();
-    set({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true });
+    set({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null });
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let delivered = false;
     const accept = async (raw: MachineSpec, rank: MachineRank, moved: { id: string; cells: number }[] = []) => {
@@ -121,6 +166,8 @@ export const useMachine = create<MachineState>((set, get) => {
     proven: false,
     moved: [],
     ai: idleAi,
+    mode: 'build',
+    fix: null,
     run: null,
     result: null,
     hash: null,
@@ -144,20 +191,16 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     async load(machine, meta = {}) {
-      const seq = ++loadSeq;
-      set({ machine, rank: meta.rank ?? 0, proven: meta.proven ?? false, moved: meta.moved ?? [], phase: 'simulating', error: null, run: null, result: null, time: 0, celebrated: 0 });
-      try {
-        const { run, result, hash } = await simulateInWorker(machine);
-        if (seq !== loadSeq) return;
-        set({ run, result, hash, phase: 'playing', time: 0, celebrated: 0, endTime: playbackEnd(run, result) });
-      } catch (err) {
-        if (seq !== loadSeq) return;
-        set({ phase: 'idle', error: err instanceof Error ? err.message : String(err) });
-      }
+      set({ machine, rank: meta.rank ?? 0, proven: meta.proven ?? false, moved: meta.moved ?? [], mode: 'build', fix: null });
+      await simulate(machine);
     },
 
     play() {
-      const { run, result } = get();
+      const { run, result, mode, fix } = get();
+      if (mode === 'fix' && fix) {
+        void get().runFix();
+        return;
+      }
       if (!run || !result) return;
       set({ phase: 'playing', time: 0, celebrated: 0, endTime: playbackEnd(run, result) });
     },
@@ -177,5 +220,60 @@ export const useMachine = create<MachineState>((set, get) => {
       aiAbort?.abort();
       set({ ai: idleAi, working: false });
     },
+
+    async startFix() {
+      const { machine, proven } = get();
+      if (!machine || !proven) return;
+      set({ phase: 'simulating', error: null });
+      const puzzle = await makePuzzleInWorker(machine, 1);
+      if (!puzzle) {
+        set({ phase: 'idle', error: 'This machine has no part that can be taken out; try another one.' });
+        return;
+      }
+      set({ mode: 'fix', fix: { puzzle, placed: [], picking: 0, tries: 0, solved: false, hint: false } });
+      // Show the broken machine fail first, so the player sees what is missing.
+      await simulate(puzzle.spec);
+    },
+
+    pick(index) {
+      set((s) => (s.fix ? { fix: { ...s.fix, picking: index } } : {}));
+    },
+
+    placeAt(x, z) {
+      const { fix } = get();
+      if (!fix || fix.picking === null || fix.solved) return;
+      const original = fix.puzzle.missing[fix.picking];
+      const part: Part = { ...original, x, z, dx: undefined, dz: undefined };
+      const placed = [...fix.placed.filter((p) => p.id !== part.id), part];
+      const next = fix.puzzle.missing.findIndex((m) => !placed.some((p) => p.id === m.id));
+      set({ fix: { ...fix, placed, picking: next >= 0 ? next : null }, run: null, result: null, phase: 'idle' });
+    },
+
+    clearPlaced() {
+      const { fix } = get();
+      if (!fix || fix.solved) return;
+      set({ fix: { ...fix, placed: [], picking: 0 }, run: null, result: null, phase: 'idle' });
+    },
+
+    async runFix() {
+      const { fix } = get();
+      if (!fix || fix.solved) return;
+      set({ fix: { ...fix, tries: fix.tries + 1 } });
+      const result = await simulate(withPlacements(fix.puzzle, fix.placed));
+      if (result?.success) set((s) => (s.fix ? { fix: { ...s.fix, solved: true } } : {}));
+    },
+
+    showHint() {
+      set((s) => (s.fix ? { fix: { ...s.fix, hint: true } } : {}));
+    },
+
+    leaveFix() {
+      const { machine } = get();
+      set({ mode: 'build', fix: null });
+      if (machine) void simulate(machine);
+    },
   };
 });
+
+// Dev only: lets headless browser checks drive the screen.
+if (import.meta.env.DEV) (window as unknown as { __machine: typeof useMachine }).__machine = useMachine;

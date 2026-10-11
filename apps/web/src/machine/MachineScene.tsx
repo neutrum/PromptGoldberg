@@ -1,7 +1,8 @@
 import { Grid } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { assemble, CELL, FRAME_HZ, GRID, KIT, type Body, type MachineRun, type Part } from '@og/machine';
-import { useEffect, useMemo, useRef } from 'react';
+import { assemble, assemblePart, CELL, FRAME_HZ, GRID, KIT, type Body, type MachineRun, type Part } from '@og/machine';
+import type { ThreeEvent } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { sfx } from '../game/audio';
 import { useMachine } from './machineStore';
@@ -24,7 +25,7 @@ function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
   return g;
 }
 
-function BodyMesh({ body, meshRef }: { body: Body; meshRef?: (m: THREE.Object3D | null) => void }) {
+function BodyMesh({ body, meshRef, ghost }: { body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string }) {
   const geometry = useMemo(() => {
     const s = body.shape;
     switch (s.kind) {
@@ -39,6 +40,13 @@ function BodyMesh({ body, meshRef }: { body: Body; meshRef?: (m: THREE.Object3D 
   const air = body.kind === 'fan' && sensor;
   const barrel = body.kind === 'cannon' && sensor;
   if (sensor && !air && !barrel) return null;
+  if (ghost) {
+    return (
+      <mesh geometry={geometry} position={body.position} quaternion={body.rotation}>
+        <meshStandardMaterial color={ghost} transparent opacity={air ? 0.05 : 0.35} depthWrite={false} emissive={ghost} emissiveIntensity={0.4} />
+      </mesh>
+    );
+  }
   return (
     <mesh
       ref={meshRef}
@@ -134,20 +142,55 @@ function MachineCamera({ parts }: { parts: Part[] }) {
   return null;
 }
 
+/** Fix mode: hover the stage to see where the missing part would go, click to put it there. */
+function Placement({ part }: { part: Part }) {
+  const [cell, setCell] = useState<{ x: number; z: number } | null>(null);
+  const planeY = part.y * CELL;
+  const w = GRID.x * CELL, d = GRID.z * CELL;
+  const toCell = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    const x = Math.floor(e.point.x / CELL), z = Math.floor(e.point.z / CELL);
+    if (x < 0 || z < 0 || x >= GRID.x || z >= GRID.z) return null;
+    return { x, z };
+  };
+  const ghost = useMemo(() => (cell ? assemblePart({ ...part, x: cell.x, z: cell.z, dx: undefined, dz: undefined }).bodies : []), [part, cell]);
+  return (
+    <>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[w / 2, planeY + 0.01, d / 2]}
+        onPointerMove={(e) => setCell(toCell(e))}
+        onPointerOut={() => setCell(null)}
+        onClick={(e) => { const c = toCell(e); if (c) useMachine.getState().placeAt(c.x, c.z); }}
+      >
+        <planeGeometry args={[w, d]} />
+        <meshBasicMaterial color="#ffd27a" transparent opacity={planeY > 0 ? 0.06 : 0.02} depthWrite={false} />
+      </mesh>
+      {ghost.map((b) => <BodyMesh key={`ghost-${b.id}`} body={b} ghost="#ffd27a" />)}
+    </>
+  );
+}
+
 function Machine3D() {
   const machine = useMachine((s) => s.machine);
   const sketch = useMachine((s) => s.ai.sketch);
   const run = useMachine((s) => s.run);
-  const parts = run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? [];
+  const fix = useMachine((s) => s.fix);
+  const phase = useMachine((s) => s.phase);
+  const parts = fix ? [...fix.puzzle.spec.parts, ...fix.placed] : run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? [];
   const bodies = useMemo(() => (run ? run.bodies : assemble(parts).bodies), [run, parts]);
   const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
+  const picking = fix && fix.picking !== null && !fix.solved ? fix.puzzle.missing[fix.picking] : null;
+  const hints = useMemo(() => (fix?.hint ? assemble(fix.puzzle.missing).bodies : []), [fix?.hint, fix?.puzzle]);
+  const framed = fix ? [...parts, ...fix.puzzle.missing] : parts;
   return (
     <>
-      <MachineCamera parts={parts} />
+      <MachineCamera parts={framed} />
       {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (
         <BodyMesh key={b.id} body={b} meshRef={b.dynamic ? (m) => { if (m) dynamic.set(b.id, m); else dynamic.delete(b.id); } : undefined} />
       ))}
+      {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
+      {picking && phase !== 'playing' && <Placement part={picking} />}
     </>
   );
 }

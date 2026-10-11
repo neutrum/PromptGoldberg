@@ -1,4 +1,4 @@
-import type { MachineResult, MachineRun, MachineSpec, MachineStreamEvent } from '@og/machine';
+import type { MachineResult, MachineRun, MachineSpec, MachineStreamEvent, Puzzle } from '@og/machine';
 import type { MachineWorkerRequest, MachineWorkerResponse } from './machine.worker';
 
 export interface MachinePlayback {
@@ -10,7 +10,7 @@ export interface MachinePlayback {
 
 let worker: Worker | null = null;
 let nextId = 1;
-const pending = new Map<number, { resolve: (r: MachinePlayback) => void; reject: (e: Error) => void }>();
+const pending = new Map<number, { resolve: (r: MachinePlayback | Puzzle | null) => void; reject: (e: Error) => void }>();
 
 function get(): Worker {
   if (worker) return worker;
@@ -20,8 +20,9 @@ function get(): Worker {
     const p = pending.get(msg.id);
     if (!p) return;
     pending.delete(msg.id);
-    if (msg.ok) p.resolve({ run: msg.run, result: msg.result, hash: msg.hash });
-    else p.reject(new Error(msg.error));
+    if (!msg.ok) p.reject(new Error(msg.error));
+    else if ('puzzle' in msg) p.resolve(msg.puzzle);
+    else p.resolve({ run: msg.run, result: msg.result, hash: msg.hash });
   };
   w.onerror = (e) => {
     for (const p of pending.values()) p.reject(new Error(e.message || 'physics worker failed'));
@@ -35,8 +36,17 @@ function get(): Worker {
 export function simulateInWorker(spec: MachineSpec): Promise<MachinePlayback> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    pending.set(id, { resolve: resolve as (r: unknown) => void, reject });
     get().postMessage({ id, spec } satisfies MachineWorkerRequest);
+  });
+}
+
+/** Pull `count` parts out of a working machine for the player to put back. */
+export function makePuzzleInWorker(solution: MachineSpec, count = 1): Promise<Puzzle | null> {
+  const id = nextId++;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve: resolve as (r: unknown) => void, reject });
+    get().postMessage({ id, spec: solution, puzzle: { count } } satisfies MachineWorkerRequest);
   });
 }
 

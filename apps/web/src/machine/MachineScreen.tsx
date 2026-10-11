@@ -73,6 +73,43 @@ function AiLog() {
   );
 }
 
+/** The game: a part is missing; put it back where the chain needs it. */
+function FixPanel() {
+  const fix = useMachine((s) => s.fix)!;
+  const phase = useMachine((s) => s.phase);
+  const result = useMachine((s) => s.result);
+  const { pick, clearPlaced, runFix, showHint, leaveFix } = useMachine.getState();
+  const allPlaced = fix.puzzle.missing.every((m) => fix.placed.some((p) => p.id === m.id));
+  const failed = phase === 'done' && result && !result.success ? result.steps.find((s) => !s.satisfied) : null;
+  const tries = (n: number) => `${n} ${n === 1 ? 'try' : 'tries'}`;
+  return (
+    <div className="mgoal mfix">
+      <div className="mtitle">
+        <h2>Fix it: {fix.puzzle.solution.title}</h2>
+        <p>{fix.solved ? `Fixed in ${tries(fix.tries)}!` : `${fix.puzzle.missing.length === 1 ? 'A part is' : `${fix.puzzle.missing.length} parts are`} missing. Pick it, then click the stage where it belongs.`}</p>
+      </div>
+      <div className="mbin">
+        {fix.puzzle.missing.map((m, i) => {
+          const placed = fix.placed.find((p) => p.id === m.id);
+          const count = m.kind === 'dominoes' || m.kind === 'platform' ? ` x${m.length ?? (m.kind === 'dominoes' ? 5 : 3)}` : '';
+          return (
+            <button key={m.id} className={fix.picking === i ? 'active' : ''} disabled={fix.solved} onClick={() => pick(i)}>
+              {m.kind}{count} at height {m.y}{placed ? ' (placed)' : ''}
+            </button>
+          );
+        })}
+      </div>
+      {failed && !fix.solved && <div className="mnote">x {failed.note}</div>}
+      <div className="mactions">
+        {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={!allPlaced || phase === 'simulating' || phase === 'playing'}>Run ({tries(fix.tries)})</button>}
+        {!fix.solved && <button onClick={clearPlaced} disabled={!fix.placed.length}>Clear</button>}
+        {!fix.solved && !fix.hint && fix.tries >= 2 && <button onClick={showHint}>Hint</button>}
+        <button onClick={leaveFix}>{fix.solved ? 'Back to the machine' : 'Give up'}</button>
+      </div>
+    </div>
+  );
+}
+
 function GoalPanel() {
   const machine = useMachine((s) => s.machine);
   const result = useMachine((s) => s.result);
@@ -81,8 +118,10 @@ function GoalPanel() {
   const proven = useMachine((s) => s.proven);
   const working = useMachine((s) => s.working);
   const moved = useMachine((s) => s.moved);
-  const { play } = useMachine.getState();
+  const mode = useMachine((s) => s.mode);
+  const { play, startFix } = useMachine.getState();
   if (!machine) return null;
+  if (mode === 'fix') return <FixPanel />;
   const name = (id: string) => machine.parts.find((p) => p.id === id)?.kind ?? id;
   const label = (g: (typeof machine.goal)[number]) => {
     switch (g.type) {
@@ -114,6 +153,7 @@ function GoalPanel() {
       </div>
       <div className="mactions">
         <button className="primary" onClick={play} disabled={phase === 'simulating' || phase === 'playing'}>{done ? '↻ Run again' : '▶ Run'}</button>
+        {proven && !working && <button onClick={() => void startFix()} disabled={phase === 'simulating'} title="A part goes missing; put it back">🔧 Break it, I'll fix it</button>}
       </div>
     </div>
   );
@@ -122,6 +162,7 @@ function GoalPanel() {
 export function MachineScreen() {
   const { go } = useGame.getState();
   const error = useMachine((s) => s.error);
+  const mode = useMachine((s) => s.mode);
   // Something runs the moment the screen opens: a sample machine until the visitor builds one.
   useEffect(() => {
     if (useMachine.getState().machine) return;
@@ -144,7 +185,7 @@ export function MachineScreen() {
         {error && <div className="error-inline">{error}</div>}
       </div>
       <div className="hud-bottom">
-        <PromptBar />
+        {mode !== 'fix' && <PromptBar />}
       </div>
     </div>
   );

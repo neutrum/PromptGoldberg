@@ -28,3 +28,8 @@
   .mside { top: 52px; width: calc(100% - 20px); }
   .mtitle p { display: none; }
 }
+
+.mbin { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.mbin button { font-size: 13px; }
+.mbin button.active { border-color: #ffd27a; color: #ffd27a; }
+.mnote { color: #ff8a80; font-size: 13px; margin-bottom: 8px; }
