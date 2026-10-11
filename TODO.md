@@ -17,13 +17,15 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 - [x] Server: `POST /api/machine` and `/api/machine/edit` (SSE).
 - [x] Web: Prompt Goldberg screen (menu card and `#machine`): parts appear as Claude writes them, the browser re-simulates for playback, follow camera, goal checklist, "physics-proven" badge, talk-to-edit, prompt chips, sample machine on open.
 - [x] First live results: "dominoes and a fan" worked in 7 s (first draft at 3 s); "cannon over a wall" needed one redesign; "seesaw, dominoes, bell" worked after one nudge.
+- [x] Fix-it mode (the game): a proven machine is broken three ways (1 missing, 2 missing, a part moved) and the player repairs it; hand-placed parts land on the floor or the platform under the cursor; placed parts can be picked up again; hint after 2 tries.
+- [x] Daily: one machine per UTC day (server cache + fallback), a three-stage ladder, best total tries per day.
+- [x] Juice: confetti per goal step, slow motion around goal events, fanfare on success, miss sound; orbit camera that frames each machine and glides with the ball.
+- [x] Prompt Goldberg is the app at the root URL (old game only at `#orbital`); welcome card with prompt cards, dice button for cards any time, two coach nudges after the first build.
 
 ## Week 1 (to Oct 17): prove the nugget
 
 - [ ] Run the 10-prompt eval, read every failing machine, fix the kit or the prompt, repeat until 5/10 and the machines are fun to watch (long chains, visible cause and effect).
-- [ ] Camera: frame the whole machine when idle and at the end of a run; slow motion on goal events.
 - [ ] Nicer parts: distinct shapes (fan blades, bell with a clapper, cannon barrel), part labels, a bounce/ring flash.
-- [ ] Ball must not sit on the platform at the end of playback; show a "done" beat with confetti when all goals fire.
 - [ ] Deterministic hash check browser vs server (log the hash on both sides and compare).
 
 ## Week 2 (Oct 18–24): reliable and legible
@@ -36,9 +38,9 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 
 ## Week 3 (Oct 25–31): the game around it
 
-- [ ] Daily Machine: one goal per UTC day, generation cached server-side, part count and run time on a small board.
+- [ ] Daily board: part count, run time, tries; share a daily result as text.
 - [ ] Replay share links and a gallery (reuse the level gallery code).
-- [ ] Juice: confetti, slow-mo on goal, a fixed SFX set baked once from ElevenLabs, ~30 cached "engineer" voice lines.
+- [ ] A fixed SFX set baked once from ElevenLabs, ~30 cached "engineer" voice lines.
 - [ ] Six challenge prompts doubling as the tutorial ("use only three parts", "make it take longer than 10 seconds").
 - [ ] Mobile layout check; CREDITS.md for every asset and licence.
 
