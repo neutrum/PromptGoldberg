@@ -65,6 +65,15 @@ export function checkMachine(spec: MachineSpec): SpecIssue[] {
   });
   const balls = spec.parts.filter((p) => p.kind === 'ball');
   if (balls.length !== 1) issues.push({ path: 'parts', message: `exactly one ball is needed (found ${balls.length})` });
+  // Two parts in one cell sit inside each other; only a platform may share a cell with what stands on it.
+  const cells = new Map<string, string>();
+  spec.parts.forEach((p, i) => {
+    if (p.kind === 'platform') return;
+    const key = `${p.x},${p.y},${p.z}`;
+    const other = cells.get(key);
+    if (other) issues.push({ path: `parts.${i}`, message: `"${p.id}" is in the same cell as "${other}"; give every part its own cell` });
+    else cells.set(key, p.id);
+  });
   const byId = new Map(spec.parts.map((p) => [p.id, p]));
   spec.goal.forEach((g, i) => {
     const part = byId.get(g.part);

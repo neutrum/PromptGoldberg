@@ -66,7 +66,7 @@ export const KIT = {
   seesaw: { length: 3 * CELL, thickness: 0.05, pivotHeight: 0.22, pivotRadius: 0.06 },
   fan: { body: [0.24, 0.4, 0.4] as Vec3, reach: 3 * CELL, accel: 9 },
   trampoline: { thickness: 0.12, jumpSpeed: 5.5 },
-  cannon: { body: [0.4, 0.3, 0.3] as Vec3, speed: 6.5, elevation: 25 },
+  cannon: { body: [0.4, 0.3, 0.3] as Vec3, catchZone: [CELL, CELL, CELL] as Vec3, speed: 6.5, elevation: 25 },
   bucket: { wall: 0.03, height: 0.6 },
   bell: { radius: 0.18, height: 0.32 },
 } as const;
@@ -157,8 +157,8 @@ export function assemblePart(p: Part): Assembly {
     case 'fan': {
       const b = KIT.fan.body;
       fixed(p.id, { kind: 'box', size: b }, add(o, [0, b[1] / 2, 0]), q);
-      // The stream of air: a sensor in front of the fan.
-      fixed(`${p.id}.air`, { kind: 'box', size: [KIT.fan.reach, CELL, CELL] }, add(add(o, f, b[0] / 2 + KIT.fan.reach / 2), [0, CELL / 2, 0]), q, { sensor: true });
+      // The stream of air: a sensor in front of the fan, three cells wide so a fan beside the path still pushes.
+      fixed(`${p.id}.air`, { kind: 'box', size: [KIT.fan.reach, CELL, 3 * CELL] }, add(add(o, f, b[0] / 2 + KIT.fan.reach / 2), [0, CELL / 2, 0]), q, { sensor: true });
       break;
     }
     case 'trampoline':
@@ -166,8 +166,9 @@ export function assemblePart(p: Part): Assembly {
       break;
     case 'cannon': {
       const b = KIT.cannon.body;
-      // The barrel is a sensor: the ball flies in and is shot out toward the facing.
-      fixed(p.id, { kind: 'box', size: b }, add(o, [0, b[1] / 2 + 0.1, 0]), q, { sensor: true });
+      // The whole cell is the barrel: a ball rolling or falling into it is shot out toward the facing.
+      fixed(p.id, { kind: 'box', size: KIT.cannon.catchZone }, add(o, [0, CELL / 2, 0]), q, { sensor: true });
+      fixed(`${p.id}.barrel`, { kind: 'cylinder', radius: b[1] / 2, height: b[0] }, add(o, [0, b[1] / 2 + 0.08, 0]), q, { sensor: true });
       fixed(`${p.id}.stand`, { kind: 'box', size: [0.2, 0.1, 0.2] }, add(o, [0, 0.05, 0]), q);
       break;
     }

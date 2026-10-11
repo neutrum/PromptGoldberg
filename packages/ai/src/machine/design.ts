@@ -27,9 +27,9 @@ THE KIT (each part stands on its cell at height y unless said otherwise)
 - wall: thin, 1 cell wide, 2 cells tall, standing across its facing; a ball rolling into it bounces back.
 - dominoes: a row of "length" standing dominoes (3 to 8, default 5) starting in its cell and continuing toward its facing, 0.24 m apart (5 dominoes span about 2.5 cells). A rolling ball knocks the first one, they fall in sequence, and the last one falling can ring a bell placed in the next cell. They need something to stand on: the floor (y 0) or a platform with the same y.
 - seesaw: a plank 3 cells long centred on its cell on a pivot 0.22 m high. A ball rolling onto one end tips the plank and rolls off the other end slightly lower; it adds a dramatic pause.
-- fan: blows the ball toward its facing, 3 cells in front of it, at about 9 m/s2 while the ball is in the stream (height y to y+1). Put it beside the ball's path, facing along the path, to push the ball further, up a shallow slope or off a shelf.
+- fan: blows the ball toward its facing for 3 cells in front of it (the stream is 3 cells wide and 1 cell tall, from height y to y+1) at about 9 m/s2. Put it on the row next to the ball's path (one cell to the side), at the same y as the ball's floor, facing the way the ball should go: it pushes the ball further, up a shallow slope or off a shelf.
 - trampoline: a 1-cell pad; a ball landing on it bounces straight up at 5.5 m/s (about 3 cells high) while keeping its horizontal speed. Good for getting back up to a higher shelf.
-- cannon: when the ball rolls or falls into its cell (the barrel spans height y to y+0.4 m), it fires the ball toward its facing at 6.5 m/s, 25 degrees up. On flat ground the ball lands about 6 to 7 cells away (rising less than a cell). The reliable way to turn a corner or jump a gap.
+- cannon: when the ball rolls or falls into its cell (the catch zone is the whole cell from height y to y+1), it fires the ball toward its facing at 6.5 m/s, 25 degrees up. On flat ground the ball lands about 6 to 7 cells away (rising less than a cell); put the landing platform there, at the cannon's y or lower. Give the cannon the same y as the floor the ball rolls in on (a cannon at y 2 next to a shelf at y 3 is below the ball). The reliable way to turn a corner or jump a gap.
 - bucket: a 1-cell box with walls 0.45 m high, open at the top. The ball has to land in it from above and settle. The usual final goal.
 - bell: a short post 0.36 m tall; rings when the ball or a falling domino hits it.
 
@@ -46,6 +46,7 @@ DESIGN RULES
 - Leave 1 to 2 cells of platform after a ramp before the next part, so the ball is rolling steadily when it arrives.
 - Each part must be reachable from the previous one: a rolling ball stays on the level it is on, drops at platform ends, flies 6 to 7 cells from a cannon, rises 3 cells from a trampoline.
 - Dominoes end where the bell is: for 5 dominoes starting at x, put the bell at x+3 on the same y.
+- Every part gets its own cell: never put two parts at the same x, y, z (a bell and a cannon in one cell block each other). Only a platform shares its cells with what stands on it.
 - Ids: short lowercase words (ball, ramp1, row, bell). Do not set dx or dz.
 - "title": 2 to 5 playful words. "caption": one sentence for players describing what should happen, no numbers.
 - If the request is not about machines, reinterpret it playfully as a machine (a pizza delivery becomes a ball rolling into a bucket called "oven"); use the request's words in the title, caption and ids.
