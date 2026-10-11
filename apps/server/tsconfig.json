@@ -8,5 +8,5 @@
     "types": ["node"]
   },
   "include": ["src", "scripts", "test"],
-  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/ai" }]
+  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/machine" }, { "path": "../../packages/ai" }]
 }

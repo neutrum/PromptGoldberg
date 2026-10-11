@@ -5,6 +5,7 @@ import { clearHash, readHash, readTutorialSwitch } from './game/share';
 import { CampaignScreen, CreateScreen, GalleryScreen, MenuScreen } from './screens/Menus';
 import { PlayScreen } from './screens/Play';
 import { SandboxScreen } from './screens/Sandbox';
+import { MachineScreen } from './machine/MachineScreen';
 
 export function App() {
   const screen = useGame((s) => s.screen);
@@ -14,6 +15,10 @@ export function App() {
   useEffect(() => {
     const tutorials = readTutorialSwitch();
     if (tutorials !== null) useGame.getState().setTutorials(tutorials);
+    if (location.hash === '#machine') {
+      useGame.getState().go('machine');
+      return;
+    }
     const target = readHash();
     if (!target) return;
     const { openLevel, showToast } = useGame.getState();
@@ -32,6 +37,7 @@ export function App() {
       {screen === 'create' && <CreateScreen />}
       {screen === 'gallery' && <GalleryScreen />}
       {screen === 'sandbox' && <SandboxScreen />}
+      {screen === 'machine' && <MachineScreen />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );

@@ -10,7 +10,7 @@ import { directionalHint, missSummary, pieceHint, playerFate } from './hints';
 import { coach, publishLevel, reportGalleryResult, streamLevel } from './net';
 import { loadProgress, mergeRecord, saveProgress, todayKey, type Progress } from './progress';
 
-export type Screen = 'menu' | 'campaign' | 'play' | 'create' | 'gallery' | 'sandbox';
+export type Screen = 'menu' | 'campaign' | 'play' | 'create' | 'gallery' | 'sandbox' | 'machine';
 
 export type Source =
   | { kind: 'campaign'; index: number }

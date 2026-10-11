@@ -134,6 +134,11 @@ export function MenuScreen() {
               <span className="menu-name">Endless</span>
               <span className="menu-sub">Generated systems, limited shots · best {progress.endlessBest}</span>
             </button>
+            <button className="menu-card primary-card" onClick={() => go('machine')}>
+              <span className="menu-icon">⚙️</span>
+              <span className="menu-name">Prompt Goldberg</span>
+              <span className="menu-sub">New: a sentence becomes a running machine</span>
+            </button>
             <button className="menu-card" onClick={() => go('gallery')}>
               <span className="menu-icon">🌌</span>
               <span className="menu-name">Community</span>

@@ -65,6 +65,18 @@ const THINKING_OFF = process.env.CLAUDE_THINKING === 'off';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /**
+ * How to answer without a thinking phase, which differs by model: Sonnet 5.5 takes
+ * `between_tools`, Opus 5.5 and Fable cannot turn thinking off (low effort is the lever),
+ * older models take `disabled`.
+ */
+function thinkingOff(model: string): { thinking?: Anthropic.Beta.BetaThinkingConfigParam } {
+  // The SDK's types predate `between_tools`.
+  if (/sonnet-5-5/.test(model)) return { thinking: { type: 'between_tools' } as unknown as Anthropic.Beta.BetaThinkingConfigParam };
+  if (/opus-5-5|fable|mythos/.test(model)) return {};
+  return { thinking: { type: 'disabled' } };
+}
+
+/**
  * Claude API. Used in production; needs ANTHROPIC_API_KEY. Streams the reply (so callers can
  * show progress and long replies never hit HTTP timeouts) and caches the system prompt, which
  * is identical on every level-design call.
@@ -86,7 +98,7 @@ function apiBackend(): LlmBackend {
           system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: prompt }],
           ...(effort ? { output_config: { effort } } : {}),
-          ...(THINKING_OFF || thinking === 'off' ? { thinking: { type: 'disabled' as const } } : {}),
+          ...(THINKING_OFF || thinking === 'off' ? thinkingOff(model) : {}),
         });
         for await (const event of stream) {
           if (event.type !== 'content_block_delta') continue;

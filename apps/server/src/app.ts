@@ -6,9 +6,10 @@ import {
 } from '@og/shared';
 import { LevelCache } from './cache';
 import { GalleryStore } from './gallery';
+import { parseMachine, type MachineStreamEvent } from '@og/machine';
 import {
-  coachTip, createLevel, createSolver, designSystem, LlmError, SolverError,
-  type CreateLevelResult, type LevelRequest, type LlmBackend, type Solver, type SolverMode,
+  coachTip, createLevel, createMachine, createPhysics, createSolver, designSystem, LlmError, SolverError,
+  type CreateLevelResult, type CreateMachineResult, type LevelRequest, type LlmBackend, type MachineRequest, type Physics, type Solver, type SolverMode,
 } from '@og/ai';
 import { DailyCap, RateLimiter } from './rateLimit';
 import { openSse } from './sse';
@@ -62,6 +63,7 @@ export interface AppOptions {
   llm: LlmBackend | null;
   dataDir: string;
   solver?: Solver | SolverMode;
+  physics?: Physics;
   limits?: Partial<Limits>;
   logger?: FastifyServerOptions['logger'];
   trustProxy?: boolean;
@@ -73,6 +75,7 @@ export async function buildApp(opts: AppOptions) {
   const limits: Limits = { ...limitsFromEnv(), ...opts.limits };
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? false, bodyLimit: 512 * 1024 });
   const solver = typeof opts.solver === 'object' ? opts.solver : createSolver(opts.solver ?? 'auto');
+  const physics = opts.physics ?? createPhysics(typeof opts.solver === 'string' ? opts.solver : 'auto');
   const gallery = await GalleryStore.open(opts.dataDir, limits.galleryMaxEntries);
   const cache = new LevelCache(join(opts.dataDir, 'cache'));
   const llmLimiter = new RateLimiter(limits.perMinute, limits.perDay);
@@ -106,6 +109,15 @@ export async function buildApp(opts: AppOptions) {
       deadlineMs: limits.levelDeadlineMs,
     });
     return { type: 'level', level: res.level, solved: res.solved, attempts: res.attempts, notes: res.notes, cached: false };
+  };
+
+  /** Prompt Goldberg: the whole AI side is one call too. */
+  const runMachineAi = async (request: MachineRequest, emit: (e: MachineStreamEvent) => void, signal: AbortSignal): Promise<Extract<MachineStreamEvent, { type: 'machine' }>> => {
+    const res: CreateMachineResult = await createMachine(request, {
+      llm: llm!, physics, signal, onEvent: emit,
+      maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs,
+    });
+    return { type: 'machine', machine: res.machine, solved: res.solved, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
   };
 
   /** Reply with a single-error SSE stream (status still reflects the failure). */
@@ -223,6 +235,52 @@ export async function buildApp(opts: AppOptions) {
     if (blocked) return sseError(reply, blocked.status, blocked.error);
 
     await streamPipeline(req, reply, (emit, signal) => runAi({ level: parsed.level, instruction }, emit, signal));
+  });
+
+  app.post<{ Body: { prompt?: unknown } }>('/api/machine', async (req, reply) => {
+    const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+    if (!prompt) return sseError(reply, 400, 'Describe the machine you want, e.g. "get the ball into the bucket using dominoes and a fan".');
+    if (prompt.length > limits.maxPromptChars) return sseError(reply, 400, `That description is too long: keep it under ${limits.maxPromptChars} characters.`);
+    const blocked = guardLlm(req);
+    if (blocked) return sseError(reply, blocked.status, blocked.error);
+    const stream = openSse<MachineStreamEvent>(reply);
+    const started = Date.now();
+    try {
+      const event = await runMachineAi({ prompt }, stream.send, stream.signal);
+      stream.send(event);
+      req.log.info({ ms: Date.now() - started, solved: event.solved, attempts: event.attempts }, 'machine stream done');
+    } catch (err) {
+      if (stream.signal.aborted) req.log.info('client disconnected during machine stream');
+      else {
+        req.log.error({ err }, 'machine stream failed');
+        stream.send({ type: 'error', error: errorMessage(err) });
+      }
+    } finally {
+      stream.close();
+    }
+  });
+
+  app.post<{ Body: { machine?: unknown; instruction?: unknown } }>('/api/machine/edit', async (req, reply) => {
+    const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
+    if (!instruction) return sseError(reply, 400, 'Say what to change, e.g. "swap the fan for a cannon".');
+    if (instruction.length > limits.maxInstructionChars) return sseError(reply, 400, `That change is too long: keep it under ${limits.maxInstructionChars} characters.`);
+    const parsed = parseMachine(req.body?.machine);
+    if (!parsed.ok) return sseError(reply, 400, `The machine to edit is invalid: ${parsed.issues.slice(0, 3).map((i) => i.message).join('; ')}`);
+    const blocked = guardLlm(req);
+    if (blocked) return sseError(reply, blocked.status, blocked.error);
+    const stream = openSse<MachineStreamEvent>(reply);
+    try {
+      const event = await runMachineAi({ machine: parsed.spec, instruction }, stream.send, stream.signal);
+      stream.send(event);
+    } catch (err) {
+      if (stream.signal.aborted) req.log.info('client disconnected during machine stream');
+      else {
+        req.log.error({ err }, 'machine edit failed');
+        stream.send({ type: 'error', error: errorMessage(err) });
+      }
+    } finally {
+      stream.close();
+    }
   });
 
   app.post<{ Body: Partial<CoachRequest> }>('/api/coach', async (req, reply) => {

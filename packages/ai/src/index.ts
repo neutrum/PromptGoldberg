@@ -12,6 +12,9 @@
  * while it works, so players can start before the proof is done.
  */
 import type { Level, LevelStreamEvent } from '@og/shared';
+import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine';
+import { editMachine, generateMachine } from './machine/pipeline';
+import { createPhysics, type Physics } from './machine/physics';
 import { createLlm, LlmError, type Completion, type LlmBackend, type LlmBackendName } from './llm/client';
 import { editLevel, generateLevel } from './pipeline';
 import { createSolver, type Solver } from './solver';
@@ -120,3 +123,75 @@ export { createSolver, SolverError, type Solver, type SolverMode } from './solve
 export { coachTip, controlAdvice, deterministicTip } from './coach';
 /** Sandbox (free-form simulator): prompt -> star system, no level wrapping. */
 export { designSystem } from './llm/design';
+
+// ---- Prompt Goldberg: plain language -> a Rube Goldberg machine that the physics proved works.
+
+export type MachineRequest =
+  /** Design a new machine from a description. */
+  | { prompt: string }
+  /** Change an existing machine ("swap the fan for a cannon"). */
+  | { machine: MachineSpec; instruction: string };
+
+export interface CreateMachineOptions {
+  llm?: LlmBackend | LlmBackendName;
+  /** Physics runner. Default: one shared worker pool. */
+  physics?: Physics;
+  /** Designs to try before giving up (default 3). */
+  maxAttempts?: number;
+  /** Nudged variants the optimizer may simulate per design (default 150). */
+  budget?: number;
+  /** Optimizer time per design in ms (default 10 000). */
+  timeLimitMs?: number;
+  /** Total time budget in ms (default 120 000). */
+  deadlineMs?: number;
+  signal?: AbortSignal;
+  onEvent?: (event: MachineStreamEvent) => void;
+}
+
+export interface CreateMachineResult {
+  machine: MachineSpec;
+  /** True when the physics proved the goal chain happens; the spec includes the optimizer's nudges. */
+  solved: boolean;
+  result: MachineResult;
+  moved: { id: string; cells: number }[];
+  attempts: number;
+  notes: string[];
+  usage: LlmUsage[];
+}
+
+let defaultPhysics: Physics | null = null;
+
+/** Design (or edit) a machine with the LLM and prove it works with the physics engine. */
+export async function createMachine(request: MachineRequest, options: CreateMachineOptions = {}): Promise<CreateMachineResult> {
+  const base = resolveLlm(options.llm);
+  const usage: LlmUsage[] = [];
+  const llm: LlmBackend = {
+    name: base.name,
+    async complete(req) {
+      const started = Date.now();
+      const c: Completion = await base.complete(req);
+      usage.push({
+        backend: c.backend, ms: Date.now() - started, inputTokens: c.inputTokens, outputTokens: c.outputTokens, costUsd: c.costUsd,
+        cacheReadTokens: c.cacheReadTokens, cacheWriteTokens: c.cacheWriteTokens,
+        firstTokenMs: c.timing?.firstTokenMs, firstTextMs: c.timing?.firstTextMs,
+      });
+      return c;
+    },
+  };
+  const deps = {
+    llm,
+    physics: options.physics ?? (defaultPhysics ??= createPhysics('auto')),
+    maxAttempts: options.maxAttempts ?? 3,
+    budget: options.budget ?? 150,
+    timeLimitMs: options.timeLimitMs ?? 10_000,
+    signal: options.signal,
+    deadline: Date.now() + (options.deadlineMs ?? 120_000),
+  };
+  const emit = options.onEvent ?? (() => {});
+  const event = 'prompt' in request
+    ? await generateMachine(deps, request.prompt, emit)
+    : await editMachine(deps, request.machine, request.instruction, emit);
+  return { machine: event.machine, solved: event.solved, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage };
+}
+
+export { createPhysics, type Physics } from './machine/physics';

@@ -1,0 +1,30 @@
+/* Prompt Goldberg screen */
+.machine-screen .mbrand { font-size: 16px; letter-spacing: 0.04em; color: var(--muted); align-self: center; }
+.machine-screen .mbrand b { color: #ffd27a; }
+
+.mside { position: absolute; left: 10px; top: 56px; width: min(340px, calc(100% - 20px)); display: flex; flex-direction: column; gap: 8px; }
+.mgoal, .mlog { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(6px); }
+.mtitle h2 { margin: 0 0 4px; font-size: 18px; }
+.mtitle p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.chain-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.chain-list li.done { color: #7dffb0; }
+.chain-list li.failed { color: #ff8a80; }
+.chain-list li.todo { color: var(--muted); }
+.mbadges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--muted); }
+.badge.ok { background: rgba(125, 255, 176, 0.15); color: #7dffb0; }
+.badge.warn { background: rgba(255, 180, 120, 0.15); color: #ffb478; }
+.mactions { display: flex; gap: 8px; }
+.mlog { font-size: 13px; display: flex; flex-direction: column; gap: 3px; color: var(--muted); }
+.mlog .current { color: #fff; }
+
+.mprompt { display: flex; flex-direction: column; gap: 6px; }
+.mprompt form { display: flex; gap: 8px; }
+.mprompt input { flex: 1; min-width: 0; font-size: 16px; padding: 12px 14px; background: var(--panel); border-color: rgba(255, 210, 122, 0.45); box-shadow: 0 0 40px rgba(255, 210, 122, 0.1); }
+.mprompt .examples { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.mprompt .examples button { font-size: 12px; background: var(--panel); color: var(--muted); }
+
+@media (max-width: 720px) {
+  .mside { top: 52px; width: calc(100% - 20px); }
+  .mtitle p { display: none; }
+}

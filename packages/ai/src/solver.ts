@@ -44,9 +44,9 @@ export interface Solver {
 
 const WORKER_URL = new URL('./solveWorker.ts', import.meta.url);
 
-class WorkerStartError extends Error {}
+export class WorkerStartError extends Error {}
 
-interface RunOptions {
+export interface RunOptions {
   timeoutMs: number;
   signal?: AbortSignal;
   onProgress?: OptimizeJob['onProgress'];
@@ -59,16 +59,16 @@ interface RunOptions {
  * any other way, and a worker that may still be computing must never be handed the next task.
  * Idle workers are unref'd, so they never keep a process alive.
  */
-class WorkerPool {
+export class WorkerPool {
   private idle: Worker[] = [];
   private proven = new WeakSet<Worker>();
   private running = 0;
   private waiting: (() => void)[] = [];
 
-  constructor(private max: number) {}
+  constructor(private max: number, private url: URL = WORKER_URL) {}
 
   private spawn(): Worker {
-    const worker = new Worker(WORKER_URL);
+    const worker = new Worker(this.url);
     worker.unref();
     worker.on('exit', () => {
       const i = this.idle.indexOf(worker);
@@ -91,7 +91,7 @@ class WorkerPool {
     this.waiting.shift()?.();
   }
 
-  async run<T>(task: SolveTask, opts: RunOptions): Promise<T> {
+  async run<T>(task: unknown, opts: RunOptions): Promise<T> {
     if (opts.signal?.aborted) throw new SolverError('aborted');
     await this.slot();
     const worker = this.idle.pop() ?? this.spawn();

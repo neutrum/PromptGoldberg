@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
+    "@og/machine": "*",
     "@og/shared": "*",
     "zod": "^4.6.5"
   },
   "scripts": {
     "eval": "tsx --env-file-if-exists=../../.env scripts/eval.ts",
+    "eval:machine": "tsx --env-file-if-exists=../../.env scripts/eval-machine.ts",
     "solve": "tsx --env-file-if-exists=../../.env scripts/solve.ts"
   }
 }
