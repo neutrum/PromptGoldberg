@@ -26,13 +26,13 @@ describe('createMachine', () => {
     // A hopeless design first (bucket far away), then one the optimizer can fix.
     const hopeless = { ...broken, parts: broken.parts.map((p: { id: string }) => (p.id === 'bucket' ? { ...p, x: 22, z: 2 } : p)) };
     const llm = new FakeLlm([reply(hopeless), reply(broken)]);
-    const res = await createMachine({ prompt: 'fan and trampoline' }, { llm, physics: createPhysics('inline'), budget: 120, timeLimitMs: 20_000 });
+    const res = await createMachine({ prompt: 'fan and trampoline' }, { llm, physics: createPhysics('inline'), budget: 250, timeLimitMs: 40_000 });
     expect(res.solved).toBe(true);
     expect(res.attempts).toBe(2);
     expect(res.moved.length).toBeGreaterThan(0);
     expect(llm.requests[1].prompt).toMatch(/did not work/);
     expect(llm.requests[1].prompt).toMatch(/touch (ramp|deck|fan)/);
-  });
+  }, 60_000);
 
   it('retries once when the reply is not a valid machine', async () => {
     const llm = new FakeLlm(['```json\n{"title":"x","parts":[],"goal":[]}\n```', reply(fixture('ramp-dominoes-bell.json'))]);

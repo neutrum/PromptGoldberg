@@ -66,6 +66,7 @@ function colliderDesc(b: Body): RAPIER.ColliderDesc {
   if (b.restitution !== undefined) desc.setRestitution(b.restitution);
   if (b.friction !== undefined) desc.setFriction(b.friction);
   if (b.density !== undefined) desc.setDensity(b.density);
+  if (b.deadens) desc.setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min);
   return desc;
 }
 
@@ -178,7 +179,8 @@ export function simulateSync(spec: MachineSpec, opts: SimulateOptions = {}): Mac
         const since = inBucket.get(b.part) ?? t;
         inBucket.set(b.part, since);
         const v = ball.linvel();
-        if (t - since >= 0.4 && Math.hypot(v.x, v.y, v.z) < 0.6 && !events.some((e) => e.type === 'bucket' && e.part === b.part)) {
+        // Settled: inside for a moment and no longer flying around.
+        if (t - since >= 0.5 && Math.hypot(v.x, v.y, v.z) < 1.5 && !events.some((e) => e.type === 'bucket' && e.part === b.part)) {
           events.push({ type: 'bucket', t, part: b.part });
         }
       }

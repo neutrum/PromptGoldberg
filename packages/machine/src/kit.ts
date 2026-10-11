@@ -31,6 +31,8 @@ export interface Body {
   restitution?: number;
   friction?: number;
   density?: number;
+  /** Use this body's restitution for contacts regardless of the other body's (bucket walls). */
+  deadens?: boolean;
 }
 
 /** Hinge between two bodies: `anchor` in world space, `axis` in world space. */
@@ -65,7 +67,7 @@ export const KIT = {
   fan: { body: [0.24, 0.4, 0.4] as Vec3, reach: 3 * CELL, accel: 9 },
   trampoline: { thickness: 0.12, jumpSpeed: 5.5 },
   cannon: { body: [0.4, 0.3, 0.3] as Vec3, speed: 6.5, elevation: 25 },
-  bucket: { wall: 0.03, height: 0.45 },
+  bucket: { wall: 0.03, height: 0.6 },
   bell: { radius: 0.18, height: 0.32 },
 } as const;
 
@@ -172,8 +174,10 @@ export function assemblePart(p: Part): Assembly {
     case 'bucket': {
       const { wall, height } = KIT.bucket;
       const w = CELL * 0.9;
-      fixed(`${p.id}.floor`, { kind: 'box', size: [w, wall, w] }, add(o, [0, wall / 2, 0]), q);
-      const side = (id: string, dir: Vec3, size: Vec3) => fixed(`${p.id}.${id}`, { kind: 'box', size }, add(add(o, dir, w / 2 - wall / 2), [0, height / 2, 0]), q);
+      // Dead walls and floor: a ball that gets in stays in instead of bouncing back out.
+      const dead = { restitution: 0, friction: 0.9, deadens: true };
+      fixed(`${p.id}.floor`, { kind: 'box', size: [w, wall, w] }, add(o, [0, wall / 2, 0]), q, dead);
+      const side = (id: string, dir: Vec3, size: Vec3) => fixed(`${p.id}.${id}`, { kind: 'box', size }, add(add(o, dir, w / 2 - wall / 2), [0, height / 2, 0]), q, dead);
       side('front', f, [wall, height, w]);
       side('back', f.map((v) => -v) as Vec3, [wall, height, w]);
       const s = sideways(p.yaw);
