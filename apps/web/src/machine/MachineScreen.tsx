@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import demo from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
+import { parseMachine } from '@og/machine';
 import { useGame } from '../game/gameStore';
 import { MachineScene } from './MachineScene';
 import { useMachine } from './machineStore';
@@ -120,6 +122,12 @@ function GoalPanel() {
 export function MachineScreen() {
   const { go } = useGame.getState();
   const error = useMachine((s) => s.error);
+  // Something runs the moment the screen opens: a sample machine until the visitor builds one.
+  useEffect(() => {
+    if (useMachine.getState().machine) return;
+    const parsed = parseMachine({ ...demo, caption: 'A sample machine. Describe your own below.' });
+    if (parsed.ok) void useMachine.getState().load(parsed.spec, { rank: 2, proven: true });
+  }, []);
   return (
     <div className="app play machine-screen">
       <MachineScene />

@@ -1,51 +1,64 @@
 # TODO
 
-Hackathon deadline: **Nov 11, 16:30 CEST** (submit a day early). Hosted demo must stay up through judging (until Nov 25).
+Hackathon deadline: **Nov 11, 16:30 CEST** (submit Nov 10). The hosted demo must stay up through judging (until Nov 25).
 
-## Next up (in order)
+## The pivot (Oct 11)
 
-- [ ] **Playtest with 3–5 people who have never seen the game.** Watch them play the tutorial and levels 1–5 without helping. Note where they get stuck, what they misread, and how many shots each level takes. Adjust par and level order from this.
-- [x] **Mobile / touch polish.** Checked in emulated phones (390×844): side panels move into the bottom stack, the camera frames the system in the space the HUD leaves free, larger grab radius, press-drag-release piece placement, tappable Skip, and touch-worded tutorial. Still to do: try it on a real phone (iOS Safari and Android Chrome).
-- [x] **Deploy.** Live on Railway: https://ogserver-production.up.railway.app (Dockerfile + railway.json, volume at /data, see DEPLOY.md). Still to do: move to the Hobby plan before the free trial ends, add uptime monitoring on `/api/health`, raise `DAILY_LLM_CALL_CAP` to about 300 for judging. Measured live: first AI draft 30 s, final version 169 s (slower than local; the free trial has 2 shared vCPUs).
-- [ ] **Demo video (under 3 min).** A prompt → the AI designs → the optimizer proves the level can be won → you beat it; show the tutorial, a build level and the daily challenge.
-- [ ] **Submission:** short description, focus category (confirm on Discord), public repo link, hosted link, `CREDITS.md` check.
+Orbital Goldberg (n-body gravity puzzles) was judged confusing, hard to prompt and not engaging. The research report (`reports/AI native game pivot.md`, not in git) concluded: keep the "AI designs, physics proves" pipeline, drop gravity, build **Prompt Goldberg**: a sentence becomes a Rube Goldberg machine from a small parts kit, a deterministic rigid-body simulation proves it runs, an optimizer nudges parts until it works, and the player changes it by talking. The hackathon's rule 6.1 wants exactly this: a browser project that "turns plain language into 3D scenes and working logic"; judges type their own prompts.
 
-## Content
+Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms allow three).
 
-- [ ] **Two-piece build levels.** An earlier attempt was dropped: every working spot for the second piece relied on long-range effects no player could reason out. Most promising direction: short flights, a heavy nearby second target that the pieces don't disturb, and designing backwards (place pieces first, then put targets on the resulting path). Tools: `packages/shared/scripts/solve-level.ts --search-pieces`, `piece-search.ts`.
-- [ ] **Levels that combine aim and building.** Earlier attempts failed: the controls could usually solve them without the piece, and forcing the piece left very narrow solutions.
-- [ ] **Level 9 (Build a Slingshot)** is the least forgiving of misclicks (33% of small nudges still solve); re-tune for a more forgiving piece spot.
-- [ ] **Level 7 (Bank Shot)** only works for about 1 in 75 random placements; watch whether playtesters find it.
-- [ ] More campaign levels between the harder ones (eclipse, capture, moon collisions).
+**Gate, Oct 17:** a typed sentence yields a working machine that is fun to watch for 5 of 10 eval prompts (`npm run eval:machine -w @og/ai`). Otherwise fall back to a Death-by-AI style judge game on the same scene kit.
 
-## Reliability
+## Done
 
-- [x] **Worker pool for the solver.** A few long-lived workers are reused; a worker is retired only when its task times out or is aborted (a synchronous simulation cannot be stopped otherwise). Idle workers are unref'd so they never hold a process open. Verified: 120 sequential + 60 parallel checks on one solver, timeouts and aborts (including while queued) recover, and the process exits cleanly.
+- [x] `@og/machine`: 11-part kit (ball, ramp, platform, wall, dominoes, seesaw, fan, trampoline, cannon, bucket, bell) on a 0.5 m grid, Rapier simulation with recorded playback frames, ordered goal checker (bucket, bell, topple, touch), nudge optimizer. Deterministic across threads (tested) and in the browser (same WebAssembly build).
+- [x] `createMachine()` in `@og/ai`: design (Sonnet 5.5, no thinking) → run → nudge → redesign with the run's timeline, streaming sketch/draft/machine events. Physics runs in a worker pool.
+- [x] Server: `POST /api/machine` and `/api/machine/edit` (SSE).
+- [x] Web: Prompt Goldberg screen (menu card and `#machine`): parts appear as Claude writes them, the browser re-simulates for playback, follow camera, goal checklist, "physics-proven" badge, talk-to-edit, prompt chips, sample machine on open.
+- [x] First live results: "dominoes and a fan" worked in 7 s (first draft at 3 s); "cannon over a wall" needed one redesign; "seesaw, dominoes, bell" worked after one nudge.
 
-## Game feel
+## Week 1 (to Oct 17): prove the nugget
 
-- [ ] Generated levels at difficulty 7+ are very hard (almost no random shots succeed); consider easier Endless difficulty steps or more forgiving flyby distances after playtesting.
-- [x] Procgen starting sliders start near the middle (was 34% of sliders within 10% of an edge, now 0% over 32 sample levels).
-- [x] Race-the-machine counter updates on every simulation (`onEval`, sent at most every 50 ms).
-- [x] Placed pieces show a dashed arc of where they travel during the probe's preview window.
-- [ ] Optional bloom/post-processing and a subtle ambient music loop (generated, to keep licensing clean).
+- [ ] Run the 10-prompt eval, read every failing machine, fix the kit or the prompt, repeat until 5/10 and the machines are fun to watch (long chains, visible cause and effect).
+- [ ] Camera: frame the whole machine when idle and at the end of a run; slow motion on goal events.
+- [ ] Nicer parts: distinct shapes (fan blades, bell with a clapper, cannon barrel), part labels, a bounce/ring flash.
+- [ ] Ball must not sit on the platform at the end of playback; show a "done" beat with confetti when all goals fire.
+- [ ] Deterministic hash check browser vs server (log the hash on both sides and compare).
 
-## AI
+## Week 2 (Oct 18–24): reliable and legible
 
-All AI logic is in `packages/ai` behind one call, `createLevel()`. Eval: `npm run eval -w @og/ai -- --edits`.
+- [ ] Validation + one repair retry + canned fallback machines when the AI is unavailable or the cap is hit.
+- [ ] Edits as diff ops on Haiku 5.5 (add/remove/move/rotate/swap) instead of whole-machine rewrites; keep untouched parts in place.
+- [ ] Curveball handling: any prompt maps to a theme plus a goal from the fixed set, with an honest "closest I could build" banner.
+- [ ] Eval at 15 prompts incl. 5 curveballs; track fraction verified, time to first part, time to verified.
+- [ ] Drag parts by hand (reuse the piece-placement code), then "verify" again.
 
-- [x] Eval script with 10 prompts (8 normal, 2 curveballs). Claude Code CLI backend, 2026-09-22:
-  - Baseline: 10/10 solved within 3 designs, 9/10 under 60 s (median 23 s), but 4/10 levels were knife-edge (17% or fewer of ±0.5% control nudges still won).
-  - After adding forgiveness (loosen the goal, else redesign with the near-miss notes): 10/10 solved, 8/10 under 60 s (median 44 s), least forgiving level 33%, 7/10 at 67% or more.
-- [x] Curveball prompts ("pizza", "my cat knocking things off the table") become sensible space levels.
-- [x] Talk-to-edit and redesign tested with the real model (CLI). One edit took 26 min once and did not reproduce (75 s on replay); probably slow CLI calls. `createLevel` now has a total deadline (server: `LEVEL_DEADLINE_MS`, 150 s).
-- [ ] Re-run the eval with `ANTHROPIC_API_KEY` once it is available (CLI timings include Claude Code start-up).
-- [x] Progressive levels: the first playable draft shows after about 15–18 s (end-to-end in the browser); proof and fairness improvements arrive while the player plays.
-- [ ] Faster first draft: a cheaper or faster model for the first design, or stream the LLM reply (API backend) and show bodies as they arrive.
-- [ ] Levels are still hard for random play (0–10% of random shots win); watch in playtests whether the AI levels feel fair.
+## Week 3 (Oct 25–31): the game around it
+
+- [ ] Daily Machine: one goal per UTC day, generation cached server-side, part count and run time on a small board.
+- [ ] Replay share links and a gallery (reuse the level gallery code).
+- [ ] Juice: confetti, slow-mo on goal, a fixed SFX set baked once from ElevenLabs, ~30 cached "engineer" voice lines.
+- [ ] Six challenge prompts doubling as the tutorial ("use only three parts", "make it take longer than 10 seconds").
+- [ ] Mobile layout check; CREDITS.md for every asset and licence.
+
+## Week 4 (Nov 1–7): harden and record
+
+- [ ] Dedicated Console workspace + key with a $50 cap; per-session and per-IP caps; 30 pre-generated machines as fallback.
+- [ ] Railway Hobby plan, uptime check on `/api/health`, `DAILY_LLM_CALL_CAP` sized for judging. (No deploys until asked.)
+- [ ] Freeze the schema Nov 7. Playtest with 3–5 people. Record the < 3 min video (storyboard in the report). Write the description in the organizer's words.
+
+## Buffer (Nov 8–10)
+
+- [ ] Playtest fixes; two-day prompt-chip pass on Orbital Goldberg for entry #2; submit both Nov 10; confirm the focus category on Discord.
+
+## Cut list
+
+No multiplayer, no live voice agent, no Meshy at runtime, no splats, no WFC, no new orbital content, no AI-generated art.
 
 ## Known technical notes
 
-- Changing a part's size or mass in `PIECE_BODIES` invalidates stored solutions of build levels made with the old value (campaign levels are covered by tests; gallery levels are not).
-- Stored level solutions break if `sim.duration` changes (the timestep changes with it); after editing any level, re-run `npx tsx packages/shared/scripts/solve-level.ts <file> --write`.
-- Placed pieces can nudge light planets off their orbits; prefer goals that don't depend on a light moving target.
+- Rapier 0.21 (`@dimforge/rapier3d-compat`, Apache-2.0). Timestep 1/120 s, playback frames at 60 Hz. Parts are created in spec order; change that and traces change.
+- Sonnet 5.5 refuses `thinking: disabled`; the client sends `between_tools` for it (`thinkingOff()` in `packages/ai/src/llm/client.ts`). Opus 5.5 cannot turn thinking off at all.
+- Changing any kit dimension in `KIT` changes every stored machine's behaviour; re-run `npx tsx packages/machine/scripts/run.ts <fixture> --nudge --write` for the fixtures and the tests.
+- Orbital Goldberg notes (solver workers, level solutions tied to `sim.duration`, piece sizes) still apply to `packages/shared`.
