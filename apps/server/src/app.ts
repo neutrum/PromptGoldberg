@@ -5,6 +5,7 @@ import {
   type CoachRequest, type GallerySort, type Level, type LevelStreamEvent,
 } from '@og/shared';
 import { LevelCache } from './cache';
+import { DailyStore } from './daily';
 import { GalleryStore } from './gallery';
 import { parseMachine, type MachineStreamEvent } from '@og/machine';
 import {
@@ -78,6 +79,9 @@ export async function buildApp(opts: AppOptions) {
   const physics = opts.physics ?? createPhysics(typeof opts.solver === 'string' ? opts.solver : 'auto');
   const gallery = await GalleryStore.open(opts.dataDir, limits.galleryMaxEntries);
   const cache = new LevelCache(join(opts.dataDir, 'cache'));
+  const daily = new DailyStore(join(opts.dataDir, 'daily'), opts.llm && ((request) => createMachine(request, {
+    llm: llm!, physics, maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs,
+  })));
   const llmLimiter = new RateLimiter(limits.perMinute, limits.perDay);
   const coachLimiter = new RateLimiter(limits.coachPerMinute, limits.coachPerMinute * 60 * 24);
   const publishLimiter = new RateLimiter(limits.publishPerMinute, limits.publishPerDay);
@@ -258,6 +262,14 @@ export async function buildApp(opts: AppOptions) {
     } finally {
       stream.close();
     }
+  });
+
+  /** Today's machine, generated once per UTC day for everyone (the client makes the fix-it puzzle). */
+  app.get('/api/machine/daily', async (req) => {
+    const started = Date.now();
+    const result = await daily.get();
+    if (Date.now() - started > 1000) req.log.info({ ms: Date.now() - started, generated: result.generated }, 'daily machine generated');
+    return result;
   });
 
   app.post<{ Body: { machine?: unknown; instruction?: unknown } }>('/api/machine/edit', async (req, reply) => {

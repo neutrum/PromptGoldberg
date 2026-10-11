@@ -3,7 +3,8 @@ import {
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle,
 } from '@og/machine';
 import { create } from 'zustand';
-import { makePuzzleInWorker, simulateInWorker, streamMachine } from './machineClient';
+import { sfx } from '../game/audio';
+import { getDailyMachine, makePuzzleInWorker, simulateInWorker, streamMachine } from './machineClient';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -68,6 +69,9 @@ interface MachineState {
   finish: () => void;
   stopAi: () => void;
 
+  /** Today's shared fix-it puzzle. */
+  daily: { date: string; loading: boolean; best: Record<string, number> };
+  playDaily: () => Promise<void>;
   /** Break the proven machine and hand the player the missing parts. */
   startFix: () => Promise<void>;
   pick: (index: number | null) => void;
@@ -79,6 +83,11 @@ interface MachineState {
 }
 
 const idleAi: MachineAiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null };
+
+const BEST_KEY = 'pg.daily.best';
+function loadBest(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}') as Record<string, number>; } catch { return {}; }
+}
 let aiAbort: AbortController | null = null;
 let loadSeq = 0;
 
@@ -168,6 +177,7 @@ export const useMachine = create<MachineState>((set, get) => {
     ai: idleAi,
     mode: 'build',
     fix: null,
+    daily: { date: '', loading: false, best: loadBest() },
     run: null,
     result: null,
     hash: null,
@@ -213,12 +223,31 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     finish() {
-      if (get().phase === 'playing') set({ phase: 'done' });
+      const { phase, result, mode } = get();
+      if (phase !== 'playing') return;
+      set({ phase: 'done' });
+      if (result?.success) sfx.success();
+      else if (mode === 'fix') sfx.miss();
     },
 
     stopAi() {
       aiAbort?.abort();
       set({ ai: idleAi, working: false });
+    },
+
+    async playDaily() {
+      aiAbort?.abort();
+      set((s) => ({ ai: idleAi, working: false, daily: { ...s.daily, loading: true }, error: null }));
+      try {
+        const d = await getDailyMachine();
+        const parsed = parseMachine(d.machine);
+        if (!parsed.ok) throw new Error("Today's machine is broken; try again later.");
+        set({ machine: { ...parsed.spec, title: `Daily: ${parsed.spec.title}` }, rank: 2, proven: true, moved: [], mode: 'build', fix: null });
+        set((s) => ({ daily: { ...s.daily, date: d.date, loading: false } }));
+        await get().startFix();
+      } catch (err) {
+        set((s) => ({ daily: { ...s.daily, loading: false }, error: err instanceof Error ? err.message : String(err) }));
+      }
     },
 
     async startFix() {
@@ -260,7 +289,16 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!fix || fix.solved) return;
       set({ fix: { ...fix, tries: fix.tries + 1 } });
       const result = await simulate(withPlacements(fix.puzzle, fix.placed));
-      if (result?.success) set((s) => (s.fix ? { fix: { ...s.fix, solved: true } } : {}));
+      if (result?.success) {
+        set((s) => (s.fix ? { fix: { ...s.fix, solved: true } } : {}));
+        // The daily keeps a personal best in tries.
+        const { daily, fix: done } = get();
+        if (daily.date && done && (!daily.best[daily.date] || done.tries < daily.best[daily.date])) {
+          const best = { ...daily.best, [daily.date]: done.tries };
+          try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch { /* private mode */ }
+          set({ daily: { ...daily, best } });
+        }
+      }
     },
 
     showHint() {

@@ -52,6 +52,26 @@ export function makePuzzleInWorker(solution: MachineSpec, count = 1): Promise<Pu
 
 const unreachable = 'The AI server is not reachable. Start it with "npm run dev:server".';
 
+export interface DailyMachine {
+  date: string;
+  prompt: string;
+  machine: MachineSpec;
+  generated: boolean;
+}
+
+/** Today's shared machine (the same for everyone until midnight UTC). */
+export async function getDailyMachine(): Promise<DailyMachine> {
+  let res: Response;
+  try {
+    res = await fetch('/api/machine/daily');
+  } catch {
+    throw new Error(unreachable);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? (res.status >= 500 ? unreachable : `Request failed (${res.status})`));
+  return data as DailyMachine;
+}
+
 /** POST a machine request and read the server-sent event stream it returns. */
 export async function streamMachine(
   path: '/machine' | '/machine/edit',

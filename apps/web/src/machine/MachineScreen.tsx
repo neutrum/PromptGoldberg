@@ -159,6 +159,18 @@ function GoalPanel() {
   );
 }
 
+function DailyButton() {
+  const daily = useMachine((s) => s.daily);
+  const busy = useMachine((s) => s.ai.busy);
+  const today = new Date().toISOString().slice(0, 10);
+  const best = daily.best[today];
+  return (
+    <button onClick={() => void useMachine.getState().playDaily()} disabled={daily.loading || busy} title="Same broken machine for everyone today">
+      {daily.loading ? 'Loading…' : best ? `📅 Daily · best ${best}` : '📅 Daily puzzle'}
+    </button>
+  );
+}
+
 export function MachineScreen() {
   const { go } = useGame.getState();
   const error = useMachine((s) => s.error);
@@ -177,7 +189,7 @@ export function MachineScreen() {
           <button onClick={() => { useMachine.getState().stopAi(); go('menu'); }}>← Menu</button>
         </div>
         <div className="mbrand">Prompt <b>Goldberg</b></div>
-        <div className="hud-right" />
+        <div className="hud-right"><DailyButton /></div>
       </div>
       <div className="mside">
         <GoalPanel />

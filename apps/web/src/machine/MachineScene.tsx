@@ -1,9 +1,9 @@
-import { Grid } from '@react-three/drei';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, FRAME_HZ, GRID, KIT, type Body, type MachineRun, type Part } from '@og/machine';
-import type { ThreeEvent } from '@react-three/fiber';
+import { Grid, OrbitControls } from '@react-three/drei';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { assemble, assemblePart, CELL, FRAME_HZ, GRID, KIT, partCentre, type Body, type MachineRun, type Part } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { sfx } from '../game/audio';
 import { useMachine } from './machineStore';
 
@@ -65,27 +65,94 @@ function BodyMesh({ body, meshRef, ghost }: { body: Body; meshRef?: (m: THREE.Ob
   );
 }
 
-const tmpP = new THREE.Vector3();
+// ---- Juice: bursts on goal steps, confetti on a finished chain.
+
+interface Particle { pos: THREE.Vector3; vel: THREE.Vector3; spin: number; born: number; color: THREE.Color }
+const particles: Particle[] = [];
+const PALETTE = ['#ffd166', '#ff5a4e', '#7de0a7', '#58c4ff', '#ff8fd1', '#ffffff'];
+
+/** A puff of confetti at a point; `count` sets how big a deal it is. */
+export function confettiAt(pos: THREE.Vector3, count = 30, up = 3) {
+  const now = performance.now();
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, r = 0.6 + Math.random() * 1.6;
+    particles.push({
+      pos: pos.clone(), born: now, spin: (Math.random() - 0.5) * 12,
+      vel: new THREE.Vector3(Math.cos(a) * r, up + Math.random() * up, Math.sin(a) * r),
+      color: new THREE.Color(PALETTE[i % PALETTE.length]),
+    });
+  }
+  if (particles.length > 400) particles.splice(0, particles.length - 400);
+}
+
+const PARTICLE_MS = 2600;
+
+function Confetti() {
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  useFrame((_, delta) => {
+    const m = mesh.current;
+    if (!m) return;
+    const now = performance.now();
+    for (let i = particles.length - 1; i >= 0; i--) if (now - particles[i].born > PARTICLE_MS) particles.splice(i, 1);
+    const dt = Math.min(delta, 0.05);
+    particles.forEach((p, i) => {
+      p.vel.y -= 9 * dt;
+      p.vel.multiplyScalar(1 - 1.2 * dt);
+      p.pos.addScaledVector(p.vel, dt);
+      if (p.pos.y < 0.02) { p.pos.y = 0.02; p.vel.set(0, 0, 0); }
+      const age = (now - p.born) / PARTICLE_MS;
+      dummy.position.copy(p.pos);
+      dummy.rotation.set(p.spin * age * 2, p.spin * age, 0);
+      dummy.scale.setScalar(age > 0.8 ? (1 - age) * 5 : 1);
+      dummy.updateMatrix();
+      m.setMatrixAt(i, dummy.matrix);
+      m.setColorAt(i, p.color);
+    });
+    m.count = particles.length;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  });
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, 400]} frustumCulled={false}>
+      <boxGeometry args={[0.06, 0.012, 0.09]} />
+      <meshBasicMaterial toneMapped={false} />
+    </instancedMesh>
+  );
+}
+
 const tmpQ = new THREE.Quaternion();
 const tmpQ2 = new THREE.Quaternion();
+const ballPos = new THREE.Vector3(NaN, 0, 0);
 
 /** Moves the dynamic bodies along the recorded trace and drives the playback clock. */
 function Playback({ run, dynamic }: { run: MachineRun; dynamic: Map<string, THREE.Object3D> }) {
   const ballIdx = run.dynamicIds.indexOf(run.spec.parts.find((p) => p.kind === 'ball')!.id);
+  const keys = useMemo(() => (useMachine.getState().result?.steps ?? []).flatMap((s) => (s.satisfied && s.t !== undefined ? [s.t] : [])), [run]);
+  const finished = useRef(false);
   useFrame((_, delta) => {
     const s = useMachine.getState();
     let t = s.time;
     if (s.phase === 'playing') {
-      t = Math.min(s.endTime, t + Math.min(delta, 0.05));
-      // Goal steps ring in as the clock passes them.
+      // Slow motion around each goal event, so the payoff is readable.
+      let slow = 1;
+      for (const k of keys) slow = Math.min(slow, 1 - 0.75 * Math.exp(-(((t - k) / 0.22) ** 2)));
+      t = Math.min(s.endTime, t + Math.min(delta, 0.05) * slow);
       s.result?.steps.forEach((step, i) => {
         if (step.satisfied && step.t !== undefined && t >= step.t && i >= s.celebrated) {
           s.celebrate(i);
           sfx.checkpoint(i);
+          const part = run.spec.parts.find((p) => p.id === run.spec.goal[i]?.part);
+          const at = part ? new THREE.Vector3(...partCentre(part)) : ballPos.clone();
+          const last = i === run.spec.goal.length - 1 && s.result?.success;
+          confettiAt(at, last ? 120 : 18, last ? 4 : 2.2);
         }
       });
       s.setTime(t);
-      if (t >= s.endTime) s.finish();
+      if (t >= s.endTime && !finished.current) {
+        finished.current = true;
+        s.finish();
+      }
     }
     const f = Math.min(run.frameCount - 1, t * FRAME_HZ);
     const f0 = Math.floor(f), f1 = Math.min(run.frameCount - 1, f0 + 1), k = f - f0;
@@ -104,15 +171,16 @@ function Playback({ run, dynamic }: { run: MachineRun; dynamic: Map<string, THRE
   return null;
 }
 
-const ballPos = new THREE.Vector3(NaN, 0, 0);
-
-/** Frames the whole machine when idle, follows the ball while it runs. */
+/**
+ * Orbit camera the player owns (drag to turn, wheel to zoom, right-drag to pan). A new machine
+ * gets framed once; while the ball runs the view glides along with it, keeping the player's angle.
+ */
 function MachineCamera({ parts }: { parts: Part[] }) {
   const camera = useThree((s) => s.camera);
-  const target = useRef(new THREE.Vector3());
-  const goal = useRef(new THREE.Vector3());
+  const controls = useRef<OrbitControlsImpl>(null);
+  const delta = useMemo(() => new THREE.Vector3(), []);
   const bounds = useMemo(() => {
-    if (!parts.length) return { centre: new THREE.Vector3((GRID.x * CELL) / 2, 1, (GRID.z * CELL) / 2), size: 6 };
+    if (!parts.length) return { centre: new THREE.Vector3((GRID.x * CELL) / 2, 0.5, (GRID.z * CELL) / 2), size: 6 };
     const box = new THREE.Box3();
     for (const p of parts) box.expandByPoint(new THREE.Vector3((p.x + 0.5) * CELL, p.y * CELL + 0.3, (p.z + 0.5) * CELL));
     box.expandByScalar(CELL);
@@ -120,26 +188,29 @@ function MachineCamera({ parts }: { parts: Part[] }) {
     const size = box.getSize(new THREE.Vector3());
     return { centre, size: Math.max(size.x, size.z, size.y * 1.5, 3) };
   }, [parts]);
+  const framedFor = useRef<string>('');
   useEffect(() => {
-    target.current.copy(bounds.centre);
+    // Frame each machine once; later changes to the same machine keep the player's view.
+    const key = parts.map((p) => p.id).join(',') + '|' + bounds.size.toFixed(1);
+    if (framedFor.current === key || !controls.current) return;
+    framedFor.current = key;
+    controls.current.target.copy(bounds.centre);
     camera.position.copy(bounds.centre).add(new THREE.Vector3(bounds.size * 0.55, bounds.size * 0.7, bounds.size * 0.95));
-  }, [bounds, camera]);
-  useFrame((_, delta) => {
+    controls.current.update();
+  }, [bounds, camera, parts]);
+  useFrame((_, dt) => {
+    const c = controls.current;
+    if (!c) return;
     const phase = useMachine.getState().phase;
     const following = phase === 'playing' && !Number.isNaN(ballPos.x);
-    const k = 1 - Math.exp(-delta * (following ? 4 : 2));
-    if (following) {
-      goal.current.copy(ballPos);
-      target.current.lerp(goal.current, k);
-      tmpP.copy(target.current).add(new THREE.Vector3(2.2, 2.4, 3.4));
-    } else {
-      target.current.lerp(bounds.centre, k);
-      tmpP.copy(bounds.centre).add(new THREE.Vector3(bounds.size * 0.55, bounds.size * 0.7, bounds.size * 0.95));
-    }
-    camera.position.lerp(tmpP, k);
-    camera.lookAt(target.current);
+    const want = following ? ballPos : bounds.centre;
+    const k = 1 - Math.exp(-dt * (following ? 4 : 1.5));
+    delta.copy(want).sub(c.target).multiplyScalar(k);
+    c.target.add(delta);
+    camera.position.add(delta);
+    c.update();
   });
-  return null;
+  return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI * 0.49} minDistance={2} maxDistance={40} />;
 }
 
 /** Fix mode: hover the stage to see where the missing part would go, click to put it there. */
@@ -153,18 +224,34 @@ function Placement({ part }: { part: Part }) {
     return { x, z };
   };
   const ghost = useMemo(() => (cell ? assemblePart({ ...part, x: cell.x, z: cell.z, dx: undefined, dz: undefined }).bodies : []), [part, cell]);
+  const cx = cell ? (cell.x + 0.5) * CELL : 0, cz = cell ? (cell.z + 0.5) * CELL : 0;
   return (
     <>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[w / 2, planeY + 0.01, d / 2]}
+        position={[w / 2, planeY + 0.005, d / 2]}
         onPointerMove={(e) => setCell(toCell(e))}
         onPointerOut={() => setCell(null)}
-        onClick={(e) => { const c = toCell(e); if (c) useMachine.getState().placeAt(c.x, c.z); }}
+        onClick={(e) => { const c = toCell(e); if (c) { useMachine.getState().placeAt(c.x, c.z); sfx.place(); } }}
       >
         <planeGeometry args={[w, d]} />
-        <meshBasicMaterial color="#ffd27a" transparent opacity={planeY > 0 ? 0.06 : 0.02} depthWrite={false} />
+        <meshBasicMaterial color="#ffd27a" transparent opacity={planeY > 0 ? 0.05 : 0.02} depthWrite={false} />
       </mesh>
+      {planeY > 0 && <Grid position={[w / 2, planeY + 0.01, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#8a7a4a" sectionSize={CELL * 4} sectionColor="#b09a5a" fadeDistance={30} />}
+      {cell && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, planeY + 0.02, cz]}>
+            <planeGeometry args={[CELL, CELL]} />
+            <meshBasicMaterial color="#ffd27a" transparent opacity={0.45} depthWrite={false} />
+          </mesh>
+          {planeY > 0 && (
+            <mesh position={[cx, planeY / 2, cz]}>
+              <cylinderGeometry args={[0.012, 0.012, planeY, 6]} />
+              <meshBasicMaterial color="#ffd27a" transparent opacity={0.7} />
+            </mesh>
+          )}
+        </>
+      )}
       {ghost.map((b) => <BodyMesh key={`ghost-${b.id}`} body={b} ghost="#ffd27a" />)}
     </>
   );
@@ -181,7 +268,7 @@ function Machine3D() {
   const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
   const picking = fix && fix.picking !== null && !fix.solved ? fix.puzzle.missing[fix.picking] : null;
   const hints = useMemo(() => (fix?.hint ? assemble(fix.puzzle.missing).bodies : []), [fix?.hint, fix?.puzzle]);
-  const framed = fix ? [...parts, ...fix.puzzle.missing] : parts;
+  const framed = fix ? [...fix.puzzle.spec.parts, ...fix.puzzle.missing] : parts;
   return (
     <>
       <MachineCamera parts={framed} />
@@ -191,6 +278,7 @@ function Machine3D() {
       ))}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
       {picking && phase !== 'playing' && <Placement part={picking} />}
+      <Confetti />
     </>
   );
 }
