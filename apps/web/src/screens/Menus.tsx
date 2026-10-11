@@ -1,7 +1,6 @@
 import { CAMPAIGN } from '@og/shared';
 import { useEffect, useState } from 'react';
 import { useGame } from '../game/gameStore';
-import { useMachine } from '../machine/machineStore';
 import { getGalleryLevel, listGallery, type GalleryEntry } from '../game/net';
 import { todayKey } from '../game/progress';
 import { galleryLink, copyText } from '../game/share';
@@ -135,16 +134,6 @@ export function MenuScreen() {
               <span className="menu-name">Endless</span>
               <span className="menu-sub">Generated systems, limited shots · best {progress.endlessBest}</span>
             </button>
-            <button className="menu-card primary-card" onClick={() => go('machine')}>
-              <span className="menu-icon">⚙️</span>
-              <span className="menu-name">Prompt Goldberg</span>
-              <span className="menu-sub">New: a sentence becomes a running machine</span>
-            </button>
-            <button className="menu-card" onClick={() => { go('machine'); void useMachine.getState().playDaily(); }}>
-              <span className="menu-icon">🔧</span>
-              <span className="menu-name">Daily fix-it</span>
-              <span className="menu-sub">Same broken machine for everyone today</span>
-            </button>
             <button className="menu-card" onClick={() => go('gallery')}>
               <span className="menu-icon">🌌</span>
               <span className="menu-name">Community</span>
@@ -161,6 +150,7 @@ export function MenuScreen() {
             {progress.tutorialsOff ? '🎓 Tutorials off' : '🎓 Tutorials on'}
           </button>
           <button className="link" onClick={() => go('sandbox')}>Sandbox (raw simulator)</button>
+          <button className="link" onClick={() => { location.hash = ''; go('machine'); }}>→ Prompt Goldberg (the new app)</button>
         </div>
       </div>
     </div>

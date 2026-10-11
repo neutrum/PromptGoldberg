@@ -9,3 +9,4 @@ export * from './goal';
 export * from './nudge';
 export * from './api';
 export * from './puzzle';
+export * from './placement';

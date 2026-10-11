@@ -293,7 +293,8 @@ export const useGame = create<GameState>((set, get) => {
   setMuted(initial.muted);
 
   return {
-    screen: 'menu',
+    // Prompt Goldberg is the app; the old orbital game only opens from #orbital or a shared level link.
+    screen: typeof location !== 'undefined' && /^#(orbital|level=|gallery=)/.test(location.hash) ? 'menu' : 'machine',
     progress: initial,
     level: null,
     source: null,

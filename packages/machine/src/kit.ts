@@ -207,6 +207,19 @@ export function assemble(parts: Part[]): Assembly {
   return { bodies, hinges };
 }
 
+/** The grid cells a part takes up on its level (platforms and ramps span several). */
+export function footprint(p: Part): { x: number; z: number }[] {
+  const f = facing(p.yaw);
+  const along = (n: number) => Array.from({ length: n }, (_, i) => ({ x: p.x + f[0] * i, z: p.z + f[2] * i }));
+  switch (p.kind) {
+    case 'platform': return along(p.length ?? PLATFORM_DEFAULT);
+    case 'ramp': return along(2);
+    case 'dominoes': return along(Math.ceil(((p.length ?? DOMINO_DEFAULT) - 1) * KIT.domino.spacing / CELL + 0.5));
+    case 'seesaw': return [{ x: p.x - f[0], z: p.z - f[2] }, { x: p.x, z: p.z }, { x: p.x + f[0], z: p.z + f[2] }];
+    default: return [{ x: p.x, z: p.z }];
+  }
+}
+
 /** Where the "action" of a part is, for distances and the camera: its origin lifted a little. */
 export function partCentre(p: Part): Vec3 {
   const o = partOrigin(p);

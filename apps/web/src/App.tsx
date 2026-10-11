@@ -15,10 +15,6 @@ export function App() {
   useEffect(() => {
     const tutorials = readTutorialSwitch();
     if (tutorials !== null) useGame.getState().setTutorials(tutorials);
-    if (location.hash === '#machine') {
-      useGame.getState().go('machine');
-      return;
-    }
     const target = readHash();
     if (!target) return;
     const { openLevel, showToast } = useGame.getState();

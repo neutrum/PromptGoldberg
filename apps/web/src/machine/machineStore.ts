@@ -1,6 +1,6 @@
 import {
-  parseMachine, withPlacements,
-  type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle,
+  dropAt, parseMachine, PUZZLE_KINDS, withPlacements,
+  type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind,
 } from '@og/machine';
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
@@ -25,6 +25,7 @@ export type Mode = 'build' | 'fix';
 
 export interface FixState {
   puzzle: Puzzle;
+  kind: PuzzleKind;
   /** The parts the player has put back (same ids as the missing ones). */
   placed: Part[];
   /** Index into puzzle.missing of the part being placed, or null. */
@@ -46,6 +47,9 @@ interface MachineState {
 
   mode: Mode;
   fix: FixState | null;
+  /** Machines the AI has delivered this session, for the first-time coach. */
+  builds: number;
+  edits: number;
 
   run: MachineRun | null;
   result: MachineResult | null;
@@ -69,13 +73,18 @@ interface MachineState {
   finish: () => void;
   stopAi: () => void;
 
-  /** Today's shared fix-it puzzle. */
-  daily: { date: string; loading: boolean; best: Record<string, number> };
+  /** Today's shared fix-it ladder: the same machine broken three ways, tries add up. */
+  daily: { date: string; loading: boolean; best: Record<string, number>; stage: number; tries: number };
   playDaily: () => Promise<void>;
-  /** Break the proven machine and hand the player the missing parts. */
-  startFix: () => Promise<void>;
+  /** After a daily stage is solved: break the machine the next way. */
+  nextDailyStage: () => Promise<void>;
+  /** Break the proven machine and hand the player the parts. Resolves false when it cannot be broken that way. */
+  startFix: (kind?: PuzzleKind) => Promise<boolean>;
   pick: (index: number | null) => void;
-  placeAt: (x: number, z: number) => void;
+  /** Drop the picked part on a column; false when something is in the way. */
+  placeAt: (x: number, z: number) => boolean;
+  /** Lift a placed part back into the hand. */
+  pickPlaced: (id: string) => void;
   clearPlaced: () => void;
   runFix: () => Promise<void>;
   showHint: () => void;
@@ -153,7 +162,10 @@ export const useMachine = create<MachineState>((set, get) => {
             break;
           case 'machine':
             log(e.solved ? `Verified: the machine works${e.moved.length ? ` after nudging ${e.moved.length} part${e.moved.length > 1 ? 's' : ''}` : ''}.` : 'Could not make it work; here is the closest attempt.');
-            void accept(e.machine, 2, e.moved).then(() => set((s) => ({ ai: { ...idleAi, lines: s.ai.lines }, working: false, proven: e.solved })));
+            void accept(e.machine, 2, e.moved).then(() => set((s) => ({
+              ai: { ...idleAi, lines: s.ai.lines }, working: false, proven: e.solved,
+              builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
+            })));
             break;
           case 'error':
             set((s) => ({ ai: { ...s.ai, error: e.error }, working: false }));
@@ -177,7 +189,9 @@ export const useMachine = create<MachineState>((set, get) => {
     ai: idleAi,
     mode: 'build',
     fix: null,
-    daily: { date: '', loading: false, best: loadBest() },
+    builds: 0,
+    edits: 0,
+    daily: { date: '', loading: false, best: loadBest(), stage: 0, tries: 0 },
     run: null,
     result: null,
     hash: null,
@@ -242,26 +256,38 @@ export const useMachine = create<MachineState>((set, get) => {
         const d = await getDailyMachine();
         const parsed = parseMachine(d.machine);
         if (!parsed.ok) throw new Error("Today's machine is broken; try again later.");
-        set({ machine: { ...parsed.spec, title: `Daily: ${parsed.spec.title}` }, rank: 2, proven: true, moved: [], mode: 'build', fix: null });
-        set((s) => ({ daily: { ...s.daily, date: d.date, loading: false } }));
-        await get().startFix();
+        set({ machine: parsed.spec, rank: 2, proven: true, moved: [], mode: 'build', fix: null });
+        set((s) => ({ daily: { ...s.daily, date: d.date, loading: false, stage: 0, tries: 0 } }));
+        await get().nextDailyStage();
       } catch (err) {
         set((s) => ({ daily: { ...s.daily, loading: false }, error: err instanceof Error ? err.message : String(err) }));
       }
     },
 
-    async startFix() {
-      const { machine, proven } = get();
-      if (!machine || !proven) return;
-      set({ phase: 'simulating', error: null });
-      const puzzle = await makePuzzleInWorker(machine, 1);
-      if (!puzzle) {
-        set({ phase: 'idle', error: 'This machine has no part that can be taken out; try another one.' });
-        return;
+    async nextDailyStage() {
+      const { daily } = get();
+      // Stages go missing, two missing, moved; a stage the machine cannot offer is skipped.
+      for (let stage = daily.stage + 1; stage <= PUZZLE_KINDS.length; stage++) {
+        set((s) => ({ daily: { ...s.daily, stage } }));
+        if (await get().startFix(PUZZLE_KINDS[stage - 1])) return;
       }
-      set({ mode: 'fix', fix: { puzzle, placed: [], picking: 0, tries: 0, solved: false, hint: false } });
-      // Show the broken machine fail first, so the player sees what is missing.
-      await simulate(puzzle.spec);
+      set((s) => ({ daily: { ...s.daily, stage: PUZZLE_KINDS.length + 1 } }));
+    },
+
+    async startFix(kind = 'missing') {
+      const { machine, proven, daily } = get();
+      if (!machine || !proven) return false;
+      set({ phase: 'simulating', error: null });
+      const seed = daily.date ? Number(daily.date.replace(/-/g, '')) : Math.floor(Math.random() * 1e9);
+      const puzzle = await makePuzzleInWorker(machine, kind, seed);
+      if (!puzzle) {
+        set({ phase: 'idle', error: kind === 'missing' ? 'This machine has no part that can be taken out; try another one.' : 'This machine cannot be broken that way; try another kind.' });
+        return false;
+      }
+      set({ mode: 'fix', fix: { puzzle, kind, placed: puzzle.start, picking: puzzle.start.length ? null : 0, tries: 0, solved: false, hint: false } });
+      // Show the broken machine fail first, so the player sees what is wrong.
+      await simulate(withPlacements(puzzle, puzzle.start));
+      return true;
     },
 
     pick(index) {
@@ -270,12 +296,24 @@ export const useMachine = create<MachineState>((set, get) => {
 
     placeAt(x, z) {
       const { fix } = get();
-      if (!fix || fix.picking === null || fix.solved) return;
+      if (!fix || fix.picking === null || fix.solved) return false;
       const original = fix.puzzle.missing[fix.picking];
-      const part: Part = { ...original, x, z, dx: undefined, dz: undefined };
-      const placed = [...fix.placed.filter((p) => p.id !== part.id), part];
+      const others = fix.placed.filter((p) => p.id !== original.id);
+      // Lands on the floor or the platform under the cursor; a taken cell refuses it.
+      const part = dropAt([...fix.puzzle.spec.parts, ...others], original, x, z);
+      if (!part) return false;
+      const placed = [...others, part];
       const next = fix.puzzle.missing.findIndex((m) => !placed.some((p) => p.id === m.id));
       set({ fix: { ...fix, placed, picking: next >= 0 ? next : null }, run: null, result: null, phase: 'idle' });
+      return true;
+    },
+
+    pickPlaced(id) {
+      const { fix } = get();
+      if (!fix || fix.solved) return;
+      const index = fix.puzzle.missing.findIndex((m) => m.id === id);
+      if (index < 0) return;
+      set({ fix: { ...fix, placed: fix.placed.filter((p) => p.id !== id), picking: index }, run: null, result: null, phase: 'idle' });
     },
 
     clearPlaced() {
@@ -291,12 +329,14 @@ export const useMachine = create<MachineState>((set, get) => {
       const result = await simulate(withPlacements(fix.puzzle, fix.placed));
       if (result?.success) {
         set((s) => (s.fix ? { fix: { ...s.fix, solved: true } } : {}));
-        // The daily keeps a personal best in tries.
+        // The daily ladder adds up tries; the last stage records a personal best.
         const { daily, fix: done } = get();
-        if (daily.date && done && (!daily.best[daily.date] || done.tries < daily.best[daily.date])) {
-          const best = { ...daily.best, [daily.date]: done.tries };
-          try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch { /* private mode */ }
-          set({ daily: { ...daily, best } });
+        if (daily.date && done) {
+          const tries = daily.tries + done.tries;
+          const last = daily.stage >= PUZZLE_KINDS.length;
+          const best = last && (!daily.best[daily.date] || tries < daily.best[daily.date]) ? { ...daily.best, [daily.date]: tries } : daily.best;
+          if (best !== daily.best) { try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch { /* private mode */ } }
+          set({ daily: { ...daily, tries, best } });
         }
       }
     },
@@ -307,7 +347,7 @@ export const useMachine = create<MachineState>((set, get) => {
 
     leaveFix() {
       const { machine } = get();
-      set({ mode: 'build', fix: null });
+      set((s) => ({ mode: 'build', fix: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
       if (machine) void simulate(machine);
     },
   };

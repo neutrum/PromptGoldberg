@@ -1,4 +1,4 @@
-import type { MachineResult, MachineRun, MachineSpec, MachineStreamEvent, Puzzle } from '@og/machine';
+import type { MachineResult, MachineRun, MachineSpec, MachineStreamEvent, Puzzle, PuzzleKind } from '@og/machine';
 import type { MachineWorkerRequest, MachineWorkerResponse } from './machine.worker';
 
 export interface MachinePlayback {
@@ -41,12 +41,12 @@ export function simulateInWorker(spec: MachineSpec): Promise<MachinePlayback> {
   });
 }
 
-/** Pull `count` parts out of a working machine for the player to put back. */
-export function makePuzzleInWorker(solution: MachineSpec, count = 1): Promise<Puzzle | null> {
+/** Break a working machine for the player to repair: a part missing, two missing, or one moved. */
+export function makePuzzleInWorker(solution: MachineSpec, kind: PuzzleKind, seed?: number): Promise<Puzzle | null> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve: resolve as (r: unknown) => void, reject });
-    get().postMessage({ id, spec: solution, puzzle: { count } } satisfies MachineWorkerRequest);
+    get().postMessage({ id, spec: solution, puzzle: { kind, seed } } satisfies MachineWorkerRequest);
   });
 }
 

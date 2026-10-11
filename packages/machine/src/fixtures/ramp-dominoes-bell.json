@@ -3,7 +3,7 @@
   "parts": [
     { "id": "ball", "kind": "ball", "x": 5, "y": 2, "z": 10 },
     { "id": "ramp", "kind": "ramp", "x": 5, "y": 1, "z": 10, "yaw": 0 },
-    { "id": "floor1", "kind": "platform", "x": 7, "y": 1, "z": 10, "yaw": 0, "length": 4 },
+    { "id": "floor1", "kind": "platform", "x": 7, "y": 1, "z": 10, "yaw": 0, "length": 5 },
     { "id": "row", "kind": "dominoes", "x": 8, "y": 1, "z": 10, "yaw": 0, "length": 5 },
     { "id": "bell", "kind": "bell", "x": 11, "y": 1, "z": 10 }
   ],

@@ -47,6 +47,7 @@ DESIGN RULES
 - Each part must be reachable from the previous one: a rolling ball stays on the level it is on, drops at platform ends, flies 6 to 7 cells from a cannon, rises 3 cells from a trampoline.
 - Dominoes end where the bell is: for 5 dominoes starting at x, put the bell at x+3 on the same y.
 - Every part gets its own cell: never put two parts at the same x, y, z (a bell and a cannon in one cell block each other). Only a platform shares its cells with what stands on it.
+- Every part except the ball stands on something: the floor (y 0) or a platform at the same y whose cells include the part's cell. Nothing else floats.
 - Ids: short lowercase words (ball, ramp1, row, bell). Do not set dx or dz.
 - "title": 2 to 5 playful words. "caption": one sentence for players describing what should happen, no numbers.
 - If the request is not about machines, reinterpret it playfully as a machine (a pizza delivery becomes a ball rolling into a bucket called "oven"); use the request's words in the title, caption and ids.

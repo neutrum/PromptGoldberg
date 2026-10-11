@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
-import { evaluateMachine, initPhysics, makePuzzle, parseMachine, simulateSync, traceHash, type MachineResult, type MachineRun, type Puzzle } from '@og/machine';
+import { evaluateMachine, initPhysics, makePuzzleOfKind, parseMachine, simulateSync, traceHash, type MachineResult, type MachineRun, type Puzzle, type PuzzleKind } from '@og/machine';
 
-export type MachineWorkerRequest = { id: number; spec: unknown; puzzle?: { count: number } };
+export type MachineWorkerRequest = { id: number; spec: unknown; puzzle?: { kind: PuzzleKind; seed?: number } };
 export type MachineWorkerResponse =
   | { id: number; ok: true; run: MachineRun; result: MachineResult; hash: string }
   | { id: number; ok: true; puzzle: Puzzle | null }
@@ -20,7 +20,7 @@ self.onmessage = async (e: MessageEvent<MachineWorkerRequest>) => {
   try {
     await ready;
     if (e.data.puzzle) {
-      self.postMessage({ id, ok: true, puzzle: makePuzzle(parsed.spec, e.data.puzzle.count) } satisfies MachineWorkerResponse);
+      self.postMessage({ id, ok: true, puzzle: makePuzzleOfKind(parsed.spec, e.data.puzzle.kind, { seed: e.data.puzzle.seed }) } satisfies MachineWorkerResponse);
       return;
     }
     const run = simulateSync(parsed.spec, { record: true });

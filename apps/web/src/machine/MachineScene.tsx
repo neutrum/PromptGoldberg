@@ -1,6 +1,6 @@
 import { Grid, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, FRAME_HZ, GRID, KIT, partCentre, type Body, type MachineRun, type Part } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, KIT, partCentre, restingHeight, type Body, type MachineRun, type Part } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -25,7 +25,7 @@ function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
   return g;
 }
 
-function BodyMesh({ body, meshRef, ghost }: { body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string }) {
+function BodyMesh({ body, meshRef, ghost, onClick, glow }: { body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string; onClick?: () => void; glow?: boolean }) {
   const geometry = useMemo(() => {
     const s = body.shape;
     switch (s.kind) {
@@ -55,12 +55,15 @@ function BodyMesh({ body, meshRef, ghost }: { body: Body; meshRef?: (m: THREE.Ob
       quaternion={body.rotation}
       castShadow={!sensor}
       receiveShadow
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
+      onPointerOver={onClick ? (e) => { e.stopPropagation(); document.body.style.cursor = 'grab'; } : undefined}
+      onPointerOut={onClick ? () => { document.body.style.cursor = ''; } : undefined}
     >
       {air
         ? <meshBasicMaterial color="#7de0a7" transparent opacity={0.1} depthWrite={false} />
         : barrel
           ? <meshStandardMaterial color="#2b3140" roughness={0.6} metalness={0.4} />
-          : <meshStandardMaterial color={body.color} roughness={body.kind === 'ball' ? 0.35 : 0.75} metalness={body.kind === 'bell' ? 0.6 : 0.05} emissive={body.color} emissiveIntensity={body.kind === 'ball' ? 0.15 : 0.03} />}
+          : <meshStandardMaterial color={body.color} roughness={body.kind === 'ball' ? 0.35 : 0.75} metalness={body.kind === 'bell' ? 0.6 : 0.05} emissive={glow ? '#ffd27a' : body.color} emissiveIntensity={glow ? 0.5 : body.kind === 'ball' ? 0.15 : 0.03} />}
     </mesh>
   );
 }
@@ -213,46 +216,65 @@ function MachineCamera({ parts }: { parts: Part[] }) {
   return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI * 0.49} minDistance={2} maxDistance={40} />;
 }
 
-/** Fix mode: hover the stage to see where the missing part would go, click to put it there. */
-function Placement({ part }: { part: Part }) {
+/**
+ * Fix mode: hover the stage to see where the part in hand would land (the floor, or the platform
+ * under the cursor), click to drop it there. A cell something else stands in shows red.
+ */
+function Placement({ part, parts }: { part: Part; parts: Part[] }) {
   const [cell, setCell] = useState<{ x: number; z: number } | null>(null);
-  const planeY = part.y * CELL;
   const w = GRID.x * CELL, d = GRID.z * CELL;
   const toCell = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
     const x = Math.floor(e.point.x / CELL), z = Math.floor(e.point.z / CELL);
     if (x < 0 || z < 0 || x >= GRID.x || z >= GRID.z) return null;
     return { x, z };
   };
-  const ghost = useMemo(() => (cell ? assemblePart({ ...part, x: cell.x, z: cell.z, dx: undefined, dz: undefined }).bodies : []), [part, cell]);
-  const cx = cell ? (cell.x + 0.5) * CELL : 0, cz = cell ? (cell.z + 0.5) * CELL : 0;
+  const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z) : null), [parts, part, cell]);
+  const y = cell ? restingHeight(parts, cell.x, cell.z, part.id) : 0;
+  const ghost = useMemo(() => (landing ? assemblePart(landing).bodies : []), [landing]);
+  const cells = useMemo(() => (cell ? footprint({ ...part, x: cell.x, y, z: cell.z }) : []), [part, cell, y]);
+  const platforms = useMemo(() => parts.filter((p) => p.kind === 'platform' && p.id !== part.id), [parts, part.id]);
+  const handlers = {
+    onPointerMove: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setCell(toCell(e)); },
+    onPointerOut: () => setCell(null),
+    onClick: (e: ThreeEvent<MouseEvent>) => {
+      e.stopPropagation();
+      const c = toCell(e);
+      if (!c) return;
+      if (useMachine.getState().placeAt(c.x, c.z)) sfx.place();
+      else sfx.miss();
+    },
+  };
+  const color = landing ? '#ffd27a' : '#ff5a4e';
   return (
     <>
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[w / 2, planeY + 0.005, d / 2]}
-        onPointerMove={(e) => setCell(toCell(e))}
-        onPointerOut={() => setCell(null)}
-        onClick={(e) => { const c = toCell(e); if (c) { useMachine.getState().placeAt(c.x, c.z); sfx.place(); } }}
-      >
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, 0.005, d / 2]} {...handlers}>
         <planeGeometry args={[w, d]} />
-        <meshBasicMaterial color="#ffd27a" transparent opacity={planeY > 0 ? 0.05 : 0.02} depthWrite={false} />
+        <meshBasicMaterial color="#ffd27a" transparent opacity={0.03} depthWrite={false} />
       </mesh>
-      {planeY > 0 && <Grid position={[w / 2, planeY + 0.01, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#8a7a4a" sectionSize={CELL * 4} sectionColor="#b09a5a" fadeDistance={30} />}
-      {cell && (
-        <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, planeY + 0.02, cz]}>
-            <planeGeometry args={[CELL, CELL]} />
-            <meshBasicMaterial color="#ffd27a" transparent opacity={0.45} depthWrite={false} />
+      {platforms.map((p) => {
+        const cs = footprint(p);
+        const xs = cs.map((c) => c.x), zs = cs.map((c) => c.z);
+        const x0 = Math.min(...xs), x1 = Math.max(...xs) + 1, z0 = Math.min(...zs), z1 = Math.max(...zs) + 1;
+        return (
+          <mesh key={p.id} rotation={[-Math.PI / 2, 0, 0]} position={[((x0 + x1) / 2) * CELL, p.y * CELL + 0.006, ((z0 + z1) / 2) * CELL]} {...handlers}>
+            <planeGeometry args={[(x1 - x0) * CELL, (z1 - z0) * CELL]} />
+            <meshBasicMaterial color="#ffd27a" transparent opacity={0.12} depthWrite={false} />
           </mesh>
-          {planeY > 0 && (
-            <mesh position={[cx, planeY / 2, cz]}>
-              <cylinderGeometry args={[0.012, 0.012, planeY, 6]} />
-              <meshBasicMaterial color="#ffd27a" transparent opacity={0.7} />
-            </mesh>
-          )}
-        </>
+        );
+      })}
+      {cells.map((c) => (
+        <mesh key={`${c.x},${c.z}`} rotation={[-Math.PI / 2, 0, 0]} position={[(c.x + 0.5) * CELL, y * CELL + 0.02, (c.z + 0.5) * CELL]}>
+          <planeGeometry args={[CELL, CELL]} />
+          <meshBasicMaterial color={color} transparent opacity={0.45} depthWrite={false} />
+        </mesh>
+      ))}
+      {cell && y > 0 && (
+        <mesh position={[(cell.x + 0.5) * CELL, (y * CELL) / 2, (cell.z + 0.5) * CELL]}>
+          <cylinderGeometry args={[0.012, 0.012, y * CELL, 6]} />
+          <meshBasicMaterial color={color} transparent opacity={0.7} />
+        </mesh>
       )}
-      {ghost.map((b) => <BodyMesh key={`ghost-${b.id}`} body={b} ghost="#ffd27a" />)}
+      {ghost.map((b) => <BodyMesh key={`ghost-${b.id}`} body={b} ghost={color} />)}
     </>
   );
 }
@@ -263,21 +285,29 @@ function Machine3D() {
   const run = useMachine((s) => s.run);
   const fix = useMachine((s) => s.fix);
   const phase = useMachine((s) => s.phase);
-  const parts = fix ? [...fix.puzzle.spec.parts, ...fix.placed] : run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? [];
+  const parts = useMemo(() => (fix ? [...fix.puzzle.spec.parts, ...fix.placed] : run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? []), [fix, run, machine, sketch]);
   const bodies = useMemo(() => (run ? run.bodies : assemble(parts).bodies), [run, parts]);
   const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
   const picking = fix && fix.picking !== null && !fix.solved ? fix.puzzle.missing[fix.picking] : null;
   const hints = useMemo(() => (fix?.hint ? assemble(fix.puzzle.missing).bodies : []), [fix?.hint, fix?.puzzle]);
   const framed = fix ? [...fix.puzzle.spec.parts, ...fix.puzzle.missing] : parts;
+  // Parts the player put down (or found moved) can be picked up again by clicking them.
+  const liftable = fix && !fix.solved && phase !== 'playing' ? new Set(fix.placed.map((p) => p.id)) : null;
   return (
     <>
       <MachineCamera parts={framed} />
       {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (
-        <BodyMesh key={b.id} body={b} meshRef={b.dynamic ? (m) => { if (m) dynamic.set(b.id, m); else dynamic.delete(b.id); } : undefined} />
+        <BodyMesh
+          key={b.id}
+          body={b}
+          meshRef={b.dynamic ? (m) => { if (m) dynamic.set(b.id, m); else dynamic.delete(b.id); } : undefined}
+          glow={!!liftable?.has(b.part)}
+          onClick={liftable?.has(b.part) ? () => { useMachine.getState().pickPlaced(b.part); sfx.place(); } : undefined}
+        />
       ))}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
-      {picking && phase !== 'playing' && <Placement part={picking} />}
+      {picking && phase !== 'playing' && <Placement part={picking} parts={parts} />}
       <Confetti />
     </>
   );
