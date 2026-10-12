@@ -1,6 +1,6 @@
 import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, KIT, lockedParts, partCentre, partNames, restingHeight, type Body, type MachineRun, type Part } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, KIT, lockedParts, partCentre, partNames, restingHeight, TARGET_KINDS, type Body, type MachineRun, type Part } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -300,7 +300,18 @@ function Machine3D() {
   const phase = useMachine((s) => s.phase);
   const busy = useMachine((s) => s.ai.busy);
   const builds = useMachine((s) => s.builds);
-  const parts = useMemo(() => (fix ? [...fix.puzzle.spec.parts, ...fix.placed] : run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? []), [fix, run, machine, sketch]);
+  const puzzle = useMachine((s) => s.puzzle);
+  const veiled = useMachine((s) => s.veiled);
+  // Puzzle play never draws the solution: while the AI writes it, only the targets take shape; once it is
+  // proven, nothing shows until the puzzle has the connecting parts out.
+  const parts = useMemo(() => {
+    if (fix) return [...fix.puzzle.spec.parts, ...fix.placed];
+    if (veiled) return [];
+    if (run?.spec.parts) return run.spec.parts;
+    if (machine?.parts) return machine.parts;
+    const drawn = sketch?.parts ?? [];
+    return puzzle ? drawn.filter((p) => TARGET_KINDS.includes(p.kind)) : drawn;
+  }, [fix, run, machine, sketch, puzzle, veiled]);
   // Build mode, or a solved puzzle: clicking a part names it in the prompt ("move " + click = "move dominoes #2").
   const spec = fix ? fix.puzzle.solution : machine;
   const naming = !!spec && builds > 0 && !busy && (!fix || fix.solved);

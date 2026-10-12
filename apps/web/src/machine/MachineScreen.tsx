@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import demo from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
-import { parseMachine, PUZZLE_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
+import { parseMachine, PUZZLE_KINDS, TARGET_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
 import { CARDS, dealCards, EDIT_IDEAS } from './cards';
 import { MachineScene } from './MachineScene';
 import { DAILY_LADDER, useMachine } from './machineStore';
@@ -173,9 +173,13 @@ function startsFresh(t: string): boolean {
 
 function AiLog() {
   const ai = useMachine((s) => s.ai);
+  const puzzle = useMachine((s) => s.puzzle);
   if (!ai.busy && !ai.error && !ai.lines.length) return null;
+  // In puzzle play the stage shows only the targets; say how much is going into the bin instead.
+  const bin = puzzle && ai.busy && ai.sketch ? ai.sketch.parts.filter((p) => !TARGET_KINDS.includes(p.kind)).length : 0;
   return (
     <div className="mlog">
+      {puzzle && ai.busy && ai.sketch && <div className="muted small">{ai.sketch.title ? `“${ai.sketch.title}”: ` : ''}targets on the stage, {bin} part{bin === 1 ? '' : 's'} for your bin so far. The route stays hidden.</div>}
       {ai.lines.map((l, i) => <div key={i} className={i === ai.lines.length - 1 && ai.busy ? 'current' : ''}>{i === ai.lines.length - 1 && ai.busy ? '◌ ' : '✓ '}{l}</div>)}
       {ai.busy && ai.lines.length === 0 && <div className="current">◌ Contacting the AI designer…</div>}
       {ai.busy && ai.progress > 0 && <div className="machine-bar"><div style={{ width: `${Math.round(ai.progress * 100)}%` }} /></div>}

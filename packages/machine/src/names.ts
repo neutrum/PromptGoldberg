@@ -36,6 +36,9 @@ export function layoutProblems(spec: MachineSpec): string[] {
   return problems;
 }
 
+/** Kinds that are targets when the goal names them; while a design streams in, these are the parts safe to show. */
+export const TARGET_KINDS: Part['kind'][] = ['ball', 'bucket', 'bell', 'dominoes'];
+
 /** The ball and the targets: the goal parts that are a destination (bucket, bell, dominoes), not a touch on the way. */
 export function targetParts(spec: MachineSpec): Set<string> {
   const ids = new Set<string>();

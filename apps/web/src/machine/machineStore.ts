@@ -60,6 +60,8 @@ interface MachineState {
   edits: number;
   /** Puzzle play: a built machine arrives with a part held back for the player to place. Off = just watch it. */
   puzzle: boolean;
+  /** The machine is being broken for the player: do not draw it, it is the solution. */
+  veiled: boolean;
   setPuzzle: (on: boolean) => void;
 
   run: MachineRun | null;
@@ -173,8 +175,8 @@ export const useMachine = create<MachineState>((set, get) => {
       // Never replace a proven version with an unproven one of the same design.
       if (rank < get().rank && get().machine?.title === parsed.spec.title) return;
       if (get().puzzle && rank === 2 && get().proven) {
-        // Puzzle play: the finished machine goes straight into fix-it with a part held back.
-        set({ machine: parsed.spec, rank, proven: true, moved, mode: 'build', fix: null });
+        // Puzzle play: the finished machine goes straight into fix-it, unseen until the player builds the route.
+        set({ machine: parsed.spec, rank, proven: true, moved, mode: 'build', fix: null, veiled: true });
         if (await get().startFix('connect')) return;
       }
       await get().load(parsed.spec, { rank, proven: rank >= 1, moved });
@@ -240,6 +242,7 @@ export const useMachine = create<MachineState>((set, get) => {
     builds: 0,
     edits: 0,
     puzzle: loadPuzzleMode(),
+    veiled: false,
     setPuzzle(on) {
       set({ puzzle: on });
       try { localStorage.setItem(PUZZLE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
@@ -278,7 +281,7 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     async load(machine, meta = {}) {
-      set({ machine, rank: meta.rank ?? 0, proven: meta.proven ?? false, moved: meta.moved ?? [], mode: 'build', fix: null });
+      set({ machine, rank: meta.rank ?? 0, proven: meta.proven ?? false, moved: meta.moved ?? [], mode: 'build', fix: null, veiled: false });
       await simulate(machine);
     },
 
@@ -319,7 +322,7 @@ export const useMachine = create<MachineState>((set, get) => {
         const d = await getDailyMachine();
         const parsed = parseMachine(d.machine);
         if (!parsed.ok) throw new Error("Today's machine is broken; try again later.");
-        set({ machine: parsed.spec, rank: 2, proven: true, moved: [], mode: 'build', fix: null });
+        set({ machine: parsed.spec, rank: 2, proven: true, moved: [], mode: 'build', fix: null, veiled: true });
         set((s) => ({ daily: { ...s.daily, date: d.date, loading: false, stage: 0, tries: 0 } }));
         await get().nextDailyStage();
       } catch (err) {
@@ -346,14 +349,14 @@ export const useMachine = create<MachineState>((set, get) => {
       try {
         puzzle = await makePuzzle(machine, kind, seed);
       } catch (err) {
-        set({ phase: 'idle', error: err instanceof Error ? err.message : String(err) });
+        set({ phase: 'idle', veiled: false, error: err instanceof Error ? err.message : String(err) });
         return false;
       }
       if (!puzzle) {
-        set({ phase: 'idle', error: kind === 'missing' ? 'This machine has no part that can be taken out; try another one.' : 'This machine cannot be broken that way; try another kind.' });
+        set({ phase: 'idle', veiled: false, error: kind === 'missing' ? 'This machine has no part that can be taken out; try another one.' : 'This machine cannot be broken that way; try another kind.' });
         return false;
       }
-      set({ mode: 'fix', fix: { puzzle, kind, hand: puzzle.missing.map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false } });
+      set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: puzzle.missing.map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false } });
       // Show the broken machine fail first, so the player sees what is wrong.
       await simulate(withPlacements(puzzle, puzzle.start));
       return true;
