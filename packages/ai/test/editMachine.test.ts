@@ -22,7 +22,7 @@ describe('editing a machine keeps the ball and the goal parts fixed', () => {
     expect(llm.requests[0].prompt).toMatch(/FIXED PARTS/);
     expect(llm.requests[0].prompt).toMatch(/dominoes = "row"/);
     expect(llm.requests[1].prompt).toMatch(/"ball" \(the ball\) is fixed but was changed/);
-    expect(res.machine.parts.find((p) => p.id === 'ball')).toMatchObject({ x: 5, y: 3 });
+    expect(res.machine.parts.find((p) => p.id === 'ball')).toMatchObject({ x: 5, y: 6 });
   });
 
   it('fails rather than deliver a machine that breaks the lock', async () => {

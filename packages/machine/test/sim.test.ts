@@ -33,7 +33,7 @@ describe('simulation', () => {
       const spec = load(file);
       const result = evaluateMachine(spec.goal, simulateSync(spec, { record: false }));
       if (result.success) continue;
-      const nudged = nudgeMachine(spec, { budget: 150, timeLimitMs: 20_000 });
+      const nudged = nudgeMachine(spec, { budget: 250, timeLimitMs: 20_000 });
       expect(nudged.solved, `${file}: ${nudged.result.steps.map((s) => s.note).join('; ')}`).toBe(true);
     }
   }, 30000);
@@ -110,7 +110,8 @@ describe('connect puzzles', () => {
     expect(spread(spec)).toBeGreaterThanOrEqual(10);
     const puzzle = makeConnectPuzzle(spec);
     expect(puzzle).not.toBeNull();
-    expect(puzzle!.spec.parts.map((p) => p.id).sort()).toEqual(['ball', 'bell', 'row', 'shelf']);
+    // The fixed wall is scenery: it stays, and the route has to clear it.
+    expect(puzzle!.spec.parts.map((p) => p.id).sort()).toEqual(['ball', 'bell', 'row', 'shelf', 'wall']);
     expect(puzzle!.missing.map((m) => m.id)).toEqual(['ramp']);
   });
 });

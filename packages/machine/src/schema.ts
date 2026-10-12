@@ -23,6 +23,8 @@ export const Part = z.object({
   yaw: Yaw.default(0).describe('facing: 0 = +x, 90 = +z, 180 = -x, 270 = -z. A ramp slopes DOWN toward its facing; fans blow and cannons fire toward it; dominoes and platforms extend toward it'),
   length: z.number().int().min(1).max(8).optional().describe('platforms: cells long (default 3); dominoes: how many (default 5)'),
   color: z.string().optional().describe('hex colour'),
+  /** Scenery: part of the level (an obstacle wall, a ledge), never handed to the player. Walls and platforms only. */
+  fixed: z.boolean().optional().describe('scenery: a wall or shelf that is part of the level and stays on the stage; the player has to get past or use it'),
   /** Fine offsets within the cell, set by the optimizer (fractions of a cell). */
   dx: z.number().min(-0.5).max(0.5).optional(),
   dz: z.number().min(-0.5).max(0.5).optional(),
@@ -78,6 +80,9 @@ export function checkMachine(spec: MachineSpec, opts: CheckOptions = {}): SpecIs
     const other = cells.get(key);
     if (other) issues.push({ path: `parts.${i}`, message: `"${p.id}" is in the same cell as "${other}"; give every part its own cell` });
     else cells.set(key, p.id);
+  });
+  spec.parts.forEach((p, i) => {
+    if (p.fixed && p.kind !== 'wall' && p.kind !== 'platform') issues.push({ path: `parts.${i}.fixed`, message: `"${p.id}" is a ${p.kind}; only walls and platforms can be fixed scenery` });
   });
   const byId = new Map(spec.parts.map((p) => [p.id, p]));
   spec.goal.forEach((g, i) => {

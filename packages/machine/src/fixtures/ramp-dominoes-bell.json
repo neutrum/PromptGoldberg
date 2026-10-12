@@ -1,18 +1,18 @@
 {
-  "title": "Ramp, dominoes, bell",
+  "title": "Over the wall",
   "parts": [
     {
       "id": "ball",
       "kind": "ball",
       "x": 5,
-      "y": 3,
+      "y": 6,
       "z": 10
     },
     {
       "id": "ramp",
       "kind": "ramp",
       "x": 5,
-      "y": 2,
+      "y": 5,
       "z": 10,
       "yaw": 0
     },
@@ -20,15 +20,24 @@
       "id": "shelf",
       "kind": "platform",
       "x": 5,
-      "y": 2,
+      "y": 5,
       "z": 10,
       "yaw": 0,
       "length": 4
     },
     {
+      "id": "wall",
+      "kind": "wall",
+      "x": 11,
+      "y": 0,
+      "z": 10,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
       "id": "row",
       "kind": "dominoes",
-      "x": 11,
+      "x": 14,
       "y": 0,
       "z": 10,
       "yaw": 0,
@@ -37,7 +46,7 @@
     {
       "id": "bell",
       "kind": "bell",
-      "x": 15,
+      "x": 18,
       "y": 0,
       "z": 10
     }

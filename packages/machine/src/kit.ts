@@ -55,6 +55,8 @@ export const DEFAULT_COLORS: Record<PartKind, string> = {
 };
 
 /** Sizes in metres. */
+export const SCENERY_COLOR = '#4a4f5c';
+
 export const KIT = {
   ballRadius: 0.16,
   rampLength: 2 * CELL,
@@ -109,7 +111,8 @@ export function assemblePart(p: Part): Assembly {
   const o = partOrigin(p);
   const f = facing(p.yaw);
   const q = yawQuat(p.yaw);
-  const color = p.color ?? DEFAULT_COLORS[p.kind];
+  // Scenery reads as stone: part of the level, not a part to play with.
+  const color = p.color ?? (p.fixed ? SCENERY_COLOR : DEFAULT_COLORS[p.kind]);
   const base = { part: p.id, kind: p.kind, color };
   const bodies: Body[] = [];
   const hinges: Hinge[] = [];

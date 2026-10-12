@@ -33,7 +33,36 @@ export function layoutProblems(spec: MachineSpec): string[] {
     const rest = restingHeight(spec.parts, p.x, p.z);
     if (p.y !== rest) problems.push(`"${p.id}" (${p.kind}) floats at y ${p.y}: nothing is under it at that height (it would rest at y ${rest}). Set its y to ${rest}, or add a platform whose cells include (${p.x}, ${p.z}) with y ${p.y}`);
   }
+  if (!obstacles(spec).length) {
+    const ball = spec.parts.find((p) => p.kind === 'ball');
+    const target = farthestTarget(spec);
+    problems.push(`no scenery in the way: add a wall with "fixed": true standing between the ball (x ${ball?.x}, z ${ball?.z}) and the farthest target (x ${target?.x}, z ${target?.z}), in the ball's path, so the route has to go over or around it`);
+  }
   return problems;
+}
+
+/** The goal part farthest from the ball. */
+export function farthestTarget(spec: MachineSpec): Part | undefined {
+  const ball = spec.parts.find((p) => p.kind === 'ball');
+  if (!ball) return undefined;
+  let best: { p: Part; d: number } | null = null;
+  for (const g of spec.goal) {
+    const p = spec.parts.find((q) => q.id === g.part);
+    if (!p) continue;
+    const d = Math.abs(p.x - ball.x) + Math.abs(p.y - ball.y) + Math.abs(p.z - ball.z);
+    if (!best || d > best.d) best = { p, d };
+  }
+  return best?.p;
+}
+
+/** Fixed walls standing in the box between the ball and the farthest target: what the route must get past. */
+export function obstacles(spec: MachineSpec): Part[] {
+  const ball = spec.parts.find((p) => p.kind === 'ball');
+  const target = farthestTarget(spec);
+  if (!ball || !target) return [];
+  const x0 = Math.min(ball.x, target.x), x1 = Math.max(ball.x, target.x);
+  const z0 = Math.min(ball.z, target.z), z1 = Math.max(ball.z, target.z);
+  return spec.parts.filter((p) => p.fixed && p.kind === 'wall' && p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1);
 }
 
 /** Kinds that are targets when the goal names them; while a design streams in, these are the parts safe to show. */

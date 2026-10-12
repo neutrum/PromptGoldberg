@@ -13,7 +13,7 @@ const setFlag = (key: string) => { try { localStorage.setItem(key, '1'); } catch
 const PART_ICON: Record<PartKind, string> = { ball: '🔴', ramp: '📐', platform: '▬', wall: '🧱', dominoes: '🁢', seesaw: '⚖️', fan: '🌀', trampoline: '🛏️', cannon: '💣', bucket: '🪣', bell: '🔔' };
 
 const KIND_LABEL: Record<PuzzleKind, { name: string; blurb: string }> = {
-  connect: { name: 'build the route', blurb: 'The ball and the goal parts are where they are. Build the route between them from the parts below. Any build that works counts.' },
+  connect: { name: 'build the route', blurb: 'The ball, the targets and the scenery are where they are. Build the route between them from the parts below. Any build that works counts.' },
   missing: { name: '1 part missing', blurb: 'One part is held back. Pick it below, then click the stage where the chain needs it.' },
   missing2: { name: '2 parts missing', blurb: 'Two parts are held back. Put both where the chain needs them.' },
   moved: { name: 'a part moved', blurb: 'Every part is here, but one is in the wrong place. Click it to pick it up, then drop it where it belongs.' },

@@ -49,7 +49,7 @@ const fails = (spec: MachineSpec) => {
 function removable(solution: MachineSpec, avoid: string[] = []): Part[] {
   const out: Part[] = [];
   for (const p of solution.parts) {
-    if (p.kind === 'ball' || avoid.includes(p.id) || !isSupported(solution.parts, p)) continue;
+    if (p.kind === 'ball' || p.fixed || avoid.includes(p.id) || !isSupported(solution.parts, p)) continue;
     const clean = dropAt(solution.parts, p, p.x, p.z, { y: p.y });
     if (clean) out.push(clean);
   }
@@ -133,12 +133,13 @@ export function makeMovedPuzzle(solution: MachineSpec, opts: { seed?: number; av
 
 /**
  * The parts a connect puzzle leaves on the stage: the ball, the targets (bucket, bell, dominoes),
- * the shelves those stand on, and the shelf under the ball's column (the start is a place, not a
- * point in the air). A part the ball only has to touch on the way stays a checklist step, but the
- * player places it.
+ * the scenery (fixed walls and ledges), the shelves the targets stand on, and the shelf under the
+ * ball's column (the start is a place, not a point in the air). A part the ball only has to touch
+ * on the way stays a checklist step, but the player places it.
  */
 export function fixedParts(solution: MachineSpec): Set<string> {
   const fixed = targetParts(solution);
+  for (const p of solution.parts) if (p.fixed) fixed.add(p.id);
   for (const id of [...fixed]) {
     const part = solution.parts.find((p) => p.id === id);
     if (!part) continue;

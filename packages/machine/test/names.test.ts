@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { lockedParts, lockProblems, parseMachine, partNames, type MachineSpec } from '../src';
+import { layoutProblems, lockedParts, lockProblems, obstacles, parseMachine, partNames, type MachineSpec } from '../src';
 
 const load = (name: string): MachineSpec => {
   const parsed = parseMachine(JSON.parse(readFileSync(join(import.meta.dirname, '../src/fixtures', name), 'utf8')));
@@ -51,5 +51,29 @@ describe('the edit lock', () => {
     expect(lockProblems(spec, fair)).toEqual([]);
     const fewerRings = edit((s) => ({ ...s, goal: s.goal.map((g) => (g.type === 'bell' ? { ...g, times: 2 } : g)) }));
     expect(lockProblems(fewerRings, spec)).toEqual([expect.stringMatching(/may not ring fewer/)]);
+  });
+});
+
+describe('scenery', () => {
+  const spec = load('ramp-dominoes-bell.json');
+  const edit = (f: (s: MachineSpec) => MachineSpec) => f(JSON.parse(JSON.stringify(spec)) as MachineSpec);
+
+  it('only walls and platforms can be fixed', () => {
+    const r = parseMachine({ ...spec, parts: spec.parts.map((p) => (p.id === 'bell' ? { ...p, fixed: true } : p)) });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.issues[0].message).toMatch(/only walls and platforms/);
+  });
+
+  it('a level needs a fixed wall in the way between the ball and the farthest target', () => {
+    expect(obstacles(spec).map((p) => p.id)).toEqual(['wall']);
+    expect(layoutProblems(spec)).toEqual([]);
+    const open = edit((s) => ({ ...s, parts: s.parts.filter((p) => p.id !== 'wall') }));
+    expect(layoutProblems(open)).toEqual([expect.stringMatching(/no scenery in the way/)]);
+    // A wall off to the side of the route does not count.
+    const aside = edit((s) => ({ ...s, parts: s.parts.map((p) => (p.id === 'wall' ? { ...p, z: 3 } : p)) }));
+    expect(obstacles(aside)).toEqual([]);
+    // A loose wall (bin part) does not count either.
+    const loose = edit((s) => ({ ...s, parts: s.parts.map((p) => (p.id === 'wall' ? { ...p, fixed: undefined } : p)) }));
+    expect(obstacles(loose)).toEqual([]);
   });
 });
