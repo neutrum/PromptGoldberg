@@ -2,13 +2,16 @@
  * Fix-it puzzles: take a machine that works and break it for the player to repair.
  * The proven machine is the solution, so a puzzle is always solvable and a hint is free.
  *
- * Kinds: 'connect' keeps the ball, the shelves and the goal parts where they are and hands the
- * player every connecting part (ramps, fans, cannons...) to build the chain with; 'missing' pulls
+ * Kinds: 'connect' keeps the ball, the goal parts and the shelves they stand on where they are and
+ * hands the player everything else (ramps, fans, cannons, free shelves...) to build the route with,
+ * The Incredible Machine's frame; 'missing' pulls
  * one part out, 'missing2' pulls two, 'moved' leaves every part in but shifts one to a nearby
  * wrong cell, so the player has to spot which one.
  */
 import { evaluateMachine } from './goal';
-import { dropAt, isSupported } from './placement';
+import { footprint } from './kit';
+import { targetParts } from './names';
+import { dropAt, isSupported, supportsOf } from './placement';
 import type { MachineSpec, Part, PartKind } from './schema';
 import { simulateSync } from './sim';
 
@@ -39,18 +42,16 @@ const fails = (spec: MachineSpec) => {
 };
 
 /**
- * Hand-placeable parts of a working machine, best to remove first. A hand-placed part sits in the
- * middle of its cell, so a part the optimizer nudged off-centre only counts when the machine still
- * works with it centred; the centred version is what the player gets back.
+ * Hand-placeable parts of a working machine, best to remove first: the ones that stand on the
+ * floor or a shelf, where a hand-placed part can go back. The player gets them centred in their
+ * cell; dropping one back in its own cell restores the optimizer's fine offsets (see withPlacements).
  */
 function removable(solution: MachineSpec, avoid: string[] = []): Part[] {
   const out: Part[] = [];
   for (const p of solution.parts) {
     if (p.kind === 'ball' || avoid.includes(p.id) || !isSupported(solution.parts, p)) continue;
-    const clean = dropAt(solution.parts, p, p.x, p.z);
-    if (!clean) continue;
-    if ((p.dx || p.dz) && fails({ ...solution, parts: solution.parts.map((q) => (q.id === p.id ? clean : q)) }) !== null) continue;
-    out.push(clean);
+    const clean = dropAt(solution.parts, p, p.x, p.z, { y: p.y });
+    if (clean) out.push(clean);
   }
   return out.sort((a, b) => REMOVAL_ORDER.indexOf(a.kind) - REMOVAL_ORDER.indexOf(b.kind));
 }
@@ -131,21 +132,52 @@ export function makeMovedPuzzle(solution: MachineSpec, opts: { seed?: number; av
 }
 
 /**
- * The goal parts and the shelves stay; everything that connects them goes to the player. Any
- * arrangement the physics accepts counts, so the AI's layout is one solution among many.
+ * The parts a connect puzzle leaves on the stage: the ball, the targets (bucket, bell, dominoes),
+ * the shelves those stand on, and the shelf under the ball's column (the start is a place, not a
+ * point in the air). A part the ball only has to touch on the way stays a checklist step, but the
+ * player places it.
+ */
+export function fixedParts(solution: MachineSpec): Set<string> {
+  const fixed = targetParts(solution);
+  for (const id of [...fixed]) {
+    const part = solution.parts.find((p) => p.id === id);
+    if (!part) continue;
+    for (const shelf of supportsOf(solution.parts, part)) fixed.add(shelf.id);
+    if (part.kind === 'ball') {
+      const under = solution.parts
+        .filter((p) => p.kind === 'platform' && p.y < part.y && footprint(p).some((c) => c.x === part.x && c.z === part.z))
+        .sort((a, b) => b.y - a.y)[0];
+      if (under) fixed.add(under.id);
+    }
+  }
+  return fixed;
+}
+
+/**
+ * The ball and the targets (and what they stand on) stay; everything that connects them, free
+ * shelves and touch-goal parts included, goes to the player. Any arrangement the physics accepts
+ * counts, so the AI's layout is one solution among many.
  */
 export function makeConnectPuzzle(solution: MachineSpec): Puzzle | null {
   if (fails(solution) !== null) return null;
-  const goalIds = new Set(solution.goal.map((g) => g.part));
-  const loose = removable(solution).filter((p) => p.kind !== 'platform' && !goalIds.has(p.id));
+  const fixed = fixedParts(solution);
+  const loose = removable(solution).filter((p) => !fixed.has(p.id));
   if (!loose.length) return null;
   const ids = new Set(loose.map((p) => p.id));
   const spec: MachineSpec = { ...solution, parts: solution.parts.filter((p) => !ids.has(p.id)) };
   const failedAt = fails(spec);
   if (failedAt === null) return null; // Works without them: nothing to connect.
-  // Hand the parts out in chain order, so the bin reads like a recipe.
+  // Hand the parts out in chain order, so the bin reads like a recipe, with a shelf ahead of whatever stands on it.
   const order = new Map(solution.parts.map((p, i) => [p.id, i]));
   loose.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  for (const shelf of loose.filter((p) => p.kind === 'platform')) {
+    const first = loose.findIndex((p) => supportsOf(solution.parts, p).some((q) => q.id === shelf.id));
+    const at = loose.indexOf(shelf);
+    if (first >= 0 && first < at) {
+      loose.splice(at, 1);
+      loose.splice(first, 0, shelf);
+    }
+  }
   return { kind: 'connect', spec, missing: loose, start: [], solution, failedAt };
 }
 
@@ -159,7 +191,15 @@ export function makePuzzleOfKind(solution: MachineSpec, kind: PuzzleKind, opts: 
   }
 }
 
-/** The puzzle with the player's placements added back in. */
+/**
+ * The puzzle with the player's placements added back in. A part dropped in the cell the solution
+ * has it in, facing the same way, takes the solution's fine offsets (the optimizer's nudges), so
+ * the AI's own layout always counts; anywhere else it sits in the middle of its cell.
+ */
 export function withPlacements(puzzle: Puzzle, placed: Part[]): MachineSpec {
-  return { ...puzzle.spec, parts: [...puzzle.spec.parts, ...placed] };
+  const parts = placed.map((p) => {
+    const s = puzzle.solution.parts.find((q) => q.id === p.id);
+    return s && s.x === p.x && s.y === p.y && s.z === p.z && s.yaw === p.yaw ? { ...p, dx: s.dx, dz: s.dz } : p;
+  });
+  return { ...puzzle.spec, parts: [...puzzle.spec.parts, ...parts] };
 }

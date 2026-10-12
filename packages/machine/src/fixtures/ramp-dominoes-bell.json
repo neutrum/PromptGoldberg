@@ -5,40 +5,40 @@
       "id": "ball",
       "kind": "ball",
       "x": 5,
-      "y": 2,
+      "y": 3,
       "z": 10
     },
     {
       "id": "ramp",
       "kind": "ramp",
       "x": 5,
-      "y": 1,
+      "y": 2,
       "z": 10,
       "yaw": 0
     },
     {
-      "id": "floor1",
+      "id": "shelf",
       "kind": "platform",
       "x": 5,
-      "y": 1,
+      "y": 2,
+      "z": 10,
+      "yaw": 0,
+      "length": 4
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 11,
+      "y": 0,
       "z": 10,
       "yaw": 0,
       "length": 7
     },
     {
-      "id": "row",
-      "kind": "dominoes",
-      "x": 8,
-      "y": 1,
-      "z": 10,
-      "yaw": 0,
-      "length": 5
-    },
-    {
       "id": "bell",
       "kind": "bell",
-      "x": 11,
-      "y": 1,
+      "x": 15,
+      "y": 0,
       "z": 10
     }
   ],

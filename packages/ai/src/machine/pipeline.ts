@@ -121,7 +121,7 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
 export function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit): Promise<MachineEvent> {
   return machineLoop(deps, emit, {
     firstStage: 'designing',
-    firstMessage: 'Designing a machine for your idea.',
+    firstMessage: 'Designing a level for your idea.',
     design: (calls, onProgress) => designMachine(deps.llm, prompt, calls, onProgress),
     request: `Design a machine for this request:\n\n${prompt}`,
   });

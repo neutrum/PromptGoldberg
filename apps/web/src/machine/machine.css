@@ -78,3 +78,5 @@
 .name-tag span { color: var(--muted); }
 .name-tag.locked { border-color: rgba(255, 255, 255, 0.25); color: #e8ecff; }
 .mprompt .examples .lock { font-size: 12px; align-self: center; }
+.mbin .lift { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.mbin .lift button { padding: 2px 8px; }

@@ -13,7 +13,7 @@ const setFlag = (key: string) => { try { localStorage.setItem(key, '1'); } catch
 const PART_ICON: Record<PartKind, string> = { ball: '🔴', ramp: '📐', platform: '▬', wall: '🧱', dominoes: '🁢', seesaw: '⚖️', fan: '🌀', trampoline: '🛏️', cannon: '💣', bucket: '🪣', bell: '🔔' };
 
 const KIND_LABEL: Record<PuzzleKind, { name: string; blurb: string }> = {
-  connect: { name: 'build the chain', blurb: 'The goal parts are in place. Use the parts below to get the ball there. Any build that works counts.' },
+  connect: { name: 'build the route', blurb: 'The ball and the goal parts are where they are. Build the route between them from the parts below. Any build that works counts.' },
   missing: { name: '1 part missing', blurb: 'One part is held back. Pick it below, then click the stage where the chain needs it.' },
   missing2: { name: '2 parts missing', blurb: 'Two parts are held back. Put both where the chain needs them.' },
   moved: { name: 'a part moved', blurb: 'Every part is here, but one is in the wrong place. Click it to pick it up, then drop it where it belongs.' },
@@ -158,7 +158,7 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
       </form>
       {!ai.busy && editing && !deck && (
         <div className="examples">
-          <span className="muted lock" title="The ball and the parts in the goal stay where they are. You change the chain between them.">🔒 ball &amp; goal parts stay put</span>
+          <span className="muted lock" title="The ball and the targets (bucket, bell, dominoes) stay where they are. You change the route between them.">🔒 ball &amp; targets stay put</span>
           {EDIT_IDEAS.map((ex) => <button key={ex} onClick={() => setDraft(ex)}>{ex}</button>)}
         </div>
       )}
@@ -199,11 +199,12 @@ function FixPanel() {
   const inDaily = !!daily.date;
   const lastStage = daily.stage >= DAILY_LADDER.length;
   const stageLabel = inDaily ? `Daily ${Math.min(daily.stage, DAILY_LADDER.length)}/${DAILY_LADDER.length}: ` : fix.kind === 'connect' ? '' : 'Fix it: ';
-  // R turns the part in hand; Escape puts it down.
+  // R turns the part in hand; up/down raise or lower a shelf; Escape puts it down.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.key === 'r' || e.key === 'R') useMachine.getState().rotatePicked();
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); useMachine.getState().liftBy(e.key === 'ArrowUp' ? 1 : -1); }
       if (e.key === 'Escape') pick(null);
     };
     window.addEventListener('keydown', onKey);
@@ -228,9 +229,22 @@ function FixPanel() {
             );
           })}
           {fix.picking !== null && <button onClick={() => useMachine.getState().rotatePicked()} title="Turn the part in hand (R)">↻ Turn</button>}
+          {fix.picking !== null && fix.hand[fix.picking].kind === 'platform' && (
+            <span className="lift" title="Shelf height (arrow keys)">
+              <button onClick={() => useMachine.getState().liftBy(-1)} disabled={fix.lift <= 0}>▼</button>
+              height {fix.lift}
+              <button onClick={() => useMachine.getState().liftBy(1)}>▲</button>
+            </span>
+          )}
         </div>
       )}
-      {!fix.solved && fix.picking !== null && <div className="muted small">Click the stage to drop the {fix.hand[fix.picking].kind}. It lands on the floor or on a shelf. Turn it with R.</div>}
+      {!fix.solved && fix.picking !== null && (
+        <div className="muted small">
+          {fix.hand[fix.picking].kind === 'platform'
+            ? `Click the stage to put the shelf there, ${fix.lift ? `${fix.lift} cell${fix.lift > 1 ? 's' : ''} up` : 'on the floor'}. Arrow keys change the height, R turns it. Parts can stand on it.`
+            : `Click the stage to drop the ${fix.hand[fix.picking].kind}. It lands on the floor or on a shelf. Turn it with R.`}
+        </div>
+      )}
       {failed && !fix.solved && <div className="mnote">✗ {failed.note}</div>}
       <div className="mactions">
         {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={!fix.placed.length || phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'You can test it before every part is down'}>▶ Run ({tries(fix.tries)})</button>}

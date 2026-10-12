@@ -222,16 +222,17 @@ function MachineCamera({ parts }: { parts: Part[] }) {
  * Fix mode: hover the stage to see where the part in hand would land (the floor, or the platform
  * under the cursor), click to drop it there. A cell something else stands in shows red.
  */
-function Placement({ part, parts }: { part: Part; parts: Part[] }) {
+function Placement({ part, parts, lift }: { part: Part; parts: Part[]; lift: number }) {
   const [cell, setCell] = useState<{ x: number; z: number } | null>(null);
+  const shelf = part.kind === 'platform';
   const w = GRID.x * CELL, d = GRID.z * CELL;
   const toCell = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
     const x = Math.floor(e.point.x / CELL), z = Math.floor(e.point.z / CELL);
     if (x < 0 || z < 0 || x >= GRID.x || z >= GRID.z) return null;
     return { x, z };
   };
-  const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z) : null), [parts, part, cell]);
-  const y = cell ? restingHeight(parts, cell.x, cell.z, part.id) : 0;
+  const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z, { y: lift }) : null), [parts, part, cell, lift]);
+  const y = cell ? (shelf ? lift : restingHeight(parts, cell.x, cell.z, part.id)) : 0;
   const ghost = useMemo(() => (landing ? assemblePart(landing).bodies : []), [landing]);
   const cells = useMemo(() => (cell ? footprint({ ...part, x: cell.x, y, z: cell.z }) : []), [part, cell, y]);
   const platforms = useMemo(() => parts.filter((p) => p.kind === 'platform' && p.id !== part.id), [parts, part.id]);
@@ -333,7 +334,7 @@ function Machine3D() {
       ))}
       {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
-      {picking && phase !== 'playing' && <Placement part={picking} parts={parts} />}
+      {picking && phase !== 'playing' && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} />}
       <Confetti />
     </>
   );

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
+import { layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
 import example from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
@@ -13,7 +13,9 @@ const EXAMPLE = { ...example, caption: 'Down the ramp, through the dominoes, and
  * most of the time; the optimizer only nudges parts by up to a cell, so the sequence and the
  * rough alignment have to come from here.
  */
-export const MACHINE_PROMPT = `You design Rube Goldberg machines for Prompt Goldberg, a browser toy where a user describes a contraption in plain language, you build it from a fixed kit of parts, and a rigid-body physics engine runs it to see whether the goal chain happens. An optimizer then nudges parts by up to a cell to make it work, so get the sequence and the rough alignment right rather than exact numbers.
+export const MACHINE_PROMPT = `You design Rube Goldberg puzzle levels for Prompt Goldberg, a browser game in the spirit of The Incredible Machine: a player describes a contraption in plain language, you build a working machine from a fixed kit of parts, and a rigid-body physics engine runs it to prove the goal chain happens. An optimizer then nudges parts by up to a cell to make it work, so get the sequence and the rough alignment right rather than exact numbers.
+
+THE GAME: the player then sees only the ball and the goal parts, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot), and the route drops a level or turns a corner at least once (a shelf the ball rolls off, a fan or cannon facing another way). A goal part right next to the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
 
 THE STAGE
 A grid of 0.5 m cells: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south), y from 0 (the floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
@@ -41,7 +43,7 @@ GOALS: an ordered list of 1 to 4 events the machine must make happen, in order:
 Use 2 or 3 goals that tell the story of the chain; the last one is usually the bucket or the bell.
 
 DESIGN RULES
-- 4 to 10 parts. The ball starts at the highest point; everything after it is lower or reached by a cannon or trampoline. Energy only comes from height, fans, trampolines and cannons.
+- 6 to 12 parts. The ball starts at the highest point; everything after it is lower or reached by a cannon or trampoline. Energy only comes from height, fans, trampolines and cannons.
 - Keep the chain on one z row where possible so parts line up; when a part must sit on a shelf, give the shelf the same y as the part and start the shelf at or before the part.
 - Leave 1 to 2 cells of platform after a ramp before the next part, so the ball is rolling steadily when it arrives.
 - Each part must be reachable from the previous one: a rolling ball stays on the level it is on, drops at platform ends, flies 6 to 7 cells from a cannon, rises 3 cells from a trampoline.
@@ -72,7 +74,7 @@ export function formatMachineIssues(issues: SpecIssue[]): string {
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
 
 /** Validate the machine and drop any fine offsets the model wrote (those belong to the optimizer). */
-export function validateMachineDesign(json: unknown): Validation<MachineDesign> {
+export function validateMachineDesign(json: unknown, opts: { layout?: boolean } = {}): Validation<MachineDesign> {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { ok: false, problems: '- expected a JSON object' };
   const { machine: nested, ...rest } = json as Record<string, unknown>;
   const raw = nested && typeof nested === 'object' ? nested : rest;
@@ -83,6 +85,9 @@ export function validateMachineDesign(json: unknown): Validation<MachineDesign> 
     caption: text(parsed.spec.caption, 240),
     parts: parsed.spec.parts.map(({ dx: _dx, dz: _dz, ...p }) => p),
   };
+  // A level, not just a machine: the goal has to be far enough from the start to build a route.
+  const layout = opts.layout === false ? [] : layoutProblems(spec);
+  if (layout.length) return { ok: false, problems: layout.map((l) => `- ${l}`).join('\n') };
   return { ok: true, value: { spec, notes: [] } };
 }
 
@@ -93,9 +98,10 @@ export function validateMachineDesign(json: unknown): Validation<MachineDesign> 
  */
 export function validateMachineEdit(original: MachineSpec): (json: unknown) => Validation<MachineDesign> {
   return (json) => {
-    const v = validateMachineDesign(json);
+    // The lock first: "you moved the ball" is the reason the model needs, not "the goal got closer".
+    const v = validateMachineDesign(json, { layout: false });
     if (!v.ok) return v;
-    const problems = lockProblems(original, v.value.spec);
+    const problems = [...lockProblems(original, v.value.spec), ...layoutProblems(v.value.spec)];
     return problems.length ? { ok: false, problems: problems.map((p) => `- ${p}`).join('\n') } : v;
   };
 }
@@ -160,7 +166,7 @@ export async function designMachine(llm: LlmBackend, userPrompt: string, calls: 
     { system: MACHINE_PROMPT, prompt: `Design a machine for this request:\n\n${userPrompt}`, thinking: 'off', maxTokens: 4000, model: MODEL() },
     validateMachineDesign,
     calls,
-    1,
+    2,
     onProgress,
   );
 }
@@ -197,7 +203,7 @@ Previous machine:
 ${JSON.stringify(ctx.previous)}
 
 Fix it while keeping the idea${failed ? `, focusing on why "${failed.note}"` : ''}: check that each part is reachable from the one before (right row, right height, within rolling or flying range), that shelves support what stands on them, and that the ball cannot roll off an edge before the next part. Reply with the full JSON object.`;
-  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validate, calls, 1, onProgress);
+  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validate, calls, 2, onProgress);
 }
 
 /** Talk-to-edit: apply a plain-language change to an existing machine, keeping the ball and the goal parts where they are. */
@@ -208,7 +214,7 @@ Current machine:
 ${JSON.stringify(spec)}
 
 Apply the change and keep everything else as it is where possible (same ids and positions for untouched parts). Update the caption, and add goal steps, if the request changes what should happen. Reply with the full JSON object.`;
-  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validateMachineEdit(spec), calls, 1, onProgress);
+  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validateMachineEdit(spec), calls, 2, onProgress);
 }
 
 /** The edit request as the redesign step repeats it: the change, plus the lock it must keep. */

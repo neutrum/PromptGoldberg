@@ -1,5 +1,5 @@
 import {
-  dropAt, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
+  dropAt, GRID, isSupported, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind,
 } from '@og/machine';
 import { create } from 'zustand';
@@ -32,6 +32,8 @@ export interface FixState {
   placed: Part[];
   /** Index into puzzle.missing of the part being placed, or null. */
   picking: number | null;
+  /** Height (cells) a shelf in hand goes at; other parts land where they rest. */
+  lift: number;
   tries: number;
   solved: boolean;
   hint: boolean;
@@ -95,8 +97,10 @@ interface MachineState {
   pick: (index: number | null) => void;
   /** Drop the picked part on a column; false when something is in the way. */
   placeAt: (x: number, z: number) => boolean;
-  /** Lift a placed part back into the hand. */
+  /** Lift a placed part back into the hand (and whatever stood on it, if it is a shelf). */
   pickPlaced: (id: string) => void;
+  /** Raise or lower the shelf in hand by `by` cells (a placed shelf is lifted first). */
+  liftBy: (by: number) => void;
   /** Turn the part in hand a quarter turn (or a placed part, which is lifted first). */
   rotatePicked: () => void;
   clearPlaced: () => void;
@@ -349,7 +353,7 @@ export const useMachine = create<MachineState>((set, get) => {
         set({ phase: 'idle', error: kind === 'missing' ? 'This machine has no part that can be taken out; try another one.' : 'This machine cannot be broken that way; try another kind.' });
         return false;
       }
-      set({ mode: 'fix', fix: { puzzle, kind, hand: puzzle.missing.map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, tries: 0, solved: false, hint: false } });
+      set({ mode: 'fix', fix: { puzzle, kind, hand: puzzle.missing.map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false } });
       // Show the broken machine fail first, so the player sees what is wrong.
       await simulate(withPlacements(puzzle, puzzle.start));
       return true;
@@ -364,8 +368,8 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!fix || fix.picking === null || fix.solved) return false;
       const original = fix.hand[fix.picking];
       const others = fix.placed.filter((p) => p.id !== original.id);
-      // Lands on the floor or the platform under the cursor; a taken cell refuses it.
-      const part = dropAt([...fix.puzzle.spec.parts, ...others], original, x, z);
+      // Lands on the floor or the platform under the cursor (a shelf at the chosen height); a taken cell refuses it.
+      const part = dropAt([...fix.puzzle.spec.parts, ...others], original, x, z, { y: fix.lift });
       if (!part) return false;
       const placed = [...others, part];
       const next = fix.hand.findIndex((m) => !placed.some((p) => p.id === m.id));
@@ -390,7 +394,21 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!fix || fix.solved) return;
       const index = fix.hand.findIndex((m) => m.id === id);
       if (index < 0) return;
-      set({ fix: { ...fix, placed: fix.placed.filter((p) => p.id !== id), picking: index }, run: null, result: null, phase: 'idle' });
+      const lifted = fix.placed.find((p) => p.id === id);
+      let placed = fix.placed.filter((p) => p.id !== id);
+      // Whatever stood on a lifted shelf comes up with it, back into the hand.
+      const all = [...fix.puzzle.spec.parts, ...placed];
+      placed = placed.filter((p) => isSupported(all, p));
+      set({ fix: { ...fix, placed, picking: index, lift: lifted?.kind === 'platform' ? lifted.y : fix.lift }, run: null, result: null, phase: 'idle' });
+    },
+
+    liftBy(by) {
+      const { fix } = get();
+      if (!fix || fix.solved || fix.picking === null) return;
+      const part = fix.hand[fix.picking];
+      if (part.kind !== 'platform') return;
+      if (fix.placed.some((p) => p.id === part.id)) get().pickPlaced(part.id);
+      set((s) => (s.fix ? { fix: { ...s.fix, lift: Math.max(0, Math.min(GRID.y - 1, s.fix.lift + by)) } } : {}));
     },
 
     clearPlaced() {

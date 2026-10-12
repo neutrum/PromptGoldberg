@@ -66,8 +66,8 @@ describe('fix-it puzzles', () => {
     expect(puzzle!.missing).toHaveLength(2);
     for (const m of puzzle!.missing) {
       expect(isSupported(spec.parts, m)).toBe(true);
-      // Dropping it back on its own column lands it at the original height.
-      const back = dropAt(puzzle!.spec.parts, m, m.x, m.z);
+      // Dropping it back on its own column lands it at the original height (a shelf at the height the player picks).
+      const back = dropAt(puzzle!.spec.parts, m, m.x, m.z, m.kind === 'platform' ? { y: m.y } : {});
       expect(back?.y).toBe(m.y);
     }
   });
@@ -88,19 +88,30 @@ describe('fix-it puzzles', () => {
 });
 
 describe('connect puzzles', () => {
-  it('keeps the ball, shelves and goal parts and hands out the rest', async () => {
+  it('keeps the ball, the goal parts and their shelves, and hands out the rest, free shelves included', async () => {
     const { makeConnectPuzzle, withPlacements } = await import('../src/puzzle');
     const spec = load('seesaw-cannon-bell.json');
     const puzzle = makeConnectPuzzle(spec);
     expect(puzzle).not.toBeNull();
     expect(puzzle!.kind).toBe('connect');
-    const kept = puzzle!.spec.parts.map((p) => p.kind);
-    expect(kept).toContain('ball');
-    expect(kept).toContain('bell');
-    expect(puzzle!.missing.length).toBeGreaterThan(0);
-    for (const m of puzzle!.missing) expect(['ball', 'platform']).not.toContain(m.kind);
+    // Targets (the bell) and their shelves stay, as does the shelf under the ball; touch-goal parts and free shelves go to the player.
+    expect(puzzle!.spec.parts.map((p) => p.id).sort()).toEqual(['ball', 'bell', 'shelf', 'shelfA']);
+    // Chain order, except that shelfB comes before the seesaw that stands on it.
+    expect(puzzle!.missing.map((m) => m.id)).toEqual(['ramp', 'shelfB', 'seesaw', 'cannon']);
+    expect(puzzle!.missing.find((m) => m.id === 'shelfB')!.y).toBe(2);
     expect(evaluateMachine(spec.goal, simulateSync(puzzle!.spec, { record: false })).success).toBe(false);
     expect(evaluateMachine(spec.goal, simulateSync(withPlacements(puzzle!, puzzle!.missing), { record: false })).success).toBe(true);
+  });
+
+  it('is a route on the sample: the ball on its shelf, the dominoes and bell far away, the ramp in hand', async () => {
+    const { makeConnectPuzzle } = await import('../src/puzzle');
+    const { spread } = await import('../src/names');
+    const spec = load('ramp-dominoes-bell.json');
+    expect(spread(spec)).toBeGreaterThanOrEqual(10);
+    const puzzle = makeConnectPuzzle(spec);
+    expect(puzzle).not.toBeNull();
+    expect(puzzle!.spec.parts.map((p) => p.id).sort()).toEqual(['ball', 'bell', 'row', 'shelf']);
+    expect(puzzle!.missing.map((m) => m.id)).toEqual(['ramp']);
   });
 });
 
@@ -124,5 +135,11 @@ describe('placement', () => {
     expect(dropAt(parts, fan, 3, 2)?.y).toBe(3);
     expect(dropAt(parts, fan, 4, 2)).toBeNull(); // the bell is there
     expect(dropAt(parts, fan, 3, 5)?.y).toBe(0);
+    // A shelf goes at the height the player chooses, even through a cell where something stands on it.
+    const plank = { id: 'plank', kind: 'platform', x: 0, y: 0, z: 0, yaw: 0, length: 2 } as const;
+    expect(dropAt(parts, plank, 6, 2)?.y).toBe(0);
+    expect(dropAt(parts, plank, 6, 2, { y: 5 })?.y).toBe(5);
+    expect(dropAt(parts, plank, 4, 2, { y: 3 })?.y).toBe(3);
+    expect(dropAt(parts, plank, 6, 2, { y: 99 })?.y).toBe(15);
   });
 });

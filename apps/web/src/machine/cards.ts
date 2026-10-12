@@ -18,7 +18,7 @@ export const CARDS: PromptCard[] = [
   { emoji: '🌬️', title: 'Windy day', prompt: 'A fan blows the ball off a shelf into a bucket far below' },
   { emoji: '⚖️', title: 'Seesaw drama', prompt: 'A seesaw tips the ball onto dominoes that ring a bell' },
   { emoji: '🔔', title: 'Double ring', prompt: 'Ring the bell twice' },
-  { emoji: '🧩', title: 'Tiny machine', prompt: 'A machine with only three parts that rings the bell' },
+  { emoji: '🧩', title: 'Tiny machine', prompt: 'The fewest parts you can to ring a bell on the far side of the stage' },
   { emoji: '🏗️', title: 'The big one', prompt: 'The longest chain you can: ramp, seesaw, fan, trampoline, cannon, dominoes, bell' },
   { emoji: '🌧️', title: 'Rainy day', prompt: 'Everything happens under a shelf: ramp, dominoes, and a bell' },
   { emoji: '🏀', title: 'Slam dunk', prompt: 'A trampoline bounces the ball into a bucket on a high shelf' },

@@ -1,5 +1,48 @@
 import { DOMINO_DEFAULT, PLATFORM_DEFAULT } from './kit';
+import { restingHeight } from './placement';
 import type { MachineSpec, Part } from './schema';
+
+/** How far apart (cells, |dx| + |dy| + |dz|) the ball and the farthest goal part must be: a level is a route, not a nudge. */
+export const SPREAD_MIN = 10;
+
+/** The distance from the ball to the farthest goal part, in cells along the axes. */
+export function spread(spec: MachineSpec): number {
+  const ball = spec.parts.find((p) => p.kind === 'ball');
+  if (!ball) return 0;
+  let best = 0;
+  for (const g of spec.goal) {
+    const p = spec.parts.find((q) => q.id === g.part);
+    if (p) best = Math.max(best, Math.abs(p.x - ball.x) + Math.abs(p.y - ball.y) + Math.abs(p.z - ball.z));
+  }
+  return best;
+}
+
+/**
+ * Why a design is not a level yet: the goal sits right next to the start, or a part floats where
+ * no hand could put it. Empty when it is fine.
+ */
+export function layoutProblems(spec: MachineSpec): string[] {
+  const problems: string[] = [];
+  const d = spread(spec);
+  if (d < SPREAD_MIN) {
+    const ball = spec.parts.find((p) => p.kind === 'ball');
+    problems.push(`the farthest goal part is only ${d} cells from the ball (x ${ball?.x}, y ${ball?.y}, z ${ball?.z}); it must be at least ${SPREAD_MIN} cells away counting x, y and z, so the player has a route to build. Move the goal parts across the stage and add parts (shelves, a cannon, a fan, a second ramp) to carry the ball there`);
+  }
+  for (const p of spec.parts) {
+    if (p.kind === 'ball' || p.kind === 'platform') continue;
+    const rest = restingHeight(spec.parts, p.x, p.z);
+    if (p.y !== rest) problems.push(`"${p.id}" (${p.kind}) floats at y ${p.y}: nothing is under it at that height (it would rest at y ${rest}). Set its y to ${rest}, or add a platform whose cells include (${p.x}, ${p.z}) with y ${p.y}`);
+  }
+  return problems;
+}
+
+/** The ball and the targets: the goal parts that are a destination (bucket, bell, dominoes), not a touch on the way. */
+export function targetParts(spec: MachineSpec): Set<string> {
+  const ids = new Set<string>();
+  for (const p of spec.parts) if (p.kind === 'ball') ids.add(p.id);
+  for (const g of spec.goal) if (g.type !== 'touch') ids.add(g.part);
+  return ids;
+}
 
 /**
  * Player-facing names: the kind, numbered in order of appearance when the machine has more than
@@ -19,14 +62,12 @@ export function partNames(parts: Part[]): Map<string, string> {
 }
 
 /**
- * The parts an edit may not touch: the ball and every part the goal names. The player builds
- * the chain between them, so "move the ball above the bucket" would end the game, not play it.
+ * The parts an edit may not touch: the ball and the targets. The player builds the route between
+ * them, so "move the ball above the bucket" would end the game, not play it. A part the ball only
+ * has to touch on the way (a seesaw, a cannon) is mechanism, and may move.
  */
 export function lockedParts(spec: MachineSpec): Set<string> {
-  const ids = new Set<string>();
-  for (const p of spec.parts) if (p.kind === 'ball') ids.add(p.id);
-  for (const g of spec.goal) ids.add(g.part);
-  return ids;
+  return targetParts(spec);
 }
 
 const length = (p: Part) => p.length ?? (p.kind === 'dominoes' ? DOMINO_DEFAULT : p.kind === 'platform' ? PLATFORM_DEFAULT : undefined);
