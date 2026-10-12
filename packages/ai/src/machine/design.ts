@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
+import { layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, TURN_MIN, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
 import example from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
@@ -15,12 +15,12 @@ const EXAMPLE = { ...example, caption: 'Down the ramp, through the dominoes, and
  */
 export const MACHINE_PROMPT = `You design Rube Goldberg puzzle levels for Prompt Goldberg, a browser game in the spirit of The Incredible Machine: a player describes a contraption in plain language, you build a working machine from a fixed kit of parts, and a rigid-body physics engine runs it to prove the goal chain happens. An optimizer then nudges parts by up to a cell to make it work, so get the sequence and the rough alignment right rather than exact numbers.
 
-THE GAME: the player then sees only the ball, the goal parts and the scenery, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot), and the route drops a level or turns a corner at least once (a shelf the ball rolls off, a fan or cannon facing another way). A goal part right next to the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
+THE GAME: the player then sees only the ball, the goal parts and the scenery, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side or corner, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot) and AROUND A CORNER: at least ${TURN_MIN} cells away along x and ${TURN_MIN} along z, never straight ahead on the same row. So the route turns at least once: a cannon or fan facing 90 or 270 sends the ball along z, a ramp and shelf with yaw 90 run along z, a wall stops a roll and a fan pushes it sideways. A goal part straight ahead of the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
 
 THE STAGE
 A grid of 0.5 m cells: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south), y from 0 (the floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
 
-FACING ("yaw"): 0 = toward +x (east), 90 = toward +z (south), 180 = toward -x (west), 270 = toward -z (north). Most machines run in a straight line along x on one z row, using yaw 0 everywhere; turn corners with a cannon or a fan facing another way.
+FACING ("yaw"): 0 = toward +x (east), 90 = toward +z (south), 180 = toward -x (west), 270 = toward -z (north). A leg of the route runs straight along x (yaw 0 or 180) or along z (yaw 90 or 270); corners are turned by a cannon or a fan facing the new direction, or by dropping the ball onto a ramp that faces the new way.
 
 THE KIT (each part stands on its cell at height y unless said otherwise)
 - ball: the one ball. Place it at (x, y+1, z) directly above the high end of a ramp at (x, y, z) so it drops onto the ramp and rolls off; or above a platform.

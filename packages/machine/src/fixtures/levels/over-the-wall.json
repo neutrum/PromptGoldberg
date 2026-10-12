@@ -1,0 +1,99 @@
+{
+  "title": "Garden Wall Hop",
+  "caption": "Roll down the shelf, get launched over the garden wall, and drop into the bucket on the other side.",
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 4,
+      "y": 5,
+      "z": 4,
+      "yaw": 0,
+      "dx": 0.36359128006733954,
+      "dz": -0.15403835126198828
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 3,
+      "y": 5,
+      "z": 4,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 3,
+      "y": 5,
+      "z": 4,
+      "yaw": 0,
+      "length": 6,
+      "dx": -0.4205039571970701,
+      "dz": -0.017064103507436812
+    },
+    {
+      "id": "stand",
+      "kind": "platform",
+      "x": 9,
+      "y": 3,
+      "z": 4,
+      "yaw": 90,
+      "length": 1
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 10,
+      "y": 3,
+      "z": 4,
+      "yaw": 90,
+      "dx": 0.07311214052606374,
+      "dz": 0.062086076592095196
+    },
+    {
+      "id": "wall",
+      "kind": "wall",
+      "x": 9,
+      "y": 0,
+      "z": 8,
+      "yaw": 90,
+      "fixed": true
+    },
+    {
+      "id": "bucket",
+      "kind": "bucket",
+      "x": 9,
+      "y": 0,
+      "z": 12,
+      "yaw": 0,
+      "dx": 0.08454701490700245,
+      "dz": 0.5
+    },
+    {
+      "id": "backstop",
+      "kind": "wall",
+      "x": 9,
+      "y": 0,
+      "z": 13,
+      "yaw": 90,
+      "fixed": true
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "bucket",
+      "part": "bucket"
+    }
+  ],
+  "duration": 12,
+  "level": {
+    "emoji": "🧱",
+    "name": "Over the wall",
+    "mission": "Get the ball over the garden wall and into the bucket on the other side",
+    "order": 1
+  }
+}

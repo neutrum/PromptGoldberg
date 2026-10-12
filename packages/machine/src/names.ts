@@ -4,6 +4,8 @@ import type { MachineSpec, Part } from './schema';
 
 /** How far apart (cells, |dx| + |dy| + |dz|) the ball and the farthest goal part must be: a level is a route, not a nudge. */
 export const SPREAD_MIN = 10;
+/** The farthest target is at least this far from the ball along x AND along z, so the route has to turn a corner. */
+export const TURN_MIN = 4;
 
 /** The distance from the ball to the farthest goal part, in cells along the axes. */
 export function spread(spec: MachineSpec): number {
@@ -24,9 +26,13 @@ export function spread(spec: MachineSpec): number {
 export function layoutProblems(spec: MachineSpec): string[] {
   const problems: string[] = [];
   const d = spread(spec);
+  const ball = spec.parts.find((p) => p.kind === 'ball');
+  const target = farthestTarget(spec);
   if (d < SPREAD_MIN) {
-    const ball = spec.parts.find((p) => p.kind === 'ball');
     problems.push(`the farthest goal part is only ${d} cells from the ball (x ${ball?.x}, y ${ball?.y}, z ${ball?.z}); it must be at least ${SPREAD_MIN} cells away counting x, y and z, so the player has a route to build. Move the goal parts across the stage and add parts (shelves, a cannon, a fan, a second ramp) to carry the ball there`);
+  }
+  if (ball && target && (Math.abs(target.x - ball.x) < TURN_MIN || Math.abs(target.z - ball.z) < TURN_MIN)) {
+    problems.push(`the farthest target "${target.id}" (x ${target.x}, z ${target.z}) is straight ahead of the ball (x ${ball.x}, z ${ball.z}): the route must turn a corner. Put it at least ${TURN_MIN} cells away along x AND ${TURN_MIN} along z, and turn the route with a cannon or fan facing 90 or 270, or a ramp and shelf running along z`);
   }
   for (const p of spec.parts) {
     if (p.kind === 'ball' || p.kind === 'platform') continue;

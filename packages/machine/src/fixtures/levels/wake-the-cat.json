@@ -1,0 +1,95 @@
+{
+  "title": "Wake the Cat Bell",
+  "caption": "Roll over the wall, get launched round the corner, and the dominoes ring the bell to wake the cat.",
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 3,
+      "y": 5,
+      "z": 4,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 3,
+      "y": 4,
+      "z": 4,
+      "yaw": 0,
+      "dx": 0.013723519979976118,
+      "dz": 0.24052548373583704
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 3,
+      "y": 4,
+      "z": 4,
+      "yaw": 0,
+      "length": 5,
+      "dx": 0.24741147283930331,
+      "dz": -0.022364436415955424
+    },
+    {
+      "id": "wall",
+      "kind": "wall",
+      "x": 10,
+      "y": 0,
+      "z": 4,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 12,
+      "y": 0,
+      "z": 4,
+      "yaw": 90
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 12,
+      "y": 0,
+      "z": 10,
+      "yaw": 90,
+      "length": 6,
+      "dx": -0.3023556462721899,
+      "dz": 0.18553392693866044
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 12,
+      "y": 0,
+      "z": 14,
+      "yaw": 0,
+      "dx": 0.1228131705429405,
+      "dz": -0.23294020141474903
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "topple",
+      "part": "row"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 14,
+  "level": {
+    "emoji": "🐱",
+    "name": "Wake the cat",
+    "mission": "Wake the cat on the top shelf by ringing the bell next to it",
+    "order": 4
+  }
+}

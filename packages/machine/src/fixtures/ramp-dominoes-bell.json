@@ -1,5 +1,5 @@
 {
-  "title": "Over the wall",
+  "title": "Over the wall, round the corner",
   "parts": [
     {
       "id": "ball",
@@ -35,23 +35,35 @@
       "fixed": true
     },
     {
-      "id": "row",
-      "kind": "dominoes",
-      "x": 14,
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 13,
       "y": 0,
       "z": 10,
-      "yaw": 0,
+      "yaw": 90
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 13,
+      "y": 0,
+      "z": 17,
+      "yaw": 90,
       "length": 7
     },
     {
       "id": "bell",
       "kind": "bell",
-      "x": 18,
+      "x": 13,
       "y": 0,
-      "z": 10
+      "z": 21
     }
   ],
   "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
     {
       "type": "topple",
       "part": "row"
@@ -61,5 +73,5 @@
       "part": "bell"
     }
   ],
-  "duration": 10
+  "duration": 12
 }

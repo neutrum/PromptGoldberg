@@ -65,6 +65,7 @@ export async function requestValidated<T>(
   onProgress?: (textSoFar: string) => void,
 ): Promise<T> {
   let prompt = req.prompt;
+  let lastProblems = '';
   for (let attempt = 0; attempt <= retries; attempt++) {
     let soFar = '';
     const onText = onProgress && ((delta: string) => {
@@ -82,6 +83,7 @@ export async function requestValidated<T>(
     } catch (err) {
       problems = `- the reply was not valid JSON (${err instanceof Error ? err.message : String(err)})`;
     }
+    lastProblems = problems;
     prompt = `${req.prompt}
 
 Your previous reply was:
@@ -92,7 +94,8 @@ ${problems}
 
 Reply with a corrected JSON object only.`;
   }
-  throw new LlmError('Could not get a valid system design after a retry.');
+  // The last reason travels with the error, so a failed build says what the designer kept getting wrong.
+  throw new LlmError(`Could not get a valid design after ${retries} ${retries === 1 ? 'retry' : 'retries'}. Last problem: ${lastProblems.replace(/^- /, '').slice(0, 300)}`);
 }
 
 /** Prompt -> validated, fixed-up system. Retries once with the validation errors. */

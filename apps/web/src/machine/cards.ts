@@ -1,6 +1,7 @@
 /**
- * Prompt cards: a sentence the AI reliably turns into a fun machine, with a face for the deck.
- * They skip the blank-page moment; the player edits by talking afterwards.
+ * Mission cards: a goal and a place, the way a player should write one. The AI makes the level
+ * from it (targets, scenery, a hidden route) and the player builds the route. They skip the
+ * blank-page moment and show what to type.
  */
 export interface PromptCard {
   emoji: string;
@@ -9,22 +10,22 @@ export interface PromptCard {
 }
 
 export const CARDS: PromptCard[] = [
-  { emoji: '🐱', title: 'Cat on a shelf', prompt: 'My cat knocks the ball off a high shelf and it lands in a bucket' },
-  { emoji: '🍕', title: 'Pizza delivery', prompt: 'A pizza delivery: the ball rolls down a ramp, a cannon fires it over a wall, and it lands in the bucket' },
-  { emoji: '⏰', title: 'Wake-up call', prompt: 'An alarm clock machine: dominoes fall one by one and the last one rings the bell' },
-  { emoji: '🐢', title: 'The lazy one', prompt: 'The slowest machine you can build that still rings the bell' },
-  { emoji: '🎪', title: 'Circus act', prompt: 'A trampoline act: the ball bounces twice, then lands in a bucket' },
-  { emoji: '🚀', title: 'Rocket launch', prompt: 'Launch the ball with a cannon over a wall into a bucket' },
-  { emoji: '🌬️', title: 'Windy day', prompt: 'A fan blows the ball off a shelf into a bucket far below' },
-  { emoji: '⚖️', title: 'Seesaw drama', prompt: 'A seesaw tips the ball onto dominoes that ring a bell' },
-  { emoji: '🔔', title: 'Double ring', prompt: 'Ring the bell twice' },
-  { emoji: '🧩', title: 'Tiny machine', prompt: 'The fewest parts you can to ring a bell on the far side of the stage' },
-  { emoji: '🏗️', title: 'The big one', prompt: 'The longest chain you can: ramp, seesaw, fan, trampoline, cannon, dominoes, bell' },
-  { emoji: '🌧️', title: 'Rainy day', prompt: 'Everything happens under a shelf: ramp, dominoes, and a bell' },
-  { emoji: '🏀', title: 'Slam dunk', prompt: 'A trampoline bounces the ball into a bucket on a high shelf' },
-  { emoji: '🎳', title: 'Strike!', prompt: 'Knock over two rows of dominoes, then ring the bell' },
-  { emoji: '🏰', title: 'Castle siege', prompt: 'A cannon shoots the ball over a tall wall; behind it dominoes topple and a bell rings' },
-  { emoji: '🛗', title: 'Going down', prompt: 'The ball drops from shelf to shelf, four shelves, and lands in a bucket at the bottom' },
+  { emoji: '🐱', title: 'Wake the cat', prompt: 'Wake the cat asleep on the top shelf by ringing the bell next to it' },
+  { emoji: '🍕', title: 'Pizza delivery', prompt: 'Get the pizza into the oven, but there is a guard wall in the way' },
+  { emoji: '⛪', title: 'Church bell', prompt: 'Ring the church bell from across the river' },
+  { emoji: '🏰', title: 'Castle siege', prompt: 'Knock over the dominoes hiding behind the castle wall' },
+  { emoji: '🌬️', title: 'Windy alley', prompt: 'A windy alley: the ball has to be blown sideways into a bucket' },
+  { emoji: '🏀', title: 'Rooftop', prompt: 'Bounce the ball up onto a rooftop ledge behind a wall and ring the bell there' },
+  { emoji: '⚖️', title: 'The drawbridge', prompt: 'A seesaw drawbridge drops the ball down past a wall into the moat bucket round the corner' },
+  { emoji: '🚀', title: 'Launch day', prompt: 'A rocket launch: fire the ball over the hangar wall into the landing bucket far away' },
+  { emoji: '🔔', title: 'Double ring', prompt: 'Ring the bell twice in a temple with a wall around it' },
+  { emoji: '🎳', title: 'Strike!', prompt: 'Knock over two rows of dominoes in a bowling alley with a divider wall' },
+  { emoji: '🧀', title: 'Mouse trap', prompt: 'Get the cheese ball to the mouse in the far corner of the kitchen, past the counter wall' },
+  { emoji: '🛗', title: 'Going down', prompt: 'A parking garage: the ball goes down ramp by ramp, round the corners, into a bucket at the bottom' },
+  { emoji: '🏔️', title: 'Mountain pass', prompt: 'Carry the ball over the mountain wall and down into the village bell' },
+  { emoji: '🧪', title: 'The lab', prompt: 'A mad lab: the ball must cross the room, dodge the bench wall, and ring the alarm bell' },
+  { emoji: '🎪', title: 'Circus act', prompt: 'A circus act: the ball flies over the lion wall into the clown bucket on the other side of the ring' },
+  { emoji: '🧩', title: 'Tiny level', prompt: 'The fewest parts you can to ring a bell round a corner, behind a wall' },
 ];
 
 /** `n` cards starting at `offset`, wrapping around the deck. */

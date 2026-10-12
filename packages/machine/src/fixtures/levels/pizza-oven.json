@@ -1,0 +1,76 @@
+{
+  "title": "Pizza past the guard",
+  "caption": "The pizza rolls off the high shelf, sails over the guard wall, and gets shot round the corner into the oven.",
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 3,
+      "y": 6,
+      "z": 6,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 3,
+      "y": 5,
+      "z": 6,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 3,
+      "y": 5,
+      "z": 6,
+      "yaw": 0,
+      "length": 6,
+      "fixed": true
+    },
+    {
+      "id": "guard",
+      "kind": "wall",
+      "x": 9,
+      "y": 0,
+      "z": 6,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 12,
+      "y": 0,
+      "z": 6,
+      "yaw": 90
+    },
+    {
+      "id": "oven",
+      "kind": "bucket",
+      "x": 12,
+      "y": 0,
+      "z": 13,
+      "yaw": 0,
+      "dx": -0.3586562881246209,
+      "dz": -0.4325715540908277
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "bucket",
+      "part": "oven"
+    }
+  ],
+  "duration": 14,
+  "level": {
+    "emoji": "🍕",
+    "name": "Pizza delivery",
+    "mission": "Get the pizza into the oven, but there is a guard wall in the way",
+    "order": 3
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import demo from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import { parseMachine, PUZZLE_KINDS, TARGET_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
 import { CARDS, dealCards, EDIT_IDEAS } from './cards';
+import { LEVELS } from './levels';
 import { MachineScene } from './MachineScene';
 import { DAILY_LADDER, useMachine } from './machineStore';
 
@@ -67,6 +68,23 @@ function CardDeck({ onPick, big = false }: { onPick: () => void; big?: boolean }
   );
 }
 
+/** Example levels the AI built from one sentence each; they open at once. */
+function LevelStrip({ onPick }: { onPick: () => void }) {
+  const busy = useMachine((s) => s.ai.busy);
+  const current = useMachine((s) => s.level?.slug);
+  if (!LEVELS.length) return null;
+  return (
+    <div className="levels">
+      {LEVELS.map((l) => (
+        <button key={l.slug} className={`level ${current === l.slug ? 'active' : ''}`} disabled={busy} onClick={() => { onPick(); void useMachine.getState().playLevel(l); }} title={`“${l.mission}”`}>
+          <span className="card-face">{l.emoji}</span>
+          <span className="card-title">{l.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** First visit: what this is, and three ways in. The sample machine keeps running behind it. */
 function Welcome({ onClose }: { onClose: () => void }) {
   const daily = useMachine((s) => s.daily);
@@ -74,15 +92,31 @@ function Welcome({ onClose }: { onClose: () => void }) {
     <div className="welcome" role="dialog" aria-label="Welcome">
       <div className="welcome-card">
         <h1 className="logo">Prompt<span>Goldberg</span></h1>
-        <p className="tagline">Describe a machine in one sentence. <b>The AI designs it</b> and real physics proves it runs. Then you get the parts: <b>build the chain that makes it happen.</b></p>
-        <p className="muted small">Pick a card to get one built:</p>
+        <p className="tagline">Tell the AI <b>a goal and a place</b>. It builds the level: the targets, the walls, and a route it keeps to itself. <b>You get the parts and build the route.</b> Real physics is the judge.</p>
+        {LEVELS.length > 0 && <p className="muted small">Play a level the AI already made:</p>}
+        <LevelStrip onPick={onClose} />
+        <p className="muted small">{LEVELS.length ? 'Or make your own. Pick a mission:' : 'Pick a mission:'}</p>
         <CardDeck onPick={onClose} big />
         <div className="welcome-actions">
-          <button className="primary" onClick={onClose}>✍️ I'll describe my own</button>
-          <button onClick={() => { onClose(); void useMachine.getState().playDaily(); }} disabled={daily.loading}>📅 Today's fix-it puzzle</button>
+          <button className="primary" onClick={onClose}>✍️ I'll write my own mission</button>
+          <button onClick={() => { onClose(); void useMachine.getState().playDaily(); }} disabled={daily.loading}>📅 Today's level</button>
         </div>
         <p className="muted small">Drag to look around · wheel to zoom</p>
       </div>
+    </div>
+  );
+}
+
+/** After an example level: this is what one sentence makes; now write yours. */
+function MakeYourOwn({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | null> }) {
+  const level = useMachine((s) => s.level);
+  const solved = useMachine((s) => s.fix?.solved ?? false);
+  const builds = useMachine((s) => s.builds);
+  if (!level || !solved || builds > 0) return null;
+  return (
+    <div className="coach-pop">
+      <span>This level came from one sentence: <i>“{level.mission}”</i>. <b>Now make your own</b>: tell the AI a goal and a place.</span>
+      <button className="primary" onClick={() => inputRef.current?.focus()}>✍️ Write a mission</button>
     </div>
   );
 }
@@ -150,11 +184,11 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
           value={text}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={400}
-          placeholder={editing ? 'Change it: “move the fan closer”, “add a trampoline”… Click a part to name it.' : 'Describe a machine… e.g. get the ball into the bucket using dominoes and a fan'}
+          placeholder={editing ? 'Change it: “move the fan closer”, “add a trampoline”… Click a part to name it.' : 'Your mission: a goal and a place, e.g. “ring the bell behind the castle wall”'}
           disabled={ai.busy}
           aria-label="Describe your machine"
         />
-        <button className="primary" disabled={ai.busy || !text.trim()}>{ai.busy ? 'Building…' : editing ? 'Change' : 'Build'}</button>
+        <button className="primary" disabled={ai.busy || !text.trim()}>{ai.busy ? 'Building…' : editing ? 'Change' : 'Make the level'}</button>
       </form>
       {!ai.busy && editing && !deck && (
         <div className="examples">
@@ -200,6 +234,7 @@ function FixPanel() {
   const [breaking, setBreaking] = useState(false);
   const allPlaced = fix.puzzle.missing.every((m) => fix.placed.some((p) => p.id === m.id));
   const failed = phase === 'done' && result && !result.success ? result.steps.find((s) => !s.satisfied) : null;
+  const level = useMachine((s) => s.level);
   const inDaily = !!daily.date;
   const lastStage = daily.stage >= DAILY_LADDER.length;
   const stageLabel = inDaily ? `Daily ${Math.min(daily.stage, DAILY_LADDER.length)}/${DAILY_LADDER.length}: ` : fix.kind === 'connect' ? '' : 'Fix it: ';
@@ -219,6 +254,7 @@ function FixPanel() {
     <div className="mgoal mfix">
       <div className="mtitle">
         <h2>{stageLabel}{fix.puzzle.solution.title}</h2>
+        {level && <p className="mission">Mission: “{level.mission}”</p>}
         <p>{fix.solved ? `Fixed in ${tries(fix.tries)}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}` : KIND_LABEL[fix.kind].blurb}</p>
       </div>
       <ChainList goal={fix.puzzle.solution.goal} parts={fix.puzzle.solution.parts} />
@@ -344,9 +380,9 @@ export function MachineScreen() {
       <div className="hud-top">
         <div className="hud-left mbrand">
           <button className="brand" onClick={() => setWelcome(true)} title="What is this?">Prompt <b>Goldberg</b></button>
-          <span className="mtag">Describe a machine. The AI builds it. Physics proves it runs.</span>
+          <span className="mtag">One sentence makes a level. You build the route. Physics judges.</span>
         </div>
-        <div className="hud-right"><ModeSwitch /><DailyButton /></div>
+        <div className="hud-right"><ModeSwitch />{LEVELS.length > 0 && <button onClick={() => setWelcome(true)} title="Example levels and missions">🎮 Levels</button>}<DailyButton /></div>
       </div>
       <div className="mside">
         <GoalPanel />
@@ -354,6 +390,7 @@ export function MachineScreen() {
         {error && <div className="error-inline">{error}</div>}
       </div>
       <div className="hud-bottom">
+        {prompting && <MakeYourOwn inputRef={inputRef} />}
         {prompting && <Coach />}
         {prompting && <PromptBar inputRef={inputRef} />}
       </div>

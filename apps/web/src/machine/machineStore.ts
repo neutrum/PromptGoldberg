@@ -5,6 +5,7 @@ import {
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
 import { getDailyMachine, makePuzzle, simulateInWorker, streamMachine } from './machineClient';
+import type { Level } from './levels';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -89,6 +90,9 @@ interface MachineState {
   finish: () => void;
   stopAi: () => void;
 
+  /** The example level being played, if any (its mission sentence is shown as what to type). */
+  level: Level | null;
+  playLevel: (level: Level) => Promise<void>;
   /** Today's shared fix-it ladder: the same machine broken three ways, tries add up. */
   daily: { date: string; loading: boolean; best: Record<string, number>; stage: number; tries: number };
   playDaily: () => Promise<void>;
@@ -161,8 +165,8 @@ export const useMachine = create<MachineState>((set, get) => {
   const aiStream = async (path: '/machine' | '/machine/edit', body: unknown) => {
     aiAbort?.abort();
     aiAbort = new AbortController();
-    // A new or changed machine is never the daily any more: its tries must not count as a daily best.
-    set((s) => ({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
+    // A new or changed machine is never the daily or an example level any more: its tries must not count as a daily best.
+    set((s) => ({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null, level: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let delivered = false;
     const accept = async (raw: MachineSpec, rank: MachineRank, moved: { id: string; cells: number }[] = []) => {
@@ -246,6 +250,12 @@ export const useMachine = create<MachineState>((set, get) => {
     setPuzzle(on) {
       set({ puzzle: on });
       try { localStorage.setItem(PUZZLE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
+    },
+    level: null,
+    async playLevel(level) {
+      aiAbort?.abort();
+      set((s) => ({ ai: idleAi, working: false, error: null, level, daily: { ...s.daily, date: '', stage: 0, tries: 0 }, machine: level.spec, rank: 2, proven: true, moved: [], mode: 'build', fix: null, veiled: true }));
+      if (!(await get().startFix('connect'))) await get().load(level.spec, { rank: 2, proven: true });
     },
     daily: { date: '', loading: false, best: loadBest(), stage: 0, tries: 0 },
     run: null,

@@ -46,12 +46,17 @@ function suspects(spec: MachineSpec, run: MachineRun, result: MachineResult): st
   for (const e of touches.slice(-3).reverse()) push(e.part);
   push(spec.parts.find((p) => p.kind === 'ball')?.id);
   for (const p of spec.parts) push(p.id);
-  return order;
+  // Scenery is the level: it is never nudged.
+  const scenery = new Set(spec.parts.filter((p) => p.fixed).map((p) => p.id));
+  return order.filter((id) => !scenery.has(id));
 }
 
-/** Fine offsets (within the cell) and, less often, a whole-cell move or a height change. */
+/**
+ * Fine offsets (within the cell) and, less often, a whole-cell move or a height change. A shelf
+ * only shifts within its cell: a whole-cell move would pull the floor from under what stands on it.
+ */
 function perturb(p: Part, rand: () => number, scale: number): Part {
-  const r = rand();
+  const r = p.kind === 'platform' ? 0 : rand();
   if (r < 0.7) {
     return { ...p, dx: clamp((p.dx ?? 0) + (rand() - 0.5) * scale, -0.5, 0.5), dz: clamp((p.dz ?? 0) + (rand() - 0.5) * scale, -0.5, 0.5) };
   }

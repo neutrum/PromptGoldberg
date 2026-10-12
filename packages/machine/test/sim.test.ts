@@ -29,7 +29,8 @@ describe('simulation', () => {
   });
 
   it('every fixture machine works, or the optimizer makes it work', () => {
-    for (const file of readdirSync(FIXTURES)) {
+    const files = [...readdirSync(FIXTURES).filter((f) => f.endsWith('.json')), ...readdirSync(join(FIXTURES, 'levels')).map((f) => `levels/${f}`)];
+    for (const file of files) {
       const spec = load(file);
       const result = evaluateMachine(spec.goal, simulateSync(spec, { record: false }));
       if (result.success) continue;
@@ -103,16 +104,17 @@ describe('connect puzzles', () => {
     expect(evaluateMachine(spec.goal, simulateSync(withPlacements(puzzle!, puzzle!.missing), { record: false })).success).toBe(true);
   });
 
-  it('is a route on the sample: the ball on its shelf, the dominoes and bell far away, the ramp in hand', async () => {
+  it('is a level on the sample: ball on its shelf, a wall in the way, targets round the corner, ramp and cannon in hand', async () => {
     const { makeConnectPuzzle } = await import('../src/puzzle');
-    const { spread } = await import('../src/names');
+    const { layoutProblems, spread } = await import('../src/names');
     const spec = load('ramp-dominoes-bell.json');
     expect(spread(spec)).toBeGreaterThanOrEqual(10);
+    expect(layoutProblems(spec)).toEqual([]);
     const puzzle = makeConnectPuzzle(spec);
     expect(puzzle).not.toBeNull();
-    // The fixed wall is scenery: it stays, and the route has to clear it.
+    // The fixed wall is scenery: it stays, and the route has to clear it; the cannon turns the corner, so it is the player's.
     expect(puzzle!.spec.parts.map((p) => p.id).sort()).toEqual(['ball', 'bell', 'row', 'shelf', 'wall']);
-    expect(puzzle!.missing.map((m) => m.id)).toEqual(['ramp']);
+    expect(puzzle!.missing.map((m) => m.id)).toEqual(['ramp', 'cannon']);
   });
 });
 

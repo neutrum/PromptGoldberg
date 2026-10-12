@@ -22,16 +22,18 @@ describe('createMachine', () => {
   });
 
   it('nudges a design that almost works, and asks for a redesign with the run story when it cannot', async () => {
-    const broken = fixture('fan-trampoline-bucket.json');
-    // A hopeless design first (bucket far away), then one the optimizer can fix.
-    const hopeless = { ...broken, parts: broken.parts.map((p: { id: string }) => (p.id === 'bucket' ? { ...p, x: 22, z: 2 } : p)) };
+    const level = fixture('ramp-dominoes-bell.json');
+    // The sample with its cannon two cells past the wall instead of one: the ball just misses it until nudged.
+    const broken = { ...level, parts: level.parts.map((p: { id: string }) => (p.id === 'cannon' ? { ...p, x: 15 } : p)) };
+    // A hopeless design first (the bell nowhere near the dominoes), then the one the optimizer can fix.
+    const hopeless = { ...level, parts: level.parts.map((p: { id: string }) => (p.id === 'bell' ? { ...p, x: 22, z: 2 } : p)) };
     const llm = new FakeLlm([reply(hopeless), reply(broken)]);
-    const res = await createMachine({ prompt: 'fan and trampoline' }, { llm, physics: createPhysics('inline'), budget: 250, timeLimitMs: 40_000 });
+    const res = await createMachine({ prompt: 'over the wall and round the corner' }, { llm, physics: createPhysics('inline'), budget: 250, timeLimitMs: 40_000 });
     expect(res.solved).toBe(true);
     expect(res.attempts).toBe(2);
     expect(res.moved.length).toBeGreaterThan(0);
     expect(llm.requests[1].prompt).toMatch(/did not work/);
-    expect(llm.requests[1].prompt).toMatch(/touch (ramp|deck|fan)/);
+    expect(llm.requests[1].prompt).toMatch(/touch (ramp|shelf|wall|cannon)/);
   }, 60_000);
 
   it('retries once when the reply is not a valid machine', async () => {
