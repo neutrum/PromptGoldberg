@@ -72,3 +72,9 @@
 .mfix .small { font-size: 12px; margin-bottom: 8px; }
 .mbreak { margin-top: 8px; margin-bottom: 0; }
 .mnote { color: #ff8a80; font-size: 13px; margin-bottom: 8px; }
+
+/* Name of the part under the pointer, when a click would put it in the prompt. */
+.name-tag { white-space: nowrap; font-size: 12px; padding: 3px 9px; border-radius: 999px; background: rgba(11, 14, 26, 0.9); border: 1px solid rgba(255, 210, 122, 0.6); color: #ffd27a; }
+.name-tag span { color: var(--muted); }
+.name-tag.locked { border-color: rgba(255, 255, 255, 0.25); color: #e8ecff; }
+.mprompt .examples .lock { font-size: 12px; align-self: center; }

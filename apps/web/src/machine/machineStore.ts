@@ -1,5 +1,5 @@
 import {
-  dropAt, parseMachine, PUZZLE_KINDS, withPlacements,
+  dropAt, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind,
 } from '@og/machine';
 import { create } from 'zustand';
@@ -39,6 +39,10 @@ export interface FixState {
 
 interface MachineState {
   prompt: string;
+  /** What the player is typing in the prompt bar; parts clicked on the stage are added here. */
+  draft: string;
+  /** Bumped when the draft wants the caret (after a click on the stage). */
+  draftFocus: number;
   machine: MachineSpec | null;
   rank: MachineRank;
   /** Versions are still arriving from the AI. */
@@ -69,6 +73,9 @@ interface MachineState {
   error: string | null;
 
   setPrompt: (p: string) => void;
+  setDraft: (d: string) => void;
+  /** Put a part's name ("dominoes #2") into the draft, so "move " + a click reads "move dominoes #2". */
+  insertPart: (id: string) => void;
   create: (prompt: string) => Promise<void>;
   edit: (instruction: string) => Promise<void>;
   load: (machine: MachineSpec, meta?: { rank?: MachineRank; proven?: boolean; moved?: { id: string; cells: number }[] }) => Promise<void>;
@@ -113,6 +120,11 @@ function loadBest(): Record<string, number> {
 let aiAbort: AbortController | null = null;
 let loadSeq = 0;
 
+/** Same parts in the same cells (the optimizer's fine offsets aside). */
+function unchanged(a: MachineSpec, b: MachineSpec): boolean {
+  return a.parts.length === b.parts.length && a.parts.every((p) => { const q = b.parts.find((x) => x.id === p.id); return !!q && samePlace(p, q); });
+}
+
 /** Where to stop: a beat after the last goal step or the ball leaving, else the whole run. */
 function playbackEnd(run: MachineRun, result: MachineResult): number {
   const times = result.steps.flatMap((s) => (s.t !== undefined ? [s.t] : []));
@@ -143,7 +155,8 @@ export const useMachine = create<MachineState>((set, get) => {
   const aiStream = async (path: '/machine' | '/machine/edit', body: unknown) => {
     aiAbort?.abort();
     aiAbort = new AbortController();
-    set({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null });
+    // A new or changed machine is never the daily any more: its tries must not count as a daily best.
+    set((s) => ({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let delivered = false;
     const accept = async (raw: MachineSpec, rank: MachineRank, moved: { id: string; cells: number }[] = []) => {
@@ -184,14 +197,18 @@ export const useMachine = create<MachineState>((set, get) => {
             }
             void accept(e.machine, e.status === 'solved' ? 1 : 0);
             break;
-          case 'machine':
+          case 'machine': {
             log(e.solved ? `Verified: the machine works${e.moved.length ? ` after nudging ${e.moved.length} part${e.moved.length > 1 ? 's' : ''}` : ''}.` : 'Could not make it work; here is the closest attempt.');
+            // An edit that left every part where it was: the request asked for a fixed part to move, most likely.
+            const before = get().machine;
+            if (path === '/machine/edit' && before && unchanged(before, e.machine)) log('Nothing moved: the ball and the goal parts stay where they are. Change the parts between them instead.');
             set({ proven: e.solved });
             void accept(e.machine, 2, e.moved).then(() => set((s) => ({
               ai: { ...idleAi, lines: s.ai.lines }, working: false, proven: e.solved,
               builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
             })));
             break;
+          }
           case 'error':
             set((s) => ({ ai: { ...s.ai, error: e.error }, working: false }));
             break;
@@ -206,6 +223,8 @@ export const useMachine = create<MachineState>((set, get) => {
 
   return {
     prompt: '',
+    draft: '',
+    draftFocus: 0,
     machine: null,
     rank: 0,
     working: false,
@@ -232,6 +251,16 @@ export const useMachine = create<MachineState>((set, get) => {
     error: null,
 
     setPrompt: (prompt) => set({ prompt }),
+    setDraft: (draft) => set({ draft }),
+
+    insertPart(id) {
+      const { fix, machine, draft } = get();
+      const parts = fix ? fix.puzzle.solution.parts : machine?.parts;
+      const name = parts && partNames(parts).get(id);
+      if (!name) return;
+      const before = draft.replace(/\s+$/, '');
+      set((s) => ({ draft: `${before}${before ? ' ' : ''}${name} `, draftFocus: s.draftFocus + 1 }));
+    },
 
     create(prompt) {
       set({ prompt, machine: null, run: null, result: null, rank: 0, proven: false, moved: [], phase: 'idle', time: 0, celebrated: 0 });

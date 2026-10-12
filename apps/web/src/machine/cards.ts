@@ -32,4 +32,5 @@ export function dealCards(offset: number, n = 3): PromptCard[] {
   return Array.from({ length: n }, (_, k) => CARDS[(offset + k) % CARDS.length]);
 }
 
-export const EDIT_IDEAS = ['make it longer', 'swap the fan for a cannon', 'add a trampoline', 'make it ring the bell twice', 'end in a bucket instead'];
+/** Changes to the mechanism; the ball and the goal parts are fixed, so none of these touch them. */
+export const EDIT_IDEAS = ['make it longer', 'swap the fan for a cannon', 'add a trampoline', 'make it ring the bell twice', 'add a seesaw before the dominoes'];

@@ -97,7 +97,7 @@ function Coach() {
   return (
     <div className="coach-pop">
       {step === 0
-        ? <span>It runs! Now <b>change it by talking</b>: try “add a trampoline” or “make it ring the bell twice”. Each change is a new puzzle.</span>
+        ? <span>It runs! Now <b>change it by talking</b>: try “add a trampoline” or “make it ring the bell twice”. <b>Click a part</b> to put its name in the prompt. Each change is a new puzzle.</span>
         : <span>Other breaks: <b>🔧 Break it again</b> hides a part or moves one. The 📅 Daily is the same machine for everyone.</span>}
       <button onClick={next}>{step === 0 ? 'Next' : 'Got it'}</button>
     </div>
@@ -120,16 +120,25 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
   const ai = useMachine((s) => s.ai);
   const machine = useMachine((s) => s.machine);
   const builds = useMachine((s) => s.builds);
-  const { create, edit } = useMachine.getState();
-  const [text, setText] = useState('');
+  const text = useMachine((s) => s.draft);
+  const draftFocus = useMachine((s) => s.draftFocus);
+  const { create, edit, setDraft } = useMachine.getState();
   const [deck, setDeck] = useState(false);
   // Edits apply to a machine the player built; the sample is only there to watch.
   const editing = !!machine && !ai.busy && builds > 0;
+  // A part clicked on the stage lands in the draft; put the caret after it.
+  useEffect(() => {
+    if (!draftFocus) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [draftFocus, inputRef]);
   const submit = () => {
     const t = text.trim();
     if (!t || ai.busy) return;
     void (editing && !startsFresh(t) ? edit(t) : create(t));
-    setText('');
+    setDraft('');
   };
   return (
     <div className="mprompt">
@@ -139,9 +148,9 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
         <input
           ref={inputRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => setDraft(e.target.value)}
           maxLength={400}
-          placeholder={editing ? 'Change it: “swap the fan for a cannon”, or describe a new machine…' : 'Describe a machine… e.g. get the ball into the bucket using dominoes and a fan'}
+          placeholder={editing ? 'Change it: “move the fan closer”, “add a trampoline”… Click a part to name it.' : 'Describe a machine… e.g. get the ball into the bucket using dominoes and a fan'}
           disabled={ai.busy}
           aria-label="Describe your machine"
         />
@@ -149,7 +158,8 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
       </form>
       {!ai.busy && editing && !deck && (
         <div className="examples">
-          {EDIT_IDEAS.map((ex) => <button key={ex} onClick={() => setText(ex)}>{ex}</button>)}
+          <span className="muted lock" title="The ball and the parts in the goal stay where they are. You change the chain between them.">🔒 ball &amp; goal parts stay put</span>
+          {EDIT_IDEAS.map((ex) => <button key={ex} onClick={() => setDraft(ex)}>{ex}</button>)}
         </div>
       )}
     </div>

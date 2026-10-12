@@ -1,7 +1,8 @@
 import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
-import { designMachine, editMachineDesign, editMachineRequest, redesignMachine, sketchMachine, type MachineDesign } from './design';
+import type { Validation } from '../llm/design';
+import { designMachine, editMachineDesign, editMachineRequest, redesignMachine, sketchMachine, validateMachineEdit, type MachineDesign } from './design';
 import type { Physics } from './physics';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
@@ -36,6 +37,8 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
   firstMessage: string;
   design: (calls: Completion[], onProgress: (textSoFar: string) => void) => Promise<MachineDesign>;
   request: string;
+  /** What every reply must satisfy, redesigns included (edits keep the ball and goal parts fixed). */
+  validate?: (json: unknown) => Validation<MachineDesign>;
 }): Promise<MachineEvent> {
   const { maxAttempts, signal } = deps;
   const calls: Completion[] = [];
@@ -71,7 +74,7 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
       try {
         design = await redesignMachine(deps.llm, {
           request: loop.request, previous: prev.spec, result: prev.result, events: prev.events, evals: prev.evals,
-        }, calls, sketcher(attempt));
+        }, calls, sketcher(attempt), loop.validate);
       } catch (err) {
         if (signal?.aborted) throw err;
         notes.push(`Redesign ${attempt} failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -130,5 +133,6 @@ export function editMachine(deps: MachinePipelineDeps, machine: MachineSpec, ins
     firstMessage: `Applying your change: ${instruction}`,
     design: (calls, onProgress) => editMachineDesign(deps.llm, machine, instruction, calls, onProgress),
     request: editMachineRequest(machine, instruction),
+    validate: validateMachineEdit(machine),
   });
 }

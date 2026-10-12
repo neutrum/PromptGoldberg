@@ -10,3 +10,4 @@ export * from './nudge';
 export * from './api';
 export * from './puzzle';
 export * from './placement';
+export * from './names';

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MachineSpec, Part, parseMachine, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
+import { lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
 import example from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
@@ -86,6 +86,32 @@ export function validateMachineDesign(json: unknown): Validation<MachineDesign> 
   return { ok: true, value: { spec, notes: [] } };
 }
 
+/**
+ * An edit is a design that also keeps the lock: the ball and the goal parts stay, the goal does
+ * not get easier. The prompt says so too, but this is what is trusted; a reply that breaks it is
+ * sent back with the reason, like any other invalid machine.
+ */
+export function validateMachineEdit(original: MachineSpec): (json: unknown) => Validation<MachineDesign> {
+  return (json) => {
+    const v = validateMachineDesign(json);
+    if (!v.ok) return v;
+    const problems = lockProblems(original, v.value.spec);
+    return problems.length ? { ok: false, problems: problems.map((p) => `- ${p}`).join('\n') } : v;
+  };
+}
+
+/** The fixed parts and the player's names for every part, for the edit prompt. */
+export function describeLocks(spec: MachineSpec): string {
+  const names = partNames(spec.parts);
+  const locked = [...lockedParts(spec)].flatMap((id) => {
+    const p = spec.parts.find((q) => q.id === id);
+    return p ? [`"${p.id}" (the ${names.get(id)}) at x ${p.x}, y ${p.y}, z ${p.z}, yaw ${p.yaw}${p.length ? `, length ${p.length}` : ''}`] : [];
+  });
+  return `Names the player uses for the parts: ${[...names].map(([id, name]) => `${name} = "${id}"`).join(', ')}.
+
+FIXED PARTS (the game's rule): the ball and every part the goal names stay exactly as they are, same id, kind, x, y, z, yaw and length: ${locked.join('; ')}. Never move, remove, replace or re-aim them. Every goal step stays in the same order; a bell may ring more times, never fewer; steps may be added. Players build the chain between the fixed parts themselves, so moving a fixed part would end the game instead of changing it. If the request asks to change a fixed part, leave that part alone and apply the rest of the request to the other parts (add, move or swap those).`;
+}
+
 /** Parts that are already complete in a partly streamed reply, so a UI can show them appear. */
 export function sketchMachine(textSoFar: string): { title?: string; parts: Part[] } {
   const rawTitle = textSoFar.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
@@ -154,7 +180,10 @@ export function describeRun(events: MachineEvent[]): string {
 }
 
 /** Ask for a fix after the physics (plus the optimizer's nudges) could not make the chain happen. */
-export async function redesignMachine(llm: LlmBackend, ctx: MachineRedesignContext, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<MachineDesign> {
+export async function redesignMachine(
+  llm: LlmBackend, ctx: MachineRedesignContext, calls: Completion[], onProgress?: (textSoFar: string) => void,
+  validate: (json: unknown) => Validation<MachineDesign> = validateMachineDesign,
+): Promise<MachineDesign> {
   const failed = ctx.result.steps.find((s) => !s.satisfied);
   const prompt = `${ctx.request}
 
@@ -168,19 +197,20 @@ Previous machine:
 ${JSON.stringify(ctx.previous)}
 
 Fix it while keeping the idea${failed ? `, focusing on why "${failed.note}"` : ''}: check that each part is reachable from the one before (right row, right height, within rolling or flying range), that shelves support what stands on them, and that the ball cannot roll off an edge before the next part. Reply with the full JSON object.`;
-  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validateMachineDesign, calls, 1, onProgress);
+  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validate, calls, 1, onProgress);
 }
 
-/** Talk-to-edit: apply a plain-language change to an existing machine. */
+/** Talk-to-edit: apply a plain-language change to an existing machine, keeping the ball and the goal parts where they are. */
 export async function editMachineDesign(llm: LlmBackend, spec: MachineSpec, instruction: string, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<MachineDesign> {
   const prompt = `${editMachineRequest(spec, instruction)}
 
 Current machine:
 ${JSON.stringify(spec)}
 
-Apply the change and keep everything else as it is where possible (same ids and positions for untouched parts). Update the goal and caption if the request changes what should happen. Reply with the full JSON object.`;
-  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validateMachineDesign, calls, 1, onProgress);
+Apply the change and keep everything else as it is where possible (same ids and positions for untouched parts). Update the caption, and add goal steps, if the request changes what should happen. Reply with the full JSON object.`;
+  return requestValidated(llm, { system: MACHINE_PROMPT, prompt, thinking: 'off', maxTokens: 4000, model: MODEL() }, validateMachineEdit(spec), calls, 1, onProgress);
 }
 
+/** The edit request as the redesign step repeats it: the change, plus the lock it must keep. */
 export const editMachineRequest = (spec: MachineSpec, instruction: string) =>
-  `Edit the machine "${spec.title}" with this change requested by the player:\n\n${instruction}`;
+  `Edit the machine "${spec.title}" with this change requested by the player:\n\n${instruction}\n\n${describeLocks(spec)}`;

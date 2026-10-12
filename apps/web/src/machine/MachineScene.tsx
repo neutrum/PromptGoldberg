@@ -1,6 +1,6 @@
-import { Grid, OrbitControls } from '@react-three/drei';
+import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, KIT, partCentre, restingHeight, type Body, type MachineRun, type Part } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, KIT, lockedParts, partCentre, partNames, restingHeight, type Body, type MachineRun, type Part } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -25,7 +25,9 @@ function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
   return g;
 }
 
-function BodyMesh({ body, meshRef, ghost, onClick, glow }: { body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string; onClick?: () => void; glow?: boolean }) {
+function BodyMesh({ body, meshRef, ghost, onClick, onHover, glow, cursor = 'grab' }: {
+  body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string; onClick?: () => void; onHover?: (over: boolean) => void; glow?: boolean; cursor?: string;
+}) {
   const geometry = useMemo(() => {
     const s = body.shape;
     switch (s.kind) {
@@ -56,8 +58,8 @@ function BodyMesh({ body, meshRef, ghost, onClick, glow }: { body: Body; meshRef
       castShadow={!sensor}
       receiveShadow
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
-      onPointerOver={onClick ? (e) => { e.stopPropagation(); document.body.style.cursor = 'grab'; } : undefined}
-      onPointerOut={onClick ? () => { document.body.style.cursor = ''; } : undefined}
+      onPointerOver={onClick ? (e) => { e.stopPropagation(); document.body.style.cursor = cursor; onHover?.(true); } : undefined}
+      onPointerOut={onClick ? () => { document.body.style.cursor = ''; onHover?.(false); } : undefined}
     >
       {air
         ? <meshBasicMaterial color="#7de0a7" transparent opacity={0.1} depthWrite={false} />
@@ -279,13 +281,32 @@ function Placement({ part, parts }: { part: Part; parts: Part[] }) {
   );
 }
 
+/** The name a clicked part puts in the prompt, floating over it while the pointer is there. */
+function NameTag({ part, name, locked }: { part: Part; name: string; locked: boolean }) {
+  const [x, y, z] = partCentre(part);
+  return (
+    <Html position={[x, y + 0.45, z]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+      <div className={`name-tag ${locked ? 'locked' : ''}`}>{locked ? '🔒 ' : ''}{name}{locked ? <span> · stays put</span> : <span> · click to name it</span>}</div>
+    </Html>
+  );
+}
+
 function Machine3D() {
   const machine = useMachine((s) => s.machine);
   const sketch = useMachine((s) => s.ai.sketch);
   const run = useMachine((s) => s.run);
   const fix = useMachine((s) => s.fix);
   const phase = useMachine((s) => s.phase);
+  const busy = useMachine((s) => s.ai.busy);
+  const builds = useMachine((s) => s.builds);
   const parts = useMemo(() => (fix ? [...fix.puzzle.spec.parts, ...fix.placed] : run?.spec.parts ?? machine?.parts ?? sketch?.parts ?? []), [fix, run, machine, sketch]);
+  // Build mode, or a solved puzzle: clicking a part names it in the prompt ("move " + click = "move dominoes #2").
+  const spec = fix ? fix.puzzle.solution : machine;
+  const naming = !!spec && builds > 0 && !busy && (!fix || fix.solved);
+  const names = useMemo(() => (naming && spec ? partNames(spec.parts) : null), [naming, spec]);
+  const locked = useMemo(() => (naming && spec ? lockedParts(spec) : null), [naming, spec]);
+  const [hover, setHover] = useState<string | null>(null);
+  const hovered = hover && names?.has(hover) ? parts.find((p) => p.id === hover) : null;
   const bodies = useMemo(() => (run ? run.bodies : assemble(parts).bodies), [run, parts]);
   const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
   const picking = fix && fix.picking !== null && !fix.solved ? fix.hand[fix.picking] : null;
@@ -302,10 +323,15 @@ function Machine3D() {
           key={b.id}
           body={b}
           meshRef={b.dynamic ? (m) => { if (m) dynamic.set(b.id, m); else dynamic.delete(b.id); } : undefined}
-          glow={!!liftable?.has(b.part)}
-          onClick={liftable?.has(b.part) ? () => { useMachine.getState().pickPlaced(b.part); sfx.place(); } : undefined}
+          glow={!!liftable?.has(b.part) || hover === b.part}
+          cursor={liftable?.has(b.part) ? 'grab' : 'copy'}
+          onHover={names?.has(b.part) ? (over) => setHover(over ? b.part : (h) => (h === b.part ? null : h)) : undefined}
+          onClick={liftable?.has(b.part)
+            ? () => { useMachine.getState().pickPlaced(b.part); sfx.place(); }
+            : names?.has(b.part) ? () => { useMachine.getState().insertPart(b.part); sfx.place(); } : undefined}
         />
       ))}
+      {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
       {picking && phase !== 'playing' && <Placement part={picking} parts={parts} />}
       <Confetti />

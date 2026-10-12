@@ -21,6 +21,9 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 - [x] Daily: one machine per UTC day (server cache + fallback), a three-stage ladder, best total tries per day.
 - [x] Juice: confetti per goal step, slow motion around goal events, fanfare on success, miss sound; orbit camera that frames each machine and glides with the ball.
 - [x] Prompt Goldberg is the app at the root URL (old game only at `#orbital`); welcome card with prompt cards, dice button for cards any time, two coach nudges after the first build.
+- [x] Puzzle play by default: the AI's goal parts stay, the player builds the chain from the parts in hand ("connect" kind; The Incredible Machine frame). Watch mode is a switch. Puzzle generation on the server.
+- [x] Click-to-name: hovering a part shows its player name ("dominoes #2"), clicking puts it in the prompt ("move " + click = "move dominoes #2").
+- [x] Edit lock (anti-cheat): the ball and every goal part are fixed in edits. The edit prompt lists them; `validateMachineEdit` in `@og/ai` rejects any reply that moves/removes them or makes the goal easier (`lockProblems` in `@og/machine`), and the retry carries the reason. Redesigns keep the lock too. An edit after a Daily clears the daily so its tries never count.
 
 ## Week 1 (to Oct 17): prove the nugget
 
@@ -78,3 +81,4 @@ No multiplayer, no live voice agent, no Meshy at runtime, no splats, no WFC, no 
 - Sonnet 5.5 refuses `thinking: disabled`; the client sends `between_tools` for it (`thinkingOff()` in `packages/ai/src/llm/client.ts`). Opus 5.5 cannot turn thinking off at all.
 - Changing any kit dimension in `KIT` changes every stored machine's behaviour; re-run `npx tsx packages/machine/scripts/run.ts <fixture> --nudge --write` for the fixtures and the tests.
 - Orbital Goldberg notes (solver workers, level solutions tied to `sim.duration`, piece sizes) still apply to `packages/shared`.
+- Anti-cheat today covers edits only. Scores (daily best) live in localStorage and the client sends the machine to `/api/machine/puzzle`, so a leaderboard would need the server to generate the daily puzzle itself and verify the player's placements with its own simulation (`POST /api/daily/solve`); all the pieces exist.
