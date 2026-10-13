@@ -6,6 +6,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { assemble, facing, KIT, partCentre, type Body, type Vec3 } from './kit';
 import { CELL, type MachineSpec, type Part } from './schema';
+import { groundRuns, lowestGround } from './terrain';
 
 export const STEP_HZ = 120;
 /** Playback frames per second (every other physics step). */
@@ -91,8 +92,19 @@ export function simulateSync(spec: MachineSpec, opts: SimulateOptions = {}): Mac
 
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = 1 / STEP_HZ;
-  const floor = world.createCollider(RAPIER.ColliderDesc.cuboid(GRID_HALF_X + 2, 0.5, GRID_HALF_Z + 2).setTranslation(GRID_HALF_X, -0.5, GRID_HALF_Z).setFriction(0.6));
+  // The ground: a slab at the lowest level, with the higher ground stacked on it as boxes. Flat
+  // ground is the one slab at 0, exactly as before terrain existed.
+  const base = lowestGround(spec.terrain);
+  const baseTop = base * CELL;
+  const floor = world.createCollider(RAPIER.ColliderDesc.cuboid(GRID_HALF_X + 2, 0.5, GRID_HALF_Z + 2).setTranslation(GRID_HALF_X, baseTop - 0.5, GRID_HALF_Z).setFriction(0.6));
   floor.setRestitution(0.2);
+  for (const g of groundRuns(spec.terrain, base)) {
+    const top = g.h * CELL, bottom = baseTop - 0.5;
+    const block = world.createCollider(RAPIER.ColliderDesc.cuboid((g.w * CELL) / 2, (top - bottom) / 2, (g.d * CELL) / 2)
+      .setTranslation((g.x0 + g.w / 2) * CELL, (top + bottom) / 2, (g.z0 + g.d / 2) * CELL).setFriction(0.6));
+    block.setRestitution(0.2);
+  }
+  const fellBelow = baseTop - 0.5;
 
   const rigid = new Map<string, RAPIER.RigidBody>();
   const colliderBody = new Map<number, Body>();
@@ -239,7 +251,7 @@ export function simulateSync(spec: MachineSpec, opts: SimulateOptions = {}): Mac
       const best = closest[id];
       if (!best || d < best.d) closest[id] = { d, t };
     }
-    if (!fell && (bp.y < -0.5 || bp.x < -1 || bp.z < -1 || bp.x > GRID_HALF_X * 2 + 1 || bp.z > GRID_HALF_Z * 2 + 1)) {
+    if (!fell && (bp.y < fellBelow || bp.x < -1 || bp.z < -1 || bp.x > GRID_HALF_X * 2 + 1 || bp.z > GRID_HALF_Z * 2 + 1)) {
       fell = true;
       events.push({ type: 'fell', t });
     }

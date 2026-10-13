@@ -1,6 +1,7 @@
 import { DOMINO_DEFAULT, PLATFORM_DEFAULT } from './kit';
 import { restingHeight } from './placement';
-import type { MachineSpec, Part } from './schema';
+import type { MachineSpec, Part, Terrain } from './schema';
+import { groundAt, terrainInBox } from './terrain';
 
 /** How far apart (cells, |dx| + |dy| + |dz|) the ball and the farthest goal part must be: a level is a route, not a nudge. */
 export const SPREAD_MIN = 10;
@@ -23,11 +24,21 @@ export function spread(spec: MachineSpec): number {
  * Why a design is not a level yet: the goal sits right next to the start, or a part floats where
  * no hand could put it. Empty when it is fine.
  */
-export function layoutProblems(spec: MachineSpec): string[] {
+export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean } = {}): string[] {
   const problems: string[] = [];
   const d = spread(spec);
   const ball = spec.parts.find((p) => p.kind === 'ball');
   const target = farthestTarget(spec);
+  const shaped = (spec.terrain ?? []).filter((t) => t.h !== 0);
+  if (!opts.flat && !shaped.length) {
+    problems.push(`the ground is flat: shape it with "terrain" (a ditch, river or pit with negative h, a bank or hill with positive h) somewhere between the ball (x ${ball?.x}, z ${ball?.z}) and the farthest target (x ${target?.x}, z ${target?.z}), so the route has to jump it or climb it`);
+  }
+  if (ball && groundAt(spec.terrain, ball.x, ball.z) < 0) {
+    problems.push(`the ball (x ${ball.x}, z ${ball.z}) starts in a ditch; start it on flat or raised ground`);
+  }
+  if (ball && ball.y < groundAt(spec.terrain, ball.x, ball.z)) {
+    problems.push(`the ball (x ${ball.x}, z ${ball.z}) is inside the ground: the ground there is ${groundAt(spec.terrain, ball.x, ball.z)} cells high, so its y must be at least that`);
+  }
   if (d < SPREAD_MIN) {
     problems.push(`the farthest goal part is only ${d} cells from the ball (x ${ball?.x}, y ${ball?.y}, z ${ball?.z}); it must be at least ${SPREAD_MIN} cells away counting x, y and z, so the player has a route to build. Move the goal parts across the stage and add parts (shelves, a cannon, a fan, a second ramp) to carry the ball there`);
   }
@@ -36,15 +47,28 @@ export function layoutProblems(spec: MachineSpec): string[] {
   }
   for (const p of spec.parts) {
     if (p.kind === 'ball' || p.kind === 'platform') continue;
-    const rest = restingHeight(spec.parts, p.x, p.z);
-    if (p.y !== rest) problems.push(`"${p.id}" (${p.kind}) floats at y ${p.y}: nothing is under it at that height (it would rest at y ${rest}). Set its y to ${rest}, or add a platform whose cells include (${p.x}, ${p.z}) with y ${p.y}`);
+    const rest = restingHeight(spec.parts, p.x, p.z, undefined, spec.terrain);
+    if (p.y !== rest) problems.push(`"${p.id}" (${p.kind}) at y ${p.y} is not standing on anything: at (${p.x}, ${p.z}) it would rest at y ${rest} (the ground there${rest < 0 ? ', a ditch' : rest > 0 ? ', raised ground or a shelf' : ''}). Set its y to ${rest}, or add a platform whose cells include (${p.x}, ${p.z}) with y ${p.y}`);
   }
-  if (!obstacles(spec).length) {
-    const ball = spec.parts.find((p) => p.kind === 'ball');
-    const target = farthestTarget(spec);
-    problems.push(`no scenery in the way: add a wall with "fixed": true standing between the ball (x ${ball?.x}, z ${ball?.z}) and the farthest target (x ${target?.x}, z ${target?.z}), in the ball's path, so the route has to go over or around it`);
+  if (!obstacles(spec).length && !terrainInWay(spec).length) {
+    problems.push(`no scenery in the way: put a wall with "fixed": true, or a ditch, river, pit or hill in "terrain", between the ball (x ${ball?.x}, z ${ball?.z}) and the farthest target (x ${target?.x}, z ${target?.z}), in the ball's path, so the route has to go over or around it`);
   }
   return problems;
+}
+
+/** Shaped ground (a ditch, a hill) inside the box between the ball and the farthest target. */
+export function terrainInWay(spec: MachineSpec): Terrain[] {
+  const ball = spec.parts.find((p) => p.kind === 'ball');
+  const target = farthestTarget(spec);
+  if (!ball || !target) return [];
+  return terrainInBox(spec.terrain, Math.min(ball.x, target.x), Math.max(ball.x, target.x), Math.min(ball.z, target.z), Math.max(ball.z, target.z));
+}
+
+/** The ground as the lock compares it: the same blocks, in any order. */
+export function sameGround(a: Terrain[] | undefined, b: Terrain[] | undefined): boolean {
+  const key = (t: Terrain) => `${t.x},${t.z},${t.w},${t.d},${t.h}`;
+  const ka = (a ?? []).map(key).sort(), kb = (b ?? []).map(key).sort();
+  return ka.length === kb.length && ka.every((k, i) => k === kb[i]);
 }
 
 /** The goal part farthest from the ball. */
@@ -125,6 +149,9 @@ export function lockProblems(original: MachineSpec, edited: MachineSpec): string
   const problems: string[] = [];
   const names = partNames(original.parts);
   const now = new Map(edited.parts.map((p) => [p.id, p]));
+  if (!sameGround(original.terrain, edited.terrain)) {
+    problems.push(`the ground ("terrain") is part of the level and was changed: keep it exactly as it was (${JSON.stringify(original.terrain ?? [])})`);
+  }
   for (const id of lockedParts(original)) {
     const was = original.parts.find((p) => p.id === id);
     if (!was) continue;

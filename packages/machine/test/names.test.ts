@@ -67,8 +67,11 @@ describe('scenery', () => {
   it('a level needs a fixed wall in the way between the ball and the farthest target', () => {
     expect(obstacles(spec).map((p) => p.id)).toEqual(['wall']);
     expect(layoutProblems(spec)).toEqual([]);
-    const open = edit((s) => ({ ...s, parts: s.parts.filter((p) => p.id !== 'wall') }));
-    expect(layoutProblems(open)).toEqual([expect.stringMatching(/no scenery in the way/)]);
+    // Without the wall the river still counts as scenery in the way; without both there is none.
+    const noWall = edit((s) => ({ ...s, parts: s.parts.filter((p) => p.id !== 'wall') }));
+    expect(layoutProblems(noWall)).toEqual([]);
+    const open = edit((s) => ({ ...s, terrain: [], parts: s.parts.filter((p) => p.id !== 'wall') }));
+    expect(layoutProblems(open, { flat: true })).toEqual([expect.stringMatching(/no scenery in the way/)]);
     // A wall off to the side of the route does not count.
     const aside = edit((s) => ({ ...s, parts: s.parts.map((p) => (p.id === 'wall' ? { ...p, z: 3 } : p)) }));
     expect(obstacles(aside)).toEqual([]);

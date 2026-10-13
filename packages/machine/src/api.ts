@@ -5,7 +5,7 @@
  * POST /api/machine/edit  { machine, instruction }   -> text/event-stream of MachineStreamEvent
  */
 import type { MachineResult } from './goal';
-import type { MachineSpec, Part } from './schema';
+import type { MachineSpec, Part, Terrain } from './schema';
 
 export type MachineStage = 'designing' | 'verifying' | 'nudging' | 'redesigning' | 'editing';
 
@@ -17,7 +17,7 @@ export type MachineStage = 'designing' | 'verifying' | 'nudging' | 'redesigning'
 export type MachineStreamEvent =
   | { type: 'stage'; stage: MachineStage; attempt: number; maxAttempts: number; message: string }
   | { type: 'progress'; attempt: number; evals: number; bestScore: number; goalLength: number }
-  | { type: 'sketch'; attempt: number; title?: string; parts: Part[] }
+  | { type: 'sketch'; attempt: number; title?: string; parts: Part[]; terrain?: Terrain[] }
   | { type: 'draft'; machine: MachineSpec; status: 'designed' | 'solved'; attempt: number; result?: MachineResult }
   | {
     type: 'machine'; machine: MachineSpec; solved: boolean; attempts: number; notes: string[]; cached: boolean;

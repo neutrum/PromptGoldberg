@@ -11,3 +11,4 @@ export * from './api';
 export * from './puzzle';
 export * from './placement';
 export * from './names';
+export * from './terrain';

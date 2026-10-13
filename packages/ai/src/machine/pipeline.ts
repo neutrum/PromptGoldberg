@@ -2,7 +2,7 @@ import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
-import { designMachine, editMachineDesign, editMachineRequest, redesignMachine, sketchMachine, validateMachineEdit, type MachineDesign } from './design';
+import { designMachine, editMachineDesign, editMachineRequest, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
 import type { Physics } from './physics';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
@@ -51,8 +51,9 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
     let sent = -1;
     return (text: string) => {
       const sketch = sketchMachine(text);
-      if (sketch.parts.length === sent) return;
-      sent = sketch.parts.length;
+      const drawn = sketch.parts.length + sketch.terrain.length;
+      if (drawn === sent) return;
+      sent = drawn;
       emit({ type: 'sketch', attempt, ...sketch });
     };
   };
@@ -124,6 +125,7 @@ export function generateMachine(deps: MachinePipelineDeps, prompt: string, emit:
     firstMessage: 'Designing a level for your idea.',
     design: (calls, onProgress) => designMachine(deps.llm, prompt, calls, onProgress),
     request: `Design a machine for this request:\n\n${prompt}`,
+    validate: (json) => validateMachineDesign(json, { flat: wantsFlat(prompt) }),
   });
 }
 

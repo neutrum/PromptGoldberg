@@ -1,64 +1,83 @@
 {
-  "title": "Castle Wall Bell Hunt",
-  "caption": "Roll down from the tower, drop past the castle wall into the cannon, and topple the dominoes to ring the hidden bell.",
+  "title": "Castle Wall Bell Run",
+  "caption": "Roll down from the tower, get fired over the moat, and topple the dominoes to ring the bell hidden round the corner of the castle wall.",
+  "terrain": [
+    {
+      "name": "moat",
+      "x": 0,
+      "z": 7,
+      "w": 24,
+      "d": 2,
+      "h": -1
+    }
+  ],
   "parts": [
     {
       "id": "ball",
       "kind": "ball",
-      "x": 3,
-      "y": 6,
-      "z": 3,
+      "x": 2,
+      "y": 5,
+      "z": 4,
       "yaw": 0
     },
     {
       "id": "ramp",
       "kind": "ramp",
-      "x": 3,
-      "y": 5,
-      "z": 3,
+      "x": 2,
+      "y": 4,
+      "z": 4,
       "yaw": 0
     },
     {
       "id": "shelf",
       "kind": "platform",
-      "x": 3,
-      "y": 5,
-      "z": 3,
+      "x": 2,
+      "y": 4,
+      "z": 4,
       "yaw": 0,
-      "length": 4
+      "length": 6
     },
     {
       "id": "castle",
       "kind": "wall",
-      "x": 8,
+      "x": 13,
       "y": 0,
-      "z": 3,
+      "z": 4,
       "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "tower",
+      "kind": "wall",
+      "x": 7,
+      "y": 0,
+      "z": 9,
+      "yaw": 90,
       "fixed": true
     },
     {
       "id": "cannon",
       "kind": "cannon",
-      "x": 9,
+      "x": 10,
       "y": 0,
-      "z": 3,
+      "z": 4,
       "yaw": 90
     },
     {
       "id": "row",
       "kind": "dominoes",
-      "x": 9,
+      "x": 10,
       "y": 0,
-      "z": 10,
+      "z": 11,
       "yaw": 90,
       "length": 5
     },
     {
       "id": "bell",
       "kind": "bell",
-      "x": 9,
+      "x": 10,
       "y": 0,
-      "z": 13,
+      "z": 14,
       "yaw": 0
     }
   ],

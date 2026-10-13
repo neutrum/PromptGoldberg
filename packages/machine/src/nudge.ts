@@ -4,7 +4,7 @@
  * contraptions are local, so the part the chain breaks at is where to look.
  */
 import { evaluateMachine, type MachineResult } from './goal';
-import { GRID, type MachineSpec, type Part } from './schema';
+import { GRID, TERRAIN_MIN, type MachineSpec, type Part } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 
 export interface NudgeOptions {
@@ -65,7 +65,7 @@ function perturb(p: Part, rand: () => number, scale: number): Part {
     const step = rand() < 0.5 ? -1 : 1;
     return { ...p, [axis]: clamp(p[axis] + step, 0, GRID[axis] - 1) };
   }
-  return { ...p, y: clamp(p.y + (rand() < 0.5 ? -1 : 1), 0, GRID.y - 1) };
+  return { ...p, y: clamp(p.y + (rand() < 0.5 ? -1 : 1), TERRAIN_MIN, GRID.y - 1) };
 }
 
 /** Nudge parts until the machine works. Call after initPhysics(). */

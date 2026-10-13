@@ -1,6 +1,6 @@
 import {
   dropAt, GRID, isSupported, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
-  type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind,
+  type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
@@ -12,8 +12,8 @@ export interface MachineAiLog {
   lines: string[];
   progress: number;
   error: string | null;
-  /** Parts Claude has written so far for the design in progress. */
-  sketch: { attempt: number; title?: string; parts: Part[] } | null;
+  /** Parts (and the shape of the ground) Claude has written so far for the design in progress. */
+  sketch: { attempt: number; title?: string; parts: Part[]; terrain?: Terrain[] } | null;
 }
 
 /** How far the machine on screen got: 0 = designed, not proven; 1 = proven by the physics; 2 = final. */
@@ -195,7 +195,7 @@ export const useMachine = create<MachineState>((set, get) => {
             set((s) => ({ ai: { ...s.ai, progress: e.goalLength ? e.bestScore / e.goalLength : 0 } }));
             break;
           case 'sketch':
-            set((s) => ({ ai: { ...s.ai, sketch: { attempt: e.attempt, title: e.title, parts: e.parts } } }));
+            set((s) => ({ ai: { ...s.ai, sketch: { attempt: e.attempt, title: e.title, parts: e.parts, terrain: e.terrain } } }));
             break;
           case 'draft':
             log(e.status === 'solved' ? 'The physics proved it works.' : 'Design ready. Running it…');
@@ -382,7 +382,7 @@ export const useMachine = create<MachineState>((set, get) => {
       const original = fix.hand[fix.picking];
       const others = fix.placed.filter((p) => p.id !== original.id);
       // Lands on the floor or the platform under the cursor (a shelf at the chosen height); a taken cell refuses it.
-      const part = dropAt([...fix.puzzle.spec.parts, ...others], original, x, z, { y: fix.lift });
+      const part = dropAt([...fix.puzzle.spec.parts, ...others], original, x, z, { y: fix.lift, terrain: fix.puzzle.spec.terrain });
       if (!part) return false;
       const placed = [...others, part];
       const next = fix.hand.findIndex((m) => !placed.some((p) => p.id === m.id));
@@ -411,7 +411,7 @@ export const useMachine = create<MachineState>((set, get) => {
       let placed = fix.placed.filter((p) => p.id !== id);
       // Whatever stood on a lifted shelf comes up with it, back into the hand.
       const all = [...fix.puzzle.spec.parts, ...placed];
-      placed = placed.filter((p) => isSupported(all, p));
+      placed = placed.filter((p) => isSupported(all, p, fix.puzzle.spec.terrain));
       set({ fix: { ...fix, placed, picking: index, lift: lifted?.kind === 'platform' ? lifted.y : fix.lift }, run: null, result: null, phase: 'idle' });
     },
 

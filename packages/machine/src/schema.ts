@@ -4,6 +4,20 @@ import { z } from 'zod';
 export const CELL = 0.5;
 /** Stage size in cells (x and z are horizontal, y is up). */
 export const GRID = { x: 24, y: 16, z: 24 } as const;
+/** How far the ground can be dug below the floor and raised above it, in cells. */
+export const TERRAIN_MIN = -2;
+export const TERRAIN_MAX = 3;
+
+/** A rectangle of ground at another height: a ditch or river (negative), a bank or hill (positive). */
+export const Terrain = z.object({
+  name: z.string().optional().describe('what it is, in the player\'s words: "river", "moat", "pit", "hill", "bank"'),
+  x: z.number().int().min(0).max(GRID.x - 1).describe('west-most cell'),
+  z: z.number().int().min(0).max(GRID.z - 1).describe('north-most cell'),
+  w: z.number().int().min(1).max(GRID.x).describe('cells along x'),
+  d: z.number().int().min(1).max(GRID.z).describe('cells along z'),
+  h: z.number().int().min(TERRAIN_MIN).max(TERRAIN_MAX).describe('ground height in cells: negative digs a ditch, river or pit below the floor; positive raises a bank or hill'),
+});
+export type Terrain = z.infer<typeof Terrain>;
 
 export const PartKind = z.enum([
   'ball', 'ramp', 'platform', 'wall', 'dominoes', 'seesaw', 'fan', 'trampoline', 'cannon', 'bucket', 'bell',
@@ -18,7 +32,7 @@ export const Part = z.object({
   id: z.string().regex(/^[a-z0-9_-]+$/i).describe('short unique id'),
   kind: PartKind,
   x: z.number().int().min(0).max(GRID.x - 1).describe('cell along x (0 = west edge)'),
-  y: z.number().int().min(0).max(GRID.y - 1).describe('height of the part\'s base in cells (0 = floor)'),
+  y: z.number().int().min(TERRAIN_MIN).max(GRID.y - 1).describe('height of the part\'s base in cells (0 = flat floor; on raised ground the ground\'s h, in a ditch its negative h)'),
   z: z.number().int().min(0).max(GRID.z - 1).describe('cell along z (0 = north edge)'),
   yaw: Yaw.default(0).describe('facing: 0 = +x, 90 = +z, 180 = -x, 270 = -z. A ramp slopes DOWN toward its facing; fans blow and cannons fire toward it; dominoes and platforms extend toward it'),
   length: z.number().int().min(1).max(8).optional().describe('platforms: cells long (default 3); dominoes: how many (default 5)'),
@@ -45,6 +59,7 @@ export type MachineGoal = z.infer<typeof MachineGoal>;
 export const MachineSpec = z.object({
   title: z.string(),
   caption: z.string().optional().describe('one sentence for players: what should happen, no numbers'),
+  terrain: z.array(Terrain).max(6).optional().describe('the shape of the ground: ditches, rivers, pits, banks and hills the route has to deal with; leave out for flat ground'),
   parts: z.array(Part).min(1).max(40),
   goal: z.array(MachineGoal).min(1).max(4).describe('ordered events; the machine works when all happen in order'),
   duration: z.number().min(4).max(30).default(15).describe('seconds to simulate'),

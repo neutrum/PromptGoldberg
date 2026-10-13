@@ -49,8 +49,8 @@ const fails = (spec: MachineSpec) => {
 function removable(solution: MachineSpec, avoid: string[] = []): Part[] {
   const out: Part[] = [];
   for (const p of solution.parts) {
-    if (p.kind === 'ball' || p.fixed || avoid.includes(p.id) || !isSupported(solution.parts, p)) continue;
-    const clean = dropAt(solution.parts, p, p.x, p.z, { y: p.y });
+    if (p.kind === 'ball' || p.fixed || avoid.includes(p.id) || !isSupported(solution.parts, p, solution.terrain)) continue;
+    const clean = dropAt(solution.parts, p, p.x, p.z, { y: p.y, terrain: solution.terrain });
     if (clean) out.push(clean);
   }
   return out.sort((a, b) => REMOVAL_ORDER.indexOf(a.kind) - REMOVAL_ORDER.indexOf(b.kind));
@@ -116,7 +116,7 @@ export function makeMovedPuzzle(solution: MachineSpec, opts: { seed?: number; av
     for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) if (dx || dz) offsets.push({ dx, dz });
     offsets.sort(() => random() - 0.5);
     for (const { dx, dz } of offsets.slice(0, 12)) {
-      const moved = dropAt(without.parts, part, part.x + dx, part.z + dz);
+      const moved = dropAt(without.parts, part, part.x + dx, part.z + dz, { terrain: solution.terrain });
       if (!moved) continue;
       const at = fails({ ...without, parts: [...without.parts, moved] });
       if (at === null) continue;

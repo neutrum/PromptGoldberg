@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, TURN_MIN, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
+import { layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, Terrain, TERRAIN_MAX, TERRAIN_MIN, TURN_MIN, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
 import example from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
@@ -18,7 +18,7 @@ export const MACHINE_PROMPT = `You design Rube Goldberg puzzle levels for Prompt
 THE GAME: the player then sees only the ball, the goal parts and the scenery, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side or corner, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot) and AROUND A CORNER: at least ${TURN_MIN} cells away along x and ${TURN_MIN} along z, never straight ahead on the same row. So the route turns at least once: a cannon or fan facing 90 or 270 sends the ball along z, a ramp and shelf with yaw 90 run along z, a wall stops a roll and a fan pushes it sideways. A goal part straight ahead of the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
 
 THE STAGE
-A grid of 0.5 m cells: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south), y from 0 (the floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
+A grid of 0.5 m cells: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south), y from ${TERRAIN_MIN} (the bottom of the deepest ditch) through 0 (the flat floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
 
 FACING ("yaw"): 0 = toward +x (east), 90 = toward +z (south), 180 = toward -x (west), 270 = toward -z (north). A leg of the route runs straight along x (yaw 0 or 180) or along z (yaw 90 or 270); corners are turned by a cannon or a fan facing the new direction, or by dropping the ball onto a ramp that faces the new way.
 
@@ -31,11 +31,13 @@ THE KIT (each part stands on its cell at height y unless said otherwise)
 - seesaw: a plank 3 cells long centred on its cell on a pivot 0.22 m high. A ball rolling onto one end tips the plank and rolls off the other end slightly lower; it adds a dramatic pause.
 - fan: blows the ball toward its facing for 3 cells in front of it (the stream is 3 cells wide and 1 cell tall, from height y to y+1) at about 9 m/s2. Put it on the row next to the ball's path (one cell to the side), at the same y as the ball's floor, facing the way the ball should go: it pushes the ball further, up a shallow slope or off a shelf.
 - trampoline: a 1-cell pad; a ball landing on it bounces straight up at 5.5 m/s (about 3 cells high) while keeping its horizontal speed. Good for getting back up to a higher shelf.
-- cannon: when the ball rolls or falls into its cell (the catch zone is the whole cell from height y to y+1), it fires the ball toward its facing at 6.5 m/s, 25 degrees up. On flat ground the ball lands about 6 to 7 cells away (rising less than a cell); put the landing platform there, at the cannon's y or lower. Give the cannon the same y as the floor the ball rolls in on (a cannon at y 2 next to a shelf at y 3 is below the ball). The reliable way to turn a corner or jump a gap.
+- cannon: when the ball rolls or falls into its cell (the catch zone is the whole cell from height y to y+1), it fires the ball toward its facing at 6.5 m/s, 25 degrees up. On flat ground the ball lands about 6 to 7 cells away (rising less than a cell); from a bank or shelf 2 cells up it lands about 9 cells away on the floor. Put the landing platform or bucket there, at the cannon's y or lower. Give the cannon the same y as the floor the ball rolls in on (a cannon at y 2 next to a shelf at y 3 is below the ball). The reliable way to turn a corner or jump a gap.
 - bucket: a 1-cell box with walls 0.45 m high, open at the top. The ball has to land in it from above and settle. The usual final goal.
 - bell: a short post 0.36 m tall; rings when the ball or a falling domino hits it.
 
-SCENERY: a wall or platform with "fixed": true is part of the level: it stays on the stage, the player does not get it in the bin and has to get past it or use it. Every level has at least one fixed wall standing in the ball's path between the start and the farthest target (same row as the route, on the floor or a shelf), so the route must go over it (a drop from a high shelf clears a 2-cell wall, a cannon, a trampoline) or around it (a fan or cannon facing another way). Fixed platforms are ledges the route may land on. Mark 1 to 3 scenery parts, never the ball, a target, or a part that moves the ball.
+THE GROUND ("terrain"): the stage is not flat. Shape it with 1 to 4 rectangles of ground at another height, each {"name", "x", "z", "w", "d", "h"}: x, z is the north-west cell, w cells along x, d cells along z, h the ground height in cells from ${TERRAIN_MIN} to ${TERRAIN_MAX}. Negative h digs a ditch, river, moat or pit: a ball that rolls into it is stuck (a river right across the stage, w 24 or d 24, must be jumped by a cannon or a trampoline; a short ditch can be gone round). Positive h raises a bank, hill or plateau: a ball on it rolls off the edge and drops; the ball can start up there (y = h) instead of on a shelf, and the side of a hill is a wall to a ball at its foot. Parts standing on shaped ground take its h as their y (a bucket at the bottom of a pit with h -2 has y -2); the ball never starts in a ditch. Give blocks the mission's names ("river", "moat", "lava", "crater", "hill"). Put at least one shaped block between the start and the farthest target. Only when the request asks for flat ground do you leave "terrain" out. Write "terrain" before "parts" in the JSON.
+
+SCENERY: a wall or platform with "fixed": true is part of the level: it stays on the stage, the player does not get it in the bin and has to get past it or use it. Besides the shaped ground, most levels have a fixed wall standing in the ball's path between the start and the farthest target (same row as the route, on the floor or a shelf), so the route must go over it (a drop from a high shelf clears a 2-cell wall, a cannon, a trampoline) or around it (a fan or cannon facing another way). Fixed platforms are ledges the route may land on. Mark 1 to 3 scenery parts, never the ball, a target, or a part that moves the ball.
 
 GOALS: an ordered list of 1 to 4 events the machine must make happen, in order:
 - {"type": "bucket", "part": id}: the ball settles in that bucket.
@@ -51,7 +53,7 @@ DESIGN RULES
 - Each part must be reachable from the previous one: a rolling ball stays on the level it is on, drops at platform ends, flies 6 to 7 cells from a cannon, rises 3 cells from a trampoline.
 - Dominoes end where the bell is: for 5 dominoes starting at x, put the bell at x+3 on the same y.
 - Every part gets its own cell: never put two parts at the same x, y, z (a bell and a cannon in one cell block each other). Only a platform shares its cells with what stands on it.
-- Every part except the ball stands on something: the floor (y 0) or a platform at the same y whose cells include the part's cell. Nothing else floats.
+- Every part except the ball stands on something: the ground (y 0 on the flat floor, the block's h on shaped ground) or a platform at the same y whose cells include the part's cell. Nothing else floats.
 - Ids: short lowercase words (ball, ramp1, row, bell). Do not set dx or dz.
 - "title": 2 to 5 playful words. "caption": one sentence for players describing what should happen, no numbers.
 - If the request is not about machines, reinterpret it playfully as a machine (a pizza delivery becomes a ball rolling into a bucket called "oven"); use the request's words in the title, caption and ids.
@@ -76,7 +78,10 @@ export function formatMachineIssues(issues: SpecIssue[]): string {
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
 
 /** Validate the machine and drop any fine offsets the model wrote (those belong to the optimizer). */
-export function validateMachineDesign(json: unknown, opts: { layout?: boolean } = {}): Validation<MachineDesign> {
+/** True when the request asks for flat ground, the one case where the designer may leave the terrain out. */
+export const wantsFlat = (request: string) => /\bflat\b/i.test(request);
+
+export function validateMachineDesign(json: unknown, opts: { layout?: boolean; flat?: boolean } = {}): Validation<MachineDesign> {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { ok: false, problems: '- expected a JSON object' };
   const { machine: nested, ...rest } = json as Record<string, unknown>;
   const raw = nested && typeof nested === 'object' ? nested : rest;
@@ -88,7 +93,7 @@ export function validateMachineDesign(json: unknown, opts: { layout?: boolean } 
     parts: parsed.spec.parts.map(({ dx: _dx, dz: _dz, ...p }) => p),
   };
   // A level, not just a machine: the goal has to be far enough from the start to build a route.
-  const layout = opts.layout === false ? [] : layoutProblems(spec);
+  const layout = opts.layout === false ? [] : layoutProblems(spec, { flat: opts.flat });
   if (layout.length) return { ok: false, problems: layout.map((l) => `- ${l}`).join('\n') };
   return { ok: true, value: { spec, notes: [] } };
 }
@@ -103,7 +108,8 @@ export function validateMachineEdit(original: MachineSpec): (json: unknown) => V
     // The lock first: "you moved the ball" is the reason the model needs, not "the goal got closer".
     const v = validateMachineDesign(json, { layout: false });
     if (!v.ok) return v;
-    const problems = [...lockProblems(original, v.value.spec), ...layoutProblems(v.value.spec)];
+    // The ground is locked with the targets, so an edit never has to add terrain a flat original lacks.
+    const problems = [...lockProblems(original, v.value.spec), ...layoutProblems(v.value.spec, { flat: true })];
     return problems.length ? { ok: false, problems: problems.map((p) => `- ${p}`).join('\n') } : v;
   };
 }
@@ -117,20 +123,25 @@ export function describeLocks(spec: MachineSpec): string {
   });
   return `Names the player uses for the parts: ${[...names].map(([id, name]) => `${name} = "${id}"`).join(', ')}.
 
-FIXED PARTS (the game's rule): the ball and every part the goal names stay exactly as they are, same id, kind, x, y, z, yaw and length: ${locked.join('; ')}. Never move, remove, replace or re-aim them. Every goal step stays in the same order; a bell may ring more times, never fewer; steps may be added. Players build the chain between the fixed parts themselves, so moving a fixed part would end the game instead of changing it. If the request asks to change a fixed part, leave that part alone and apply the rest of the request to the other parts (add, move or swap those).`;
+FIXED PARTS (the game's rule): the ball and every part the goal names stay exactly as they are, same id, kind, x, y, z, yaw and length: ${locked.join('; ')}. Never move, remove, replace or re-aim them. The ground ("terrain") stays exactly as it is too. Every goal step stays in the same order; a bell may ring more times, never fewer; steps may be added. Players build the chain between the fixed parts themselves, so moving a fixed part would end the game instead of changing it. If the request asks to change a fixed part, leave that part alone and apply the rest of the request to the other parts (add, move or swap those).`;
 }
 
 /** Parts that are already complete in a partly streamed reply, so a UI can show them appear. */
-export function sketchMachine(textSoFar: string): { title?: string; parts: Part[] } {
+export function sketchMachine(textSoFar: string): { title?: string; parts: Part[]; terrain: Terrain[] } {
   const rawTitle = textSoFar.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
   let title: string | undefined;
   if (rawTitle !== undefined) {
     try { title = JSON.parse(`"${rawTitle}"`) as string; } catch { title = rawTitle; }
   }
-  const parts: Part[] = [];
-  const key = textSoFar.indexOf('"parts"');
-  const open = key < 0 ? -1 : textSoFar.indexOf('[', key);
-  if (open < 0) return { title, parts };
+  return { title, parts: completeObjects(textSoFar, '"parts"', Part), terrain: completeObjects(textSoFar, '"terrain"', Terrain) };
+}
+
+/** The objects of the array under `key` that are complete so far in a partly streamed JSON text. */
+function completeObjects<T>(textSoFar: string, key: string, schema: { safeParse: (v: unknown) => { success: boolean; data?: T } }): T[] {
+  const parts: T[] = [];
+  const at = textSoFar.indexOf(key);
+  const open = at < 0 ? -1 : textSoFar.indexOf('[', at);
+  if (open < 0) return parts;
   let depth = 0, inString = false, escaped = false, start = -1;
   for (let i = open + 1; i < textSoFar.length; i++) {
     const ch = textSoFar[i];
@@ -148,16 +159,16 @@ export function sketchMachine(textSoFar: string): { title?: string; parts: Part[
       depth--;
       if (depth === 0 && start >= 0) {
         try {
-          const p = Part.safeParse(JSON.parse(textSoFar.slice(start, i + 1)));
-          if (p.success) parts.push(p.data);
+          const p = schema.safeParse(JSON.parse(textSoFar.slice(start, i + 1)));
+          if (p.success && p.data !== undefined) parts.push(p.data);
         } catch {
-          // An unfinished or broken part: skip it.
+          // An unfinished or broken object: skip it.
         }
         start = -1;
       }
     } else if (ch === ']' && depth === 0) break;
   }
-  return { title, parts };
+  return parts;
 }
 
 const MODEL = () => process.env.CLAUDE_MACHINE_MODEL ?? 'claude-sonnet-5-5';
@@ -166,7 +177,7 @@ export async function designMachine(llm: LlmBackend, userPrompt: string, calls: 
   return requestValidated(
     llm,
     { system: MACHINE_PROMPT, prompt: `Design a machine for this request:\n\n${userPrompt}`, thinking: 'off', maxTokens: 4000, model: MODEL() },
-    validateMachineDesign,
+    (json) => validateMachineDesign(json, { flat: wantsFlat(userPrompt) }),
     calls,
     2,
     onProgress,

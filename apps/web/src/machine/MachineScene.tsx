@@ -1,6 +1,6 @@
 import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, KIT, lockedParts, partCentre, partNames, restingHeight, TARGET_KINDS, type Body, type MachineRun, type Part } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, groundRuns, KIT, lockedParts, lowestGround, partCentre, partNames, restingHeight, TARGET_KINDS, WATER_WORDS, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -207,7 +207,8 @@ function MachineCamera({ parts }: { parts: Part[] }) {
     const c = controls.current;
     if (!c) return;
     const phase = useMachine.getState().phase;
-    const following = phase === 'playing' && !Number.isNaN(ballPos.x);
+    // A ball lost off the edge keeps falling; the camera does not follow it under the ground.
+    const following = phase === 'playing' && !Number.isNaN(ballPos.x) && ballPos.y > -2;
     const want = following ? ballPos : bounds.centre;
     const k = 1 - Math.exp(-dt * (following ? 4 : 1.5));
     delta.copy(want).sub(c.target).multiplyScalar(k);
@@ -222,7 +223,7 @@ function MachineCamera({ parts }: { parts: Part[] }) {
  * Fix mode: hover the stage to see where the part in hand would land (the floor, or the platform
  * under the cursor), click to drop it there. A cell something else stands in shows red.
  */
-function Placement({ part, parts, lift }: { part: Part; parts: Part[]; lift: number }) {
+function Placement({ part, parts, lift, terrain }: { part: Part; parts: Part[]; lift: number; terrain?: Terrain[] }) {
   const [cell, setCell] = useState<{ x: number; z: number } | null>(null);
   const shelf = part.kind === 'platform';
   const w = GRID.x * CELL, d = GRID.z * CELL;
@@ -231,8 +232,10 @@ function Placement({ part, parts, lift }: { part: Part; parts: Part[]; lift: num
     if (x < 0 || z < 0 || x >= GRID.x || z >= GRID.z) return null;
     return { x, z };
   };
-  const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z, { y: lift }) : null), [parts, part, cell, lift]);
-  const y = cell ? (shelf ? lift : restingHeight(parts, cell.x, cell.z, part.id)) : 0;
+  const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z, { y: lift, terrain }) : null), [parts, part, cell, lift, terrain]);
+  const y = cell ? (landing?.y ?? restingHeight(parts, cell.x, cell.z, part.id, terrain)) : 0;
+  const base = lowestGround(terrain);
+  const ground = useMemo(() => groundRuns(terrain, base), [terrain, base]);
   const ghost = useMemo(() => (landing ? assemblePart(landing).bodies : []), [landing]);
   const cells = useMemo(() => (cell ? footprint({ ...part, x: cell.x, y, z: cell.z }) : []), [part, cell, y]);
   const platforms = useMemo(() => parts.filter((p) => p.kind === 'platform' && p.id !== part.id), [parts, part.id]);
@@ -250,10 +253,16 @@ function Placement({ part, parts, lift }: { part: Part; parts: Part[]; lift: num
   const color = landing ? '#ffd27a' : '#ff5a4e';
   return (
     <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, 0.005, d / 2]} {...handlers}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL + 0.005, d / 2]} {...handlers}>
         <planeGeometry args={[w, d]} />
         <meshBasicMaterial color="#ffd27a" transparent opacity={0.03} depthWrite={false} />
       </mesh>
+      {ground.map((g) => (
+        <mesh key={`g${g.x0},${g.z0},${g.w},${g.d}`} rotation={[-Math.PI / 2, 0, 0]} position={[(g.x0 + g.w / 2) * CELL, g.h * CELL + 0.005, (g.z0 + g.d / 2) * CELL]} {...handlers}>
+          <planeGeometry args={[g.w * CELL, g.d * CELL]} />
+          <meshBasicMaterial color="#ffd27a" transparent opacity={0.03} depthWrite={false} />
+        </mesh>
+      ))}
       {platforms.map((p) => {
         const cs = footprint(p);
         const xs = cs.map((c) => c.x), zs = cs.map((c) => c.z);
@@ -271,7 +280,7 @@ function Placement({ part, parts, lift }: { part: Part; parts: Part[]; lift: num
           <meshBasicMaterial color={color} transparent opacity={0.45} depthWrite={false} />
         </mesh>
       ))}
-      {cell && y > 0 && (
+      {cell && shelf && y > 0 && (
         <mesh position={[(cell.x + 0.5) * CELL, (y * CELL) / 2, (cell.z + 0.5) * CELL]}>
           <cylinderGeometry args={[0.012, 0.012, y * CELL, 6]} />
           <meshBasicMaterial color={color} transparent opacity={0.7} />
@@ -289,6 +298,43 @@ function NameTag({ part, name, locked }: { part: Part; name: string; locked: boo
     <Html position={[x, y + 0.45, z]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
       <div className={`name-tag ${locked ? 'locked' : ''}`}>{locked ? '🔒 ' : ''}{name}{locked ? <span> · stays put</span> : <span> · click to name it</span>}</div>
     </Html>
+  );
+}
+
+/**
+ * The stage floor, shaped by the level's terrain: a slab at the lowest level with the higher
+ * ground stacked on it as blocks, exactly as the physics builds it. Sunken blocks with a watery
+ * name get a water surface.
+ */
+function Ground({ terrain }: { terrain?: Terrain[] }) {
+  const w = GRID.x * CELL, d = GRID.z * CELL;
+  const base = lowestGround(terrain);
+  const runs = useMemo(() => groundRuns(terrain, base), [terrain, base]);
+  const water = (terrain ?? []).filter((t) => t.h < 0 && t.name && WATER_WORDS.test(t.name));
+  const tone = (h: number) => (h > 0 ? '#2a3557' : h === 0 ? '#141a2e' : '#0e1222');
+  return (
+    <>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL - 0.001, d / 2]} receiveShadow>
+        <planeGeometry args={[w, d]} />
+        <meshStandardMaterial color={tone(base)} roughness={0.95} />
+      </mesh>
+      <Grid position={[w / 2, base * CELL + 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#2a3354" sectionSize={CELL * 4} sectionColor="#3b4a7a" fadeDistance={30} infiniteGrid={false} />
+      {runs.map((g) => {
+        const top = g.h * CELL, bottom = base * CELL - 0.02;
+        return (
+          <mesh key={`${g.x0},${g.z0},${g.w},${g.d}`} position={[(g.x0 + g.w / 2) * CELL, (top + bottom) / 2, (g.z0 + g.d / 2) * CELL]} castShadow receiveShadow>
+            <boxGeometry args={[g.w * CELL, top - bottom, g.d * CELL]} />
+            <meshStandardMaterial color={tone(g.h)} roughness={0.95} />
+          </mesh>
+        );
+      })}
+      {water.map((t, i) => (
+        <mesh key={`water-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[(t.x + t.w / 2) * CELL, -0.05, (t.z + t.d / 2) * CELL]}>
+          <planeGeometry args={[t.w * CELL, t.d * CELL]} />
+          <meshStandardMaterial color="#1d5fd1" transparent opacity={0.55} roughness={0.3} depthWrite={false} />
+        </mesh>
+      ))}
+    </>
   );
 }
 
@@ -312,6 +358,8 @@ function Machine3D() {
     const drawn = sketch?.parts ?? [];
     return puzzle ? drawn.filter((p) => TARGET_KINDS.includes(p.kind)) : drawn;
   }, [fix, run, machine, sketch, puzzle, veiled]);
+  // The ground is scenery: it shows from the first streamed block on, veil or not.
+  const terrain = fix ? fix.puzzle.spec.terrain : run?.spec.terrain ?? machine?.terrain ?? sketch?.terrain;
   // Build mode, or a solved puzzle: clicking a part names it in the prompt ("move " + click = "move dominoes #2").
   const spec = fix ? fix.puzzle.solution : machine;
   const naming = !!spec && builds > 0 && !busy && (!fix || fix.solved);
@@ -329,6 +377,7 @@ function Machine3D() {
   return (
     <>
       <MachineCamera parts={framed} />
+      <Ground terrain={terrain} />
       {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (
         <BodyMesh
@@ -345,25 +394,19 @@ function Machine3D() {
       ))}
       {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
-      {picking && phase !== 'playing' && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} />}
+      {picking && phase !== 'playing' && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} terrain={terrain} />}
       <Confetti />
     </>
   );
 }
 
 export function MachineScene() {
-  const w = GRID.x * CELL, d = GRID.z * CELL;
   return (
     <Canvas className="scene" shadows camera={{ fov: 45, position: [8, 6, 12], near: 0.05, far: 200 }} gl={{ antialias: true }}>
       <color attach="background" args={['#0b0e1a']} />
       <fog attach="fog" args={['#0b0e1a', 18, 40]} />
       <hemisphereLight args={['#dfe8ff', '#1a1430', 0.7]} />
       <directionalLight position={[6, 12, 4]} intensity={1.6} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-10} shadow-camera-right={10} shadow-camera-top={10} shadow-camera-bottom={-10} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, -0.001, d / 2]} receiveShadow>
-        <planeGeometry args={[w, d]} />
-        <meshStandardMaterial color="#141a2e" roughness={0.95} />
-      </mesh>
-      <Grid position={[w / 2, 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#2a3354" sectionSize={CELL * 4} sectionColor="#3b4a7a" fadeDistance={30} infiniteGrid={false} />
       <Machine3D />
     </Canvas>
   );
