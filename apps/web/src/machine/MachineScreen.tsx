@@ -213,7 +213,7 @@ function AiLog() {
   const bin = puzzle && ai.busy && ai.sketch ? ai.sketch.parts.filter((p) => !TARGET_KINDS.includes(p.kind)).length : 0;
   return (
     <div className="mlog">
-      {puzzle && ai.busy && ai.sketch && <div className="muted small">{ai.sketch.title ? `“${ai.sketch.title}”: ` : ''}targets on the stage, {bin} part{bin === 1 ? '' : 's'} for your bin so far. The route stays hidden.</div>}
+      {puzzle && ai.busy && ai.sketch && <div className="muted small">{ai.sketch.title ? `“${ai.sketch.title}”: ` : ''}targets on the stage, {bin} part{bin === 1 ? '' : 's'} for your bin so far.</div>}
       {ai.lines.map((l, i) => <div key={i} className={i === ai.lines.length - 1 && ai.busy ? 'current' : ''}>{i === ai.lines.length - 1 && ai.busy ? '◌ ' : '✓ '}{l}</div>)}
       {ai.busy && ai.lines.length === 0 && <div className="current">◌ Contacting the AI designer…</div>}
       {ai.busy && ai.progress > 0 && <div className="machine-bar"><div style={{ width: `${Math.round(ai.progress * 100)}%` }} /></div>}
@@ -255,7 +255,11 @@ function FixPanel() {
       <div className="mtitle">
         <h2>{stageLabel}{fix.puzzle.solution.title}</h2>
         {level && <p className="mission">Mission: “{level.mission}”</p>}
-        <p>{fix.solved ? `Fixed in ${tries(fix.tries)}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}` : KIND_LABEL[fix.kind].blurb}</p>
+        <p>{fix.solved
+          ? `${fix.puzzle.verified === false ? 'Solved' : 'Fixed'} in ${tries(fix.tries)}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
+          : fix.puzzle.verified === false
+            ? `The AI set the stage and picked the parts, but nobody has solved this level yet. Physics decides. Its own idea used ${fix.puzzle.missing.length} of the ${fix.hand.length} parts below.`
+            : KIND_LABEL[fix.kind].blurb}</p>
       </div>
       <ChainList goal={fix.puzzle.solution.goal} parts={fix.puzzle.solution.parts} />
       {!fix.solved && (
@@ -289,7 +293,7 @@ function FixPanel() {
       <div className="mactions">
         {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={!fix.placed.length || phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'You can test it before every part is down'}>▶ Run ({tries(fix.tries)})</button>}
         {!fix.solved && <button onClick={clearPlaced} disabled={!fix.placed.length}>Clear</button>}
-        {!fix.solved && !fix.hint && fix.tries >= 2 && <button onClick={showHint}>Hint</button>}
+        {!fix.solved && !fix.hint && fix.tries >= 2 && <button onClick={showHint} title={fix.puzzle.verified === false ? 'Shows the AI\'s own idea; nobody has tested it' : ''}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'}</button>}
         {fix.solved && inDaily && !lastStage && <button className="primary" onClick={() => void nextDailyStage()} disabled={phase === 'simulating'}>Next: {KIND_LABEL[DAILY_LADDER[daily.stage]].name} →</button>}
         {fix.solved && inDaily && lastStage && <span className="badge ok">Daily done in {tries(daily.tries)}{daily.best[daily.date] ? ` · best ${daily.best[daily.date]}` : ''}</span>}
         {fix.solved && !inDaily && !breaking && <button onClick={() => setBreaking(true)}>🔧 Break it again</button>}

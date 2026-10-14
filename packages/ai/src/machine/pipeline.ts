@@ -2,7 +2,7 @@ import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
-import { designMachine, editMachineDesign, editMachineRequest, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
+import { designMachine, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
 import type { Physics } from './physics';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
@@ -119,22 +119,52 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
   };
 }
 
-export function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit): Promise<MachineEvent> {
-  return machineLoop(deps, emit, {
-    firstStage: 'designing',
-    firstMessage: 'Designing a level for your idea.',
-    design: (calls, onProgress) => designMachine(deps.llm, prompt, calls, onProgress),
-    request: `Design a machine for this request:\n\n${prompt}`,
-    validate: (json) => validateMachineDesign(json, { flat: wantsFlat(prompt) }),
+/** A result for a machine nobody has run. */
+const UNRUN: MachineResult = { success: false, satisfiedCount: 0, score: 0, progress: 0, failedAt: null, steps: [] };
+
+/**
+ * Design only: the level comes back as the AI wrote it, with no run, no nudging and no redesign.
+ * Puzzle play wants this: the player's build is the first thing the physics ever runs, so the
+ * level has no answer sheet, only the AI's idea of one (the bin).
+ */
+async function designOnly(deps: MachinePipelineDeps, emit: Emit, loop: {
+  firstStage: 'designing' | 'editing';
+  firstMessage: string;
+  design: (calls: Completion[], onProgress: (textSoFar: string) => void) => Promise<MachineDesign>;
+}): Promise<MachineEvent> {
+  const calls: Completion[] = [];
+  let sent = -1;
+  emit({ type: 'stage', stage: loop.firstStage, attempt: 1, maxAttempts: 1, message: loop.firstMessage });
+  const design = await loop.design(calls, (text) => {
+    const sketch = sketchMachine(text);
+    const drawn = sketch.parts.length + sketch.terrain.length;
+    if (drawn === sent) return;
+    sent = drawn;
+    emit({ type: 'sketch', attempt: 1, ...sketch });
   });
+  emit({ type: 'draft', machine: design.spec, status: 'designed', attempt: 1 });
+  return { type: 'machine', machine: design.spec, solved: false, verified: false, attempts: 1, notes: ['Level set up; nobody has run it.'], cached: false, result: UNRUN, moved: [], attempt: 1 };
 }
 
-export function editMachine(deps: MachinePipelineDeps, machine: MachineSpec, instruction: string, emit: Emit): Promise<MachineEvent> {
-  return machineLoop(deps, emit, {
-    firstStage: 'editing',
+export function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
+  const twist = pickTwist(prompt);
+  const loop = {
+    firstStage: 'designing' as const,
+    firstMessage: 'Designing a level for your idea.',
+    design: (calls: Completion[], onProgress: (textSoFar: string) => void) => designMachine(deps.llm, prompt, calls, onProgress, { twist }),
+    request: `Design a machine for this request:\n\n${prompt}`,
+    validate: (json: unknown) => validateMachineDesign(json, { flat: wantsFlat(prompt) }),
+  };
+  return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);
+}
+
+export function editMachine(deps: MachinePipelineDeps, machine: MachineSpec, instruction: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
+  const loop = {
+    firstStage: 'editing' as const,
     firstMessage: `Applying your change: ${instruction}`,
-    design: (calls, onProgress) => editMachineDesign(deps.llm, machine, instruction, calls, onProgress),
+    design: (calls: Completion[], onProgress: (textSoFar: string) => void) => editMachineDesign(deps.llm, machine, instruction, calls, onProgress),
     request: editMachineRequest(machine, instruction),
     validate: validateMachineEdit(machine),
-  });
+  };
+  return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);
 }

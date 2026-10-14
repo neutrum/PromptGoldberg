@@ -29,8 +29,17 @@ export interface Puzzle {
   start: Part[];
   /** The complete machine. */
   solution: MachineSpec;
-  /** Which goal step the broken machine fails at. */
+  /** Which goal step the broken machine fails at (-1 when nobody ran it). */
   failedAt: number;
+  /** False when the solution is the AI's unproven idea: the player's build is the first run. */
+  verified?: boolean;
+  /** Extra parts in the hand that the solution does not use. */
+  spares?: Part[];
+}
+
+/** Everything in the player's hand: the parts of the route, then the spares. */
+export function handOf(puzzle: Puzzle): Part[] {
+  return [...puzzle.missing, ...(puzzle.spares ?? [])];
 }
 
 /** Parts worth removing, best first: the ones whose absence is visible and makes a satisfying fix. */
@@ -168,7 +177,11 @@ export function makeConnectPuzzle(solution: MachineSpec): Puzzle | null {
   const spec: MachineSpec = { ...solution, parts: solution.parts.filter((p) => !ids.has(p.id)) };
   const failedAt = fails(spec);
   if (failedAt === null) return null; // Works without them: nothing to connect.
-  // Hand the parts out in chain order, so the bin reads like a recipe, with a shelf ahead of whatever stands on it.
+  return { kind: 'connect', spec, missing: chainOrder(solution, loose), start: [], solution, failedAt };
+}
+
+/** Parts in chain order, so the bin reads like a recipe, with a shelf ahead of whatever stands on it. */
+function chainOrder(solution: MachineSpec, loose: Part[]): Part[] {
   const order = new Map(solution.parts.map((p, i) => [p.id, i]));
   loose.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   for (const shelf of loose.filter((p) => p.kind === 'platform')) {
@@ -179,7 +192,22 @@ export function makeConnectPuzzle(solution: MachineSpec): Puzzle | null {
       loose.splice(first, 0, shelf);
     }
   }
-  return { kind: 'connect', spec, missing: loose, start: [], solution, failedAt };
+  return loose;
+}
+
+/**
+ * A level the AI only set up: the stage (ball, targets, scenery, ground) stays, the parts of the
+ * AI's route and its spares go to the player, and nobody has run anything. No physics here: the
+ * player's first run is the first run. Null when there is nothing to hand out.
+ */
+export function makeLevelPuzzle(level: MachineSpec): Puzzle | null {
+  const fixed = fixedParts(level);
+  const loose = removable(level).filter((p) => !fixed.has(p.id));
+  if (!loose.length) return null;
+  const ids = new Set(loose.map((p) => p.id));
+  const spec: MachineSpec = { ...level, parts: level.parts.filter((p) => !ids.has(p.id)), spares: undefined };
+  const spares: Part[] = (level.spares ?? []).map((s, i) => ({ id: `spare${i + 1}`, kind: s.kind, x: 0, y: 0, z: 0, yaw: 0 as const, length: s.length }));
+  return { kind: 'connect', spec, missing: chainOrder(level, loose), start: [], solution: { ...level, spares: undefined }, failedAt: -1, verified: false, spares };
 }
 
 /** A puzzle of the given kind, or null when the machine cannot be broken that way. */

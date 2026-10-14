@@ -124,7 +124,7 @@ export async function buildApp(opts: AppOptions) {
       llm: llm!, physics, signal, onEvent: emit,
       maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs,
     });
-    return { type: 'machine', machine: res.machine, solved: res.solved, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
+    return { type: 'machine', machine: res.machine, solved: res.solved, verified: res.verified, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
   };
 
   /** Reply with a single-error SSE stream (status still reflects the failure). */
@@ -244,8 +244,9 @@ export async function buildApp(opts: AppOptions) {
     await streamPipeline(req, reply, (emit, signal) => runAi({ level: parsed.level, instruction }, emit, signal));
   });
 
-  app.post<{ Body: { prompt?: unknown } }>('/api/machine', async (req, reply) => {
+  app.post<{ Body: { prompt?: unknown; verify?: unknown } }>('/api/machine', async (req, reply) => {
     const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+    const verify = req.body?.verify !== false;
     if (!prompt) return sseError(reply, 400, 'Describe the machine you want, e.g. "get the ball into the bucket using dominoes and a fan".');
     if (prompt.length > limits.maxPromptChars) return sseError(reply, 400, `That description is too long: keep it under ${limits.maxPromptChars} characters.`);
     const blocked = guardLlm(req);
@@ -253,9 +254,9 @@ export async function buildApp(opts: AppOptions) {
     const stream = openSse<MachineStreamEvent>(reply);
     const started = Date.now();
     try {
-      const event = await runMachineAi({ prompt }, stream.send, stream.signal);
+      const event = await runMachineAi({ prompt, verify }, stream.send, stream.signal);
       stream.send(event);
-      req.log.info({ ms: Date.now() - started, solved: event.solved, attempts: event.attempts }, 'machine stream done');
+      req.log.info({ ms: Date.now() - started, solved: event.solved, verified: event.verified !== false, attempts: event.attempts }, 'machine stream done');
     } catch (err) {
       if (stream.signal.aborted) req.log.info('client disconnected during machine stream');
       else {
@@ -290,7 +291,7 @@ export async function buildApp(opts: AppOptions) {
     return { puzzle };
   });
 
-  app.post<{ Body: { machine?: unknown; instruction?: unknown } }>('/api/machine/edit', async (req, reply) => {
+  app.post<{ Body: { machine?: unknown; instruction?: unknown; verify?: unknown } }>('/api/machine/edit', async (req, reply) => {
     const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
     if (!instruction) return sseError(reply, 400, 'Say what to change, e.g. "swap the fan for a cannon".');
     if (instruction.length > limits.maxInstructionChars) return sseError(reply, 400, `That change is too long: keep it under ${limits.maxInstructionChars} characters.`);
@@ -300,7 +301,7 @@ export async function buildApp(opts: AppOptions) {
     if (blocked) return sseError(reply, blocked.status, blocked.error);
     const stream = openSse<MachineStreamEvent>(reply);
     try {
-      const event = await runMachineAi({ machine: parsed.spec, instruction }, stream.send, stream.signal);
+      const event = await runMachineAi({ machine: parsed.spec, instruction, verify: req.body?.verify !== false }, stream.send, stream.signal);
       stream.send(event);
     } catch (err) {
       if (stream.signal.aborted) req.log.info('client disconnected during machine stream');

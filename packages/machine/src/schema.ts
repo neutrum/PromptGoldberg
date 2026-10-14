@@ -45,6 +45,13 @@ export const Part = z.object({
 });
 export type Part = z.infer<typeof Part>;
 
+/** An extra part for the player's bin that the designer's own route does not use: a red herring, or another way. */
+export const Spare = z.object({
+  kind: PartKind.exclude(['ball']),
+  length: z.number().int().min(1).max(8).optional().describe('platforms: cells long; dominoes: how many'),
+});
+export type Spare = z.infer<typeof Spare>;
+
 export const BucketGoal = z.object({ type: z.literal('bucket'), part: z.string().describe('id of the bucket the ball must land in') });
 export const BellGoal = z.object({
   type: z.literal('bell'), part: z.string().describe('id of the bell'),
@@ -61,6 +68,7 @@ export const MachineSpec = z.object({
   caption: z.string().optional().describe('one sentence for players: what should happen, no numbers'),
   terrain: z.array(Terrain).max(6).optional().describe('the shape of the ground: ditches, rivers, pits, banks and hills the route has to deal with; leave out for flat ground'),
   parts: z.array(Part).min(1).max(40),
+  spares: z.array(Spare).max(4).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),
   goal: z.array(MachineGoal).min(1).max(4).describe('ordered events; the machine works when all happen in order'),
   duration: z.number().min(4).max(30).default(15).describe('seconds to simulate'),
 });

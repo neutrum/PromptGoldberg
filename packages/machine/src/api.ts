@@ -22,5 +22,7 @@ export type MachineStreamEvent =
   | {
     type: 'machine'; machine: MachineSpec; solved: boolean; attempts: number; notes: string[]; cached: boolean;
     result: MachineResult; moved: { id: string; cells: number }[]; attempt?: number;
+    /** False for a level the AI only set up: nobody has run it, the player's build is the first. */
+    verified?: boolean;
   }
   | { type: 'error'; error: string };

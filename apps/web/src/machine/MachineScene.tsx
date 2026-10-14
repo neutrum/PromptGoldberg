@@ -180,7 +180,7 @@ function Playback({ run, dynamic }: { run: MachineRun; dynamic: Map<string, THRE
  * Orbit camera the player owns (drag to turn, wheel to zoom, right-drag to pan). A new machine
  * gets framed once; while the ball runs the view glides along with it, keeping the player's angle.
  */
-function MachineCamera({ parts }: { parts: Part[] }) {
+function MachineCamera({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] }) {
   const camera = useThree((s) => s.camera);
   const controls = useRef<OrbitControlsImpl>(null);
   const delta = useMemo(() => new THREE.Vector3(), []);
@@ -188,11 +188,17 @@ function MachineCamera({ parts }: { parts: Part[] }) {
     if (!parts.length) return { centre: new THREE.Vector3((GRID.x * CELL) / 2, 0.5, (GRID.z * CELL) / 2), size: 6 };
     const box = new THREE.Box3();
     for (const p of parts) box.expandByPoint(new THREE.Vector3((p.x + 0.5) * CELL, p.y * CELL + 0.3, (p.z + 0.5) * CELL));
+    // The shaped ground is the scene too: a river or a hill belongs in the frame.
+    for (const t of terrain ?? []) {
+      if (t.h === 0) continue;
+      box.expandByPoint(new THREE.Vector3(t.x * CELL, Math.max(0, t.h) * CELL, t.z * CELL));
+      box.expandByPoint(new THREE.Vector3((t.x + t.w) * CELL, Math.max(0, t.h) * CELL, (t.z + t.d) * CELL));
+    }
     box.expandByScalar(CELL);
     const centre = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     return { centre, size: Math.max(size.x, size.z, size.y * 1.5, 3) };
-  }, [parts]);
+  }, [parts, terrain]);
   const framedFor = useRef<string>('');
   useEffect(() => {
     // Frame each machine once; later changes to the same machine keep the player's view.
@@ -376,7 +382,7 @@ function Machine3D() {
   const liftable = fix && !fix.solved && phase !== 'playing' ? new Set(fix.placed.map((p) => p.id)) : null;
   return (
     <>
-      <MachineCamera parts={framed} />
+      <MachineCamera parts={framed} terrain={terrain} />
       <Ground terrain={terrain} />
       {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (

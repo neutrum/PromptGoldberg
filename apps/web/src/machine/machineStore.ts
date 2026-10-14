@@ -1,5 +1,5 @@
 import {
-  dropAt, GRID, isSupported, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
+  dropAt, GRID, handOf, isSupported, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
@@ -100,6 +100,8 @@ interface MachineState {
   nextDailyStage: () => Promise<void>;
   /** Break the proven machine and hand the player the parts. Resolves false when it cannot be broken that way. */
   startFix: (kind?: PuzzleKind) => Promise<boolean>;
+  /** A level nobody has run: the stage stays, the AI's route parts and spares go to the hand. */
+  startLevel: (level: MachineSpec) => Promise<boolean>;
   pick: (index: number | null) => void;
   /** Drop the picked part on a column; false when something is in the way. */
   placeAt: (x: number, z: number) => boolean;
@@ -185,6 +187,18 @@ export const useMachine = create<MachineState>((set, get) => {
       }
       await get().load(parsed.spec, { rank, proven: rank >= 1, moved });
     };
+    // A level the AI only set up: no answer sheet, the hand is the AI's idea plus spares, the player's run is the first.
+    const acceptLevel = async (raw: MachineSpec) => {
+      const parsed = parseMachine(raw);
+      if (!parsed.ok) {
+        set((s) => ({ ai: { ...s.ai, error: `The level came back broken: ${parsed.issues[0]?.message}` } }));
+        return;
+      }
+      delivered = true;
+      set({ machine: parsed.spec, rank: 2, proven: false, moved: [], mode: 'build', fix: null, veiled: true });
+      if (await get().startLevel(parsed.spec)) return;
+      await get().load(parsed.spec, { rank: 2, proven: false });
+    };
     try {
       await streamMachine(path, body, (e: MachineStreamEvent) => {
         switch (e.type) {
@@ -208,12 +222,14 @@ export const useMachine = create<MachineState>((set, get) => {
             void accept(e.machine, e.status === 'solved' ? 1 : 0);
             break;
           case 'machine': {
-            log(e.solved ? `Verified: the machine works${e.moved.length ? ` after nudging ${e.moved.length} part${e.moved.length > 1 ? 's' : ''}` : ''}.` : 'Could not make it work; here is the closest attempt.');
+            const unrun = e.verified === false;
+            log(unrun ? 'Level ready. Nobody has solved it yet: that is your job.' : e.solved ? `Verified: the machine works${e.moved.length ? ` after nudging ${e.moved.length} part${e.moved.length > 1 ? 's' : ''}` : ''}.` : 'Could not make it work; here is the closest attempt.');
             // An edit that left every part where it was: the request asked for a fixed part to move, most likely.
             const before = get().machine;
             if (path === '/machine/edit' && before && unchanged(before, e.machine)) log('Nothing moved: the ball and the goal parts stay where they are. Change the parts between them instead.');
             set({ proven: e.solved });
-            void accept(e.machine, 2, e.moved).then(() => set((s) => ({
+            const deliver = unrun ? acceptLevel(e.machine) : accept(e.machine, 2, e.moved);
+            void deliver.then(() => set((s) => ({
               ai: { ...idleAi, lines: s.ai.lines }, working: false, proven: e.solved,
               builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
             })));
@@ -281,13 +297,13 @@ export const useMachine = create<MachineState>((set, get) => {
 
     create(prompt) {
       set({ prompt, machine: null, run: null, result: null, rank: 0, proven: false, moved: [], phase: 'idle', time: 0, celebrated: 0 });
-      return aiStream('/machine', { prompt });
+      return aiStream('/machine', { prompt, verify: !get().puzzle });
     },
 
     edit(instruction) {
       const { machine } = get();
       if (!machine) return Promise.resolve();
-      return aiStream('/machine/edit', { machine, instruction });
+      return aiStream('/machine/edit', { machine, instruction, verify: !get().puzzle });
     },
 
     async load(machine, meta = {}) {
@@ -372,6 +388,18 @@ export const useMachine = create<MachineState>((set, get) => {
       return true;
     },
 
+    async startLevel(level) {
+      const puzzle = makeLevelPuzzle(level);
+      if (!puzzle) {
+        set({ veiled: false, error: 'This level has no parts to hand out; ask for another one.' });
+        return false;
+      }
+      set({ mode: 'fix', veiled: false, phase: 'simulating', error: null, fix: { puzzle, kind: 'connect', hand: handOf(puzzle).map((m) => ({ ...m })), placed: [], picking: 0, lift: 1, tries: 0, solved: false, hint: false } });
+      // The stage as it is: the ball drops and nothing happens yet.
+      await simulate(withPlacements(puzzle, []));
+      return true;
+    },
+
     pick(index) {
       set((s) => (s.fix ? { fix: { ...s.fix, picking: index } } : {}));
     },
@@ -427,7 +455,7 @@ export const useMachine = create<MachineState>((set, get) => {
     clearPlaced() {
       const { fix } = get();
       if (!fix || fix.solved) return;
-      set({ fix: { ...fix, placed: [], picking: 0, hand: fix.puzzle.missing.map((m) => ({ ...m })) }, run: null, result: null, phase: 'idle' });
+      set({ fix: { ...fix, placed: [], picking: 0, hand: handOf(fix.puzzle).map((m) => ({ ...m })) }, run: null, result: null, phase: 'idle' });
     },
 
     async runFix() {
@@ -454,9 +482,11 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     leaveFix() {
-      const { machine } = get();
-      set((s) => ({ mode: 'build', fix: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
-      if (machine) void simulate(machine);
+      const { machine, fix } = get();
+      // A solved puzzle: what plays on is the player's build, not the AI's idea of one.
+      const whole = fix?.solved ? withPlacements(fix.puzzle, fix.placed) : machine;
+      set((s) => ({ mode: 'build', fix: null, machine: whole, proven: fix?.solved ? true : s.proven, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
+      if (whole) void simulate(whole);
     },
   };
 });

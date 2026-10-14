@@ -126,11 +126,15 @@ export { designSystem } from './llm/design';
 
 // ---- Prompt Goldberg: plain language -> a Rube Goldberg machine that the physics proved works.
 
-export type MachineRequest =
+export type MachineRequest = (
   /** Design a new machine from a description. */
   | { prompt: string }
   /** Change an existing machine ("swap the fan for a cannon"). */
-  | { machine: MachineSpec; instruction: string };
+  | { machine: MachineSpec; instruction: string }
+) & {
+  /** False: design only, no run, no nudging (puzzle play: the player's build is the first run). Default true. */
+  verify?: boolean;
+};
 
 export interface CreateMachineOptions {
   llm?: LlmBackend | LlmBackendName;
@@ -152,6 +156,8 @@ export interface CreateMachineResult {
   machine: MachineSpec;
   /** True when the physics proved the goal chain happens; the spec includes the optimizer's nudges. */
   solved: boolean;
+  /** False when nothing was run (verify: false). */
+  verified: boolean;
   result: MachineResult;
   moved: { id: string; cells: number }[];
   attempts: number;
@@ -188,10 +194,11 @@ export async function createMachine(request: MachineRequest, options: CreateMach
     deadline: Date.now() + (options.deadlineMs ?? 120_000),
   };
   const emit = options.onEvent ?? (() => {});
+  const opts = { verify: request.verify };
   const event = 'prompt' in request
-    ? await generateMachine(deps, request.prompt, emit)
-    : await editMachine(deps, request.machine, request.instruction, emit);
-  return { machine: event.machine, solved: event.solved, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage };
+    ? await generateMachine(deps, request.prompt, emit, opts)
+    : await editMachine(deps, request.machine, request.instruction, emit, opts);
+  return { machine: event.machine, solved: event.solved, verified: event.verified !== false, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage };
 }
 
 export { createPhysics, type Physics } from './machine/physics';

@@ -6,7 +6,7 @@ import { requestValidated, type Validation } from '../llm/design';
 
 export const MACHINE_SCHEMA = JSON.stringify(z.toJSONSchema(MachineSpec, { io: 'input' }));
 
-const EXAMPLE = { ...example, caption: 'Down the ramp, through the dominoes, and the bell rings.' };
+const EXAMPLE = { ...example, caption: 'Down the ramp, through the dominoes, and the bell rings.', spares: [{ kind: 'trampoline' }, { kind: 'platform', length: 3 }] };
 
 /**
  * The parts manual. Everything the model needs to compose a chain that works on the first try
@@ -15,7 +15,7 @@ const EXAMPLE = { ...example, caption: 'Down the ramp, through the dominoes, and
  */
 export const MACHINE_PROMPT = `You design Rube Goldberg puzzle levels for Prompt Goldberg, a browser game in the spirit of The Incredible Machine: a player describes a contraption in plain language, you build a working machine from a fixed kit of parts, and a rigid-body physics engine runs it to prove the goal chain happens. An optimizer then nudges parts by up to a cell to make it work, so get the sequence and the rough alignment right rather than exact numbers.
 
-THE GAME: the player then sees only the ball, the goal parts and the scenery, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side or corner, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot) and AROUND A CORNER: at least ${TURN_MIN} cells away along x and ${TURN_MIN} along z, never straight ahead on the same row. So the route turns at least once: a cannon or fan facing 90 or 270 sends the ball along z, a ramp and shelf with yaw 90 run along z, a wall stops a roll and a fan pushes it sideways. A goal part straight ahead of the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
+THE GAME: the player then sees only the ball, the goal parts and the scenery, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side or corner, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot) and AROUND A CORNER: at least ${TURN_MIN} cells away along x and ${TURN_MIN} along z, never straight ahead on the same row. So the route turns at least once: a cannon or fan facing 90 or 270 sends the ball along z, a ramp and shelf with yaw 90 run along z, a wall stops a roll and a fan pushes it sideways. A goal part straight ahead of the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw, a fan beside the path. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
 
 THE STAGE
 A grid of 0.5 m cells: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south), y from ${TERRAIN_MIN} (the bottom of the deepest ditch) through 0 (the flat floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
@@ -38,6 +38,10 @@ THE KIT (each part stands on its cell at height y unless said otherwise)
 THE GROUND ("terrain"): the stage is not flat. Shape it with 1 to 4 rectangles of ground at another height, each {"name", "x", "z", "w", "d", "h"}: x, z is the north-west cell, w cells along x, d cells along z, h the ground height in cells from ${TERRAIN_MIN} to ${TERRAIN_MAX}. Negative h digs a ditch, river, moat or pit: a ball that rolls into it is stuck (a river right across the stage, w 24 or d 24, must be jumped by a cannon or a trampoline; a short ditch can be gone round). Positive h raises a bank, hill or plateau: a ball on it rolls off the edge and drops; the ball can start up there (y = h) instead of on a shelf, and the side of a hill is a wall to a ball at its foot. Parts standing on shaped ground take its h as their y (a bucket at the bottom of a pit with h -2 has y -2); the ball never starts in a ditch. Give blocks the mission's names ("river", "moat", "lava", "crater", "hill"). Put at least one shaped block between the start and the farthest target. Only when the request asks for flat ground do you leave "terrain" out. Write "terrain" before "parts" in the JSON.
 
 SCENERY: a wall or platform with "fixed": true is part of the level: it stays on the stage, the player does not get it in the bin and has to get past it or use it. Besides the shaped ground, most levels have a fixed wall standing in the ball's path between the start and the farthest target (same row as the route, on the floor or a shelf), so the route must go over it (a drop from a high shelf clears a 2-cell wall, a cannon, a trampoline) or around it (a fan or cannon facing another way). Fixed platforms are ledges the route may land on. Mark 1 to 3 scenery parts, never the ball, a target, or a part that moves the ball.
+
+VARIETY: levels must not all look alike. "Ramp, cannon over the wall, bucket" is the shape to avoid: use a cannon in at most one level in three, and never as a reflex. Pick the main link from the mission and the twist in the request: a fan beside the path pushing the ball sideways, a trampoline up to a ledge, a seesaw tipping the ball down onto a ramp facing the other way, a long row of dominoes turning the corner, drops from shelf to lower shelf, a hill start with two legs on different rows, a gap in a pair of walls. Mix which part turns the corner, which scenery blocks the way and where the ball starts.
+
+SPARES: give the player 2 or 3 "spares", extra parts beyond your route (a ramp, a shelf, a trampoline, a fan, a wall): the player gets your route's parts and the spares mixed in the bin with no positions, so the spares make them think and offer another way. Spares are kinds only, no positions.
 
 GOALS: an ordered list of 1 to 4 events the machine must make happen, in order:
 - {"type": "bucket", "part": id}: the ball settles in that bucket.
@@ -78,6 +82,27 @@ export function formatMachineIssues(issues: SpecIssue[]): string {
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
 
 /** Validate the machine and drop any fine offsets the model wrote (those belong to the optimizer). */
+
+/** Twists the server hands out so one mission does not always get the same level; the mission's own words win. */
+export const TWISTS = [
+  'a fan beside the path blows the ball sideways along the bank into the target; no cannon',
+  'a trampoline bounces the ball up onto a high ledge where the target waits; no cannon',
+  'a seesaw on a bank tips the ball down onto a ramp that faces the other way; no cannon',
+  'a long row of dominoes carries the action round the corner to the bell; the ball only has to start it',
+  'the ball starts on top of a hill and the route winds down it in two legs on different rows',
+  'a pit between the start and the target: the only way across is a cannon shot from a shelf',
+  'the target sits at the bottom of a pit; the route ends with a drop into it',
+  'a pair of walls with a one-cell gap: a fan pushes the ball through the gap',
+  'two shelves at different heights: the ball drops from one to the other and turns the corner on the lower one',
+];
+
+/** A twist for a mission that names no mechanism of its own (deterministic when `seed` is given). */
+export function pickTwist(request: string, seed?: number): string | undefined {
+  if (/\b(fan|trampoline|seesaw|cannon|dominoe?s?|shelf|shelves|hill|pit|ditch|river|moat|gap|flat)\b/i.test(request)) return undefined;
+  const n = seed === undefined ? Math.floor(Math.random() * TWISTS.length) : Math.abs(seed) % TWISTS.length;
+  return TWISTS[n];
+}
+
 /** True when the request asks for flat ground, the one case where the designer may leave the terrain out. */
 export const wantsFlat = (request: string) => /\bflat\b/i.test(request);
 
@@ -173,10 +198,11 @@ function completeObjects<T>(textSoFar: string, key: string, schema: { safeParse:
 
 const MODEL = () => process.env.CLAUDE_MACHINE_MODEL ?? 'claude-sonnet-5-5';
 
-export async function designMachine(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void): Promise<MachineDesign> {
+export async function designMachine(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void, opts: { twist?: string } = {}): Promise<MachineDesign> {
+  const twist = opts.twist ? `\n\nThis level's twist, use it: ${opts.twist}.` : '';
   return requestValidated(
     llm,
-    { system: MACHINE_PROMPT, prompt: `Design a machine for this request:\n\n${userPrompt}`, thinking: 'off', maxTokens: 4000, model: MODEL() },
+    { system: MACHINE_PROMPT, prompt: `Design a level for this mission:\n\n${userPrompt}${twist}`, thinking: 'off', maxTokens: 4000, model: MODEL() },
     (json) => validateMachineDesign(json, { flat: wantsFlat(userPrompt) }),
     calls,
     2,
