@@ -1,6 +1,6 @@
 # Credits
 
-All third-party code and assets used in Orbital Goldberg. Permissive licenses only (MIT, Apache-2.0, BSD, ISC).
+All third-party code and assets used in Prompt Goldberg and Orbital Goldberg. Permissive licenses only (MIT, Apache-2.0, BSD, ISC).
 
 ## Libraries
 
@@ -17,12 +17,15 @@ All third-party code and assets used in Orbital Goldberg. Permissive licenses on
 | fastify | MIT | Backend server |
 | @anthropic-ai/sdk | MIT | Claude API client |
 | typescript | Apache-2.0 | Language |
+| @dimforge/rapier3d-compat | Apache-2.0 | Rigid-body physics (Prompt Goldberg) |
 
 ## AI-generated materials
 
 - Code in this repository was written with assistance from Claude (Anthropic) via Claude Code.
-- Star systems at runtime are designed by the Claude API.
+- Star systems (Orbital Goldberg) and levels (Prompt Goldberg) are designed at runtime by the Claude API.
+- The built-in Prompt Goldberg levels in `packages/machine/src/fixtures/levels/` were made by the same AI pipeline from their mission sentences.
 
 ## Assets
 
-- No third-party art, audio, or fonts yet.
+- Sound effects in `apps/web/public/sfx/` (cannon, boing, ding, plop, clack, whoosh): generated once with ElevenLabs sound effects (elevenlabs.io), October 2026, on the free plan, which requires attribution: **Sound effects by ElevenLabs.** If the project is used commercially, regenerate them on a paid plan. Without the files the game falls back to its built-in WebAudio synth.
+- No third-party art or fonts.

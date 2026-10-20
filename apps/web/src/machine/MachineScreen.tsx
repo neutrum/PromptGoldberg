@@ -103,7 +103,7 @@ function Welcome({ onClose }: { onClose: () => void }) {
           <button className="primary" onClick={onClose}>✍️ I'll write my own mission</button>
           <button onClick={() => { onClose(); void useMachine.getState().playDaily(); }} disabled={daily.loading}>📅 Today's level</button>
         </div>
-        <p className="muted small">Drag to look around · wheel to zoom</p>
+        <p className="muted small">Drag to look around · wheel to zoom · sound effects by ElevenLabs</p>
       </div>
     </div>
   );
