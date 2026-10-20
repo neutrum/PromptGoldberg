@@ -545,7 +545,9 @@ function Machine3D() {
     return () => window.removeEventListener('pointerup', end);
   }, []);
   // Parts the player put down (or found moved) can be picked up again by clicking them.
-  const liftable = fix && !fix.solved && phase !== 'playing' ? new Set(fix.placed.map((p) => p.id)) : null;
+  // The opening replay (the stage before any try) never blocks building; the player's own run is theirs to watch.
+  const building = !!fix && !fix.solved && (phase !== 'playing' || fix.tries === 0);
+  const liftable = building ? new Set(fix!.placed.map((p) => p.id)) : null;
   return (
     <>
       <MachineCamera parts={framed} terrain={terrain} />
@@ -565,7 +567,7 @@ function Machine3D() {
       ))}
       {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
-      {picking && phase !== 'playing' && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} terrain={terrain} />}
+      {picking && building && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} terrain={terrain} />}
       <Decor parts={parts} />
       <Confetti />
       <Flashes />

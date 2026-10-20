@@ -460,6 +460,8 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!part) return false;
       const placed = [...others, part];
       const next = fix.hand.findIndex((m) => !placed.some((p) => p.id === m.id));
+      // A run still being simulated (the opening replay) is stale now.
+      loadSeq++;
       set({ fix: { ...fix, placed, picking: next >= 0 ? next : null }, run: null, result: null, phase: 'idle' });
       return true;
     },

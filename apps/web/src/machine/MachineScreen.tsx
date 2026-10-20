@@ -146,8 +146,8 @@ function ModeSwitch() {
   const { setPuzzle } = useMachine.getState();
   return (
     <div className="mswitch" role="radiogroup" aria-label="Play mode" title="Puzzle: you get the parts and build the chain. Watch: the AI's machine just runs.">
-      <button className={puzzle ? 'active' : ''} onClick={() => setPuzzle(true)}>🧩 Puzzle</button>
-      <button className={puzzle ? '' : 'active'} onClick={() => setPuzzle(false)}>👀 Watch</button>
+      <button className={puzzle ? 'active' : ''} onClick={() => setPuzzle(true)}>🧩<span className="label"> Puzzle</span></button>
+      <button className={puzzle ? '' : 'active'} onClick={() => setPuzzle(false)}>👀<span className="label"> Watch</span></button>
     </div>
   );
 }
@@ -407,7 +407,7 @@ function DailyButton() {
   const best = daily.best[today];
   return (
     <button onClick={() => void useMachine.getState().playDaily()} disabled={daily.loading || busy || !!daily.date} title="The same machine for everyone today, broken three ways">
-      {daily.loading ? 'Loading…' : best ? `📅 Daily · best ${best}` : '📅 Daily puzzle'}
+      📅<span className="label">{daily.loading ? ' Loading…' : best ? ` Daily · best ${best}` : ' Daily puzzle'}</span>
     </button>
   );
 }
@@ -444,7 +444,7 @@ export function MachineScreen() {
           <button className="brand" onClick={() => setWelcome(true)} title="What is this?">Prompt <b>Goldberg</b></button>
           <span className="mtag">One sentence makes a level. You build the route. Physics judges.</span>
         </div>
-        <div className="hud-right"><ModeSwitch />{LEVELS.length > 0 && <button onClick={() => setWelcome(true)} title="Example levels and missions">🎮 Levels</button>}<DailyButton /></div>
+        <div className="hud-right"><ModeSwitch />{LEVELS.length > 0 && <button onClick={() => setWelcome(true)} title="Example levels and missions">🎮<span className="label"> Levels</span></button>}<DailyButton /></div>
       </div>
       <div className="mside">
         <GoalPanel />

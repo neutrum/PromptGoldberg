@@ -61,8 +61,18 @@
 @media (max-width: 720px) {
   .mside { top: 52px; width: calc(100% - 20px); }
   .mtitle p { display: none; }
+  /* The mission, the par line and an honest note still matter on a phone. */
+  .mtitle p.mission, .mtitle p.closest, .mtitle p.starline { display: block; }
   .welcome-card .logo { font-size: 30px; }
   .cards.big .card { min-width: 120px; }
+}
+
+@media (max-width: 600px) {
+  /* The top buttons wrap in a row beside the brand instead of a column under the panel. */
+  .machine-screen .hud-right { position: static; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+  .machine-screen .hud-top { grid-template-columns: auto 1fr; }
+  .machine-screen .hud-right button { font-size: 12px; padding: 4px 6px; }
+  .machine-screen .mside { top: 84px; max-height: calc(100% - 200px); overflow-y: auto; }
 }
 
 .mbin { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; align-items: center; }
@@ -90,3 +100,9 @@
 .stars.big { font-size: 22px; letter-spacing: 3px; }
 .starline { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .closest { margin: 4px 0 6px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 210, 122, 0.1); border: 1px solid rgba(255, 210, 122, 0.35); color: #ffd27a; font-size: 13px; }
+@media (max-width: 600px) {
+  .machine-screen .hud-right .label { display: none; }
+  .machine-screen .hud-right { flex-wrap: nowrap; }
+  .machine-screen .hud-top .brand { font-size: 14px; padding: 4px 6px; }
+  .machine-screen .mside { top: 56px; }
+}
