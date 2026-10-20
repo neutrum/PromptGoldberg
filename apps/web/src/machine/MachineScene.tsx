@@ -1,6 +1,6 @@
 import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, dropAt, footprint, FRAME_HZ, GRID, groundRuns, KIT, lockedParts, lowestGround, partCentre, partNames, restingHeight, TARGET_KINDS, WATER_WORDS, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, facing, footprint, FRAME_HZ, GRID, groundRuns, KIT, lockedParts, lowestGround, partCentre, partNames, partOrigin, restingHeight, TARGET_KINDS, WATER_WORDS, yawQuat, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -42,7 +42,8 @@ function BodyMesh({ body, meshRef, ghost, onClick, onGrab, onHover, glow, cursor
   useEffect(() => () => geometry.dispose(), [geometry]);
   const sensor = !!body.sensor;
   const air = body.kind === 'fan' && sensor;
-  const barrel = body.kind === 'cannon' && sensor;
+  // The cannon's barrel is drawn by Decor, tilted the way it fires; its sensor stays as an invisible handle to click and drag.
+  const barrel = body.kind === 'cannon' && sensor && body.id.endsWith('.barrel');
   if (sensor && !air && !barrel) return null;
   if (ghost) {
     return (
@@ -67,7 +68,7 @@ function BodyMesh({ body, meshRef, ghost, onClick, onGrab, onHover, glow, cursor
       {air
         ? <meshBasicMaterial color="#7de0a7" transparent opacity={0.1} depthWrite={false} />
         : barrel
-          ? <meshStandardMaterial color="#2b3140" roughness={0.6} metalness={0.4} />
+          ? <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           : <meshStandardMaterial color={body.color} roughness={body.kind === 'ball' ? 0.35 : 0.75} metalness={body.kind === 'bell' ? 0.6 : 0.05} emissive={glow ? '#ffd27a' : body.color} emissiveIntensity={glow ? 0.5 : body.kind === 'ball' ? 0.15 : 0.03} />}
     </mesh>
   );
@@ -126,6 +127,89 @@ function Confetti() {
       <boxGeometry args={[0.06, 0.012, 0.09]} />
       <meshBasicMaterial toneMapped={false} />
     </instancedMesh>
+  );
+}
+
+// ---- Decor: what makes a part read as itself (fan blades, a bell's dome, a cannon's barrel). Drawn only, never simulated.
+
+const spinning = new Set<THREE.Object3D>();
+
+function FanBlades({ part }: { part: Part }) {
+  const ref = useRef<THREE.Group>(null);
+  useEffect(() => {
+    const g = ref.current;
+    if (!g) return;
+    spinning.add(g);
+    return () => { spinning.delete(g); };
+  }, []);
+  const o = partOrigin(part);
+  const f = facing(part.yaw);
+  const front = KIT.fan.body[0] / 2 + 0.012;
+  return (
+    <group position={[o[0] + f[0] * front, o[1] + KIT.fan.body[1] / 2, o[2] + f[2] * front]} quaternion={yawQuat(part.yaw)}>
+      <group ref={ref}>
+        {[0, 1, 2].map((k) => (
+          <mesh key={k} rotation={[(k * 2 * Math.PI) / 3, 0, 0]} position={[0, 0, 0]}>
+            <boxGeometry args={[0.012, 0.3, 0.07]} />
+            <meshStandardMaterial color="#e8fff1" roughness={0.4} />
+          </mesh>
+        ))}
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.035, 0.035, 0.03, 12]} />
+          <meshStandardMaterial color="#2b3140" />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function BellDome({ part }: { part: Part }) {
+  const o = partOrigin(part);
+  const { radius, height } = KIT.bell;
+  return (
+    <group position={[o[0], o[1] + height, o[2]]}>
+      <mesh castShadow>
+        <sphereGeometry args={[radius * 1.02, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color="#ffcc33" metalness={0.7} roughness={0.25} />
+      </mesh>
+      <mesh position={[0, radius + 0.02, 0]}>
+        <sphereGeometry args={[0.03, 12, 8]} />
+        <meshStandardMaterial color="#c99a1a" metalness={0.6} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function CannonBarrel({ part }: { part: Part }) {
+  const o = partOrigin(part);
+  const tilt = (KIT.cannon.elevation * Math.PI) / 180;
+  const r = KIT.cannon.body[1] / 2;
+  return (
+    <group position={[o[0], o[1] + 0.16, o[2]]} quaternion={yawQuat(part.yaw)}>
+      {/* Local +x is the facing; tilt up about local z. */}
+      <mesh rotation={[0, 0, -Math.PI / 2 + tilt]} position={[0.06, 0.04, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.8, r, 0.42, 20]} />
+        <meshStandardMaterial color="#3a4256" metalness={0.5} roughness={0.45} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} rotation={[Math.PI / 2, 0, 0]} position={[-0.04, -0.06, s * 0.15]} castShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.035, 18]} />
+          <meshStandardMaterial color="#8a5a2b" roughness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function Decor({ parts }: { parts: Part[] }) {
+  useFrame((_, delta) => { for (const g of spinning) g.rotation.x += Math.min(delta, 0.05) * 14; });
+  return (
+    <>
+      {parts.map((p) => p.kind === 'fan' ? <FanBlades key={`decor-${p.id}`} part={p} />
+        : p.kind === 'bell' ? <BellDome key={`decor-${p.id}`} part={p} />
+        : p.kind === 'cannon' ? <CannonBarrel key={`decor-${p.id}`} part={p} />
+        : null)}
+    </>
   );
 }
 
@@ -482,6 +566,7 @@ function Machine3D() {
       {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
       {picking && phase !== 'playing' && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} terrain={terrain} />}
+      <Decor parts={parts} />
       <Confetti />
       <Flashes />
     </>
