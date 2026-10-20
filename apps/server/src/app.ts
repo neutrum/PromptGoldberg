@@ -286,6 +286,19 @@ export async function buildApp(opts: AppOptions) {
   });
 
   /** Break a working machine for fix-it play. Pure physics, no LLM; dozens of short runs in the worker pool. */
+  /**
+   * Run a machine (a player's build) on the server: whether the goal chain happens and the trace's
+   * fingerprint, which a browser run of the same build must match. Pure physics, no LLM.
+   */
+  app.post<{ Body: { machine?: unknown } }>('/api/machine/verify', async (req, reply) => {
+    const limited = resultLimiter.take(req.ip);
+    if (limited) return reply.code(429).send({ error: limited.error });
+    const parsed = parseMachine(req.body?.machine, { allowMissingGoalParts: true });
+    if (!parsed.ok) return reply.code(400).send({ error: `The machine is invalid: ${parsed.issues.slice(0, 3).map((i) => i.message).join('; ')}` });
+    const { result, hash } = await physics.check(parsed.spec, { hash: true });
+    return { success: result.success, failedAt: result.failedAt, hash };
+  });
+
   app.post<{ Body: { machine?: unknown; kind?: unknown; seed?: unknown } }>('/api/machine/puzzle', async (req, reply) => {
     const limited = resultLimiter.take(req.ip);
     if (limited) return reply.code(429).send({ error: limited.error });

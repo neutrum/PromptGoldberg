@@ -1,6 +1,6 @@
 import { availableParallelism } from 'node:os';
 import {
-  compileRoute, evaluateMachine, initPhysics, makePuzzleOfKind, nudgeMachine, simulateSync,
+  compileRoute, evaluateMachine, initPhysics, makePuzzleOfKind, nudgeMachine, simulateSync, traceHash,
   type CompileResult, type RouteGraphInput, type MachineEvent, type MachineResult, type MachineSpec, type Puzzle, type PuzzleKind,
 } from '@og/machine';
 import { SolverError, WorkerPool, WorkerStartError } from '../solver';
@@ -9,6 +9,8 @@ import type { PhysicsTask } from './physicsWorker';
 export interface CheckOutcome {
   result: MachineResult;
   events: MachineEvent[];
+  /** Trace fingerprint (only when asked for: it needs a recorded run). */
+  hash?: string;
 }
 
 export interface NudgeOutcome extends CheckOutcome {
@@ -29,7 +31,7 @@ export interface NudgeJob {
 /** Runs machine physics for the pipeline: in worker threads when they load, inline otherwise. */
 export interface Physics {
   readonly mode: 'worker' | 'inline';
-  check(spec: MachineSpec, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<CheckOutcome>;
+  check(spec: MachineSpec, opts?: { timeoutMs?: number; signal?: AbortSignal; hash?: boolean }): Promise<CheckOutcome>;
   nudge(spec: MachineSpec, job: NudgeJob): Promise<NudgeOutcome>;
   /** Break a working machine for the player (dozens of short runs; cheap here, slow in a browser). */
   puzzle(spec: MachineSpec, kind: PuzzleKind, seed: number, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<Puzzle | null>;
@@ -60,10 +62,10 @@ export function createPhysics(mode: 'worker' | 'inline' | 'auto' = 'auto', maxCo
       return useWorker ? 'worker' : 'inline';
     },
     check(spec, opts = {}) {
-      return attempt({ kind: 'check', spec }, async () => {
+      return attempt({ kind: 'check', spec, hash: opts.hash }, async () => {
         await initPhysics();
-        const run = simulateSync(spec, { record: false });
-        return { result: evaluateMachine(spec.goal, run), events: run.events };
+        const run = simulateSync(spec, { record: !!opts.hash });
+        return { result: evaluateMachine(spec.goal, run), events: run.events, hash: opts.hash ? traceHash(run) : undefined };
       }, { timeoutMs: opts.timeoutMs ?? 15_000, signal: opts.signal });
     },
     nudge(spec, job) {

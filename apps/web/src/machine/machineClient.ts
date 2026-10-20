@@ -68,6 +68,18 @@ export async function makePuzzle(solution: MachineSpec, kind: PuzzleKind, seed: 
 
 const unreachable = 'The AI server is not reachable. Start it with "npm run dev:server".';
 
+export interface ServerVerdict { success: boolean; failedAt: number | null; hash: string }
+
+/** The server runs the same build; its trace hash must match the browser's. Null when the server is not there. */
+export async function verifyOnServer(machine: MachineSpec): Promise<ServerVerdict | null> {
+  try {
+    const res = await fetch('/api/machine/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ machine }) });
+    return res.ok ? ((await res.json()) as ServerVerdict) : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface DailyMachine {
   date: string;
   prompt: string;

@@ -1,9 +1,9 @@
 import { parentPort } from 'node:worker_threads';
-import { compileRoute, evaluateMachine, initPhysics, makePuzzleOfKind, nudgeMachine, simulateSync, type MachineSpec, type PuzzleKind, type RouteGraphInput } from '@og/machine';
+import { compileRoute, evaluateMachine, initPhysics, makePuzzleOfKind, nudgeMachine, simulateSync, traceHash, type MachineSpec, type PuzzleKind, type RouteGraphInput } from '@og/machine';
 import type { WorkerMessage } from '../solver';
 
 export type PhysicsTask =
-  | { kind: 'check'; spec: MachineSpec }
+  | { kind: 'check'; spec: MachineSpec; hash?: boolean }
   | { kind: 'nudge'; spec: MachineSpec; budget: number; timeLimitMs: number; seed: number }
   | { kind: 'puzzle'; spec: MachineSpec; puzzleKind: PuzzleKind; seed: number }
   | { kind: 'compile'; graph: RouteGraphInput; seed: number; flat?: boolean };
@@ -15,8 +15,9 @@ parentPort!.on('message', async (task: PhysicsTask) => {
   try {
     await ready;
     if (task.kind === 'check') {
-      const run = simulateSync(task.spec, { record: false });
-      post({ type: 'done', result: { result: evaluateMachine(task.spec.goal, run), events: run.events } });
+      // The trace fingerprint needs the recorded frames; plain checks skip recording.
+      const run = simulateSync(task.spec, { record: !!task.hash });
+      post({ type: 'done', result: { result: evaluateMachine(task.spec.goal, run), events: run.events, hash: task.hash ? traceHash(run) : undefined } });
     } else if (task.kind === 'compile') {
       post({ type: 'done', result: compileRoute(task.graph, { seed: task.seed, flat: task.flat }) });
     } else if (task.kind === 'puzzle') {

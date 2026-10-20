@@ -195,3 +195,29 @@ describe('POST /api/machine/puzzle', () => {
     expect(bad.statusCode).toBe(400);
   });
 });
+
+describe('POST /api/machine/verify', () => {
+  it('runs a build and returns its trace hash, the same as a local run', async () => {
+    const { initPhysics, simulateSync, traceHash, parseMachine } = await import('@og/machine');
+    const sample = (await import('@og/machine/fixtures/ramp-dominoes-bell.json', { with: { type: 'json' } })).default;
+    const app = await setup(null);
+    const res = await app.inject({ method: 'POST', url: '/api/machine/verify', payload: { machine: sample } });
+    expect(res.statusCode).toBe(200);
+    await initPhysics();
+    const local = parseMachine(sample);
+    if (!local.ok) throw new Error('fixture');
+    expect(res.json()).toEqual({ success: true, failedAt: null, hash: traceHash(simulateSync(local.spec)) });
+  });
+});
+
+describe('POST /api/machine without an AI', () => {
+  it('still builds a verified level from the mission\'s words, and says so', async () => {
+    const app = await setup(null);
+    const res = await app.inject({ method: 'POST', url: '/api/machine', payload: { prompt: 'ring the church bell across the river', verify: false } });
+    expect(res.statusCode).toBe(200);
+    const events = parseSse(res.body) as { type: string; solved?: boolean; machine?: { closest?: string } }[];
+    const done = events.find((e) => e.type === 'machine');
+    expect(done?.solved).toBe(true);
+    expect(done?.machine?.closest).toMatch(/resting/);
+  }, 30_000);
+});

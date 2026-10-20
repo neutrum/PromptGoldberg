@@ -4,7 +4,7 @@ import {
 } from '@og/machine';
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
-import { getDailyMachine, makePuzzle, simulateInWorker, streamMachine } from './machineClient';
+import { getDailyMachine, makePuzzle, simulateInWorker, streamMachine, verifyOnServer } from './machineClient';
 import type { Level, SharedLevel } from './levels';
 
 export interface MachineAiLog {
@@ -40,6 +40,8 @@ export interface FixState {
   hint: boolean;
   /** Stars for a solved puzzle (1 to 3), or 0. */
   stars: number;
+  /** The server's re-run of the solved build: 'agrees' when its trace hash matches the browser's. */
+  server?: 'checking' | 'agrees' | 'differs' | 'offline';
 }
 
 /** What a hint costs, in tries. */
@@ -508,7 +510,14 @@ export const useMachine = create<MachineState>((set, get) => {
       set({ fix: { ...fix, tries: fix.tries + 1 } });
       const result = await simulate(withPlacements(fix.puzzle, fix.placed));
       if (result?.success) {
-        set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: starsFor(s.fix) } } : {}));
+        set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: starsFor(s.fix), server: 'checking' } } : {}));
+        // The server runs the same build: the same physics must give the same trace, bit for bit.
+        const browserHash = get().hash;
+        void verifyOnServer(withPlacements(fix.puzzle, fix.placed)).then((v) => {
+          const server = !v ? 'offline' : v.success && v.hash === browserHash ? 'agrees' : 'differs';
+          if (server === 'differs') console.warn('[machine] server run differs', { browser: browserHash, server: v });
+          set((s) => (s.fix?.solved ? { fix: { ...s.fix, server } } : {}));
+        });
         const { level, fix: won, stars } = get();
         if (level && level.slug !== 'shared' && won && won.stars > (stars[level.slug] ?? 0)) {
           const next = { ...stars, [level.slug]: won.stars };

@@ -305,7 +305,7 @@ function FixPanel() {
             ? `The AI set the stage and picked the parts, but nobody has solved this level yet. Physics decides. Its own idea used ${par} of the ${fix.hand.length} parts below.`
             : KIND_LABEL[fix.kind].blurb}</p>
         {fix.solved
-          ? <p className="starline"><span className="stars big">{starRow(fix.stars)}</span> <span className="muted small">{fix.placed.length <= par ? `★ par ${par} parts or fewer` : `☆ par is ${par} parts`} · {fix.tries <= 3 ? '★ 3 tries or fewer' : '☆ 3 tries or fewer'}</span></p>
+          ? <p className="starline"><span className="stars big">{starRow(fix.stars)}</span>{fix.server === 'agrees' && <span className="badge ok" title="The server ran your build too and got the same run, bit for bit">✓ server agrees</span>} <span className="muted small">{fix.placed.length <= par ? `★ par ${par} parts or fewer` : `☆ par is ${par} parts`} · {fix.tries <= 3 ? '★ 3 tries or fewer' : '☆ 3 tries or fewer'}</span></p>
           : <p className="muted small">Par: {par} part{par === 1 ? '' : 's'} · ★ solve it · ★ use {par} or fewer · ★ in 3 tries{fix.hand.length > par ? ` · ${fix.hand.length - par} spare${fix.hand.length - par === 1 ? '' : 's'} in the bin` : ''}</p>}
       </div>
       <ChainList goal={fix.puzzle.solution.goal} parts={fix.puzzle.solution.parts} />
