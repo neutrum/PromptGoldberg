@@ -13,7 +13,7 @@
  */
 import type { Level, LevelStreamEvent } from '@og/shared';
 import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine';
-import { editMachine, generateMachine } from './machine/pipeline';
+import { editMachine, generateMachine, wordsMachine } from './machine/pipeline';
 import { createPhysics, type Physics } from './machine/physics';
 import { createLlm, LlmError, type Completion, type LlmBackend, type LlmBackendName } from './llm/client';
 import { editLevel, generateLevel } from './pipeline';
@@ -202,3 +202,14 @@ export async function createMachine(request: MachineRequest, options: CreateMach
 }
 
 export { createPhysics, type Physics } from './machine/physics';
+
+/**
+ * A level with no AI call: the route compiler builds it from the mission's words. For when the AI
+ * is unavailable or out of budget; the level carries an honest note saying so, and it is verified.
+ */
+export async function createMachineOffline(prompt: string, options: Pick<CreateMachineOptions, 'physics' | 'signal' | 'onEvent'> = {}): Promise<CreateMachineResult> {
+  const physics = options.physics ?? (defaultPhysics ??= createPhysics('auto'));
+  const event = await wordsMachine({ physics, signal: options.signal }, prompt, options.onEvent ?? (() => {}));
+  return { machine: event.machine, solved: event.solved, verified: true, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage: [] };
+}
+export { routeFromWords, routable } from './machine/route';

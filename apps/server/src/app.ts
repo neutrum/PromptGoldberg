@@ -9,7 +9,7 @@ import { DailyStore } from './daily';
 import { GalleryStore } from './gallery';
 import { parseMachine, PUZZLE_KINDS, type MachineStreamEvent, type PuzzleKind } from '@og/machine';
 import {
-  coachTip, createLevel, createMachine, createPhysics, createSolver, designSystem, LlmError, SolverError,
+  coachTip, createLevel, createMachine, createMachineOffline, createPhysics, createSolver, designSystem, LlmError, SolverError,
   type CreateLevelResult, type CreateMachineResult, type LevelRequest, type LlmBackend, type MachineRequest, type Physics, type Solver, type SolverMode,
 } from '@og/ai';
 import { DailyCap, RateLimiter } from './rateLimit';
@@ -125,6 +125,11 @@ export async function buildApp(opts: AppOptions) {
       maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs,
     });
     return { type: 'machine', machine: res.machine, solved: res.solved, verified: res.verified, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
+  };
+
+  const runMachineOffline = async (prompt: string, emit: (e: MachineStreamEvent) => void, signal: AbortSignal): Promise<Extract<MachineStreamEvent, { type: 'machine' }>> => {
+    const res = await createMachineOffline(prompt, { physics, signal, onEvent: emit });
+    return { type: 'machine', machine: res.machine, solved: res.solved, verified: true, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
   };
 
   /** Reply with a single-error SSE stream (status still reflects the failure). */
@@ -250,11 +255,15 @@ export async function buildApp(opts: AppOptions) {
     if (!prompt) return sseError(reply, 400, 'Describe the machine you want, e.g. "get the ball into the bucket using dominoes and a fan".');
     if (prompt.length > limits.maxPromptChars) return sseError(reply, 400, `That description is too long: keep it under ${limits.maxPromptChars} characters.`);
     const blocked = guardLlm(req);
-    if (blocked) return sseError(reply, blocked.status, blocked.error);
+    // No AI (none configured, or the day's budget is spent): the route compiler still builds a level from the words.
+    const offline = blocked?.status === 503;
+    if (blocked && !offline) return sseError(reply, blocked.status, blocked.error);
     const stream = openSse<MachineStreamEvent>(reply);
     const started = Date.now();
     try {
-      const event = await runMachineAi({ prompt, verify }, stream.send, stream.signal);
+      const event = offline
+        ? await runMachineOffline(prompt, stream.send, stream.signal)
+        : await runMachineAi({ prompt, verify }, stream.send, stream.signal);
       stream.send(event);
       req.log.info({ ms: Date.now() - started, solved: event.solved, verified: event.verified !== false, attempts: event.attempts }, 'machine stream done');
     } catch (err) {

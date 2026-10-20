@@ -143,8 +143,7 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
   const attempts = opts.attempts ?? 12;
   let sims = 0;
   const run = (spec: MachineSpec) => { sims++; return simulateSync(spec, { record: true }); };
-  // A level must turn a corner: a graph that never turns gets its first link bent.
-  const links = graph.links.some((l) => l.turn !== 'straight') ? graph.links : graph.links.map((l, i) => (i === 0 ? { ...l, turn: rand() < 0.5 ? 'left' : 'right' } as RouteLink : l));
+  const links = withTurn(graph.links, rand() < 0.5 ? 'left' : 'right');
   for (let tryNo = 1; tryNo <= attempts; tryNo++) {
     const spec = layOut(graph, links, rand, run, opts);
     if (spec) return { spec, tries: tryNo, sims };
@@ -158,6 +157,19 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
     }
   }
   return null;
+}
+
+/**
+ * A level must turn a corner, and a trampoline cannot turn: a graph whose turns are all on links
+ * that cannot make them gets the first link that can bent, or a ramp turn after the last fall.
+ */
+function withTurn(links: RouteLink[], turn: 'left' | 'right'): RouteLink[] {
+  const canTurn = (l: RouteLink) => l.via !== 'trampoline';
+  const fixed = links.map((l) => (canTurn(l) ? l : { ...l, turn: 'straight' as const }));
+  if (fixed.some((l) => l.turn !== 'straight')) return fixed;
+  const i = fixed.findIndex(canTurn);
+  if (i >= 0) return fixed.map((l, k) => (k === i ? { ...l, turn } : l));
+  return [...fixed, { via: 'ramp', turn }];
 }
 
 const ADAPT: Record<RouteGraph['end'], RouteGraph['end'][]> = { bucket: ['dominoes', 'bell'], bell: ['dominoes'], dominoes: ['bell'] };

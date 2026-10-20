@@ -5,6 +5,9 @@ import { createMachine, type Physics } from '../src';
 import { difficultyOf, pickTwist, TWISTS, validateMachineDesign } from '../src/machine/design';
 import { FakeLlm } from './helpers';
 
+// These cover the full designer; the route-graph fast path has its own tests.
+process.env.MACHINE_ROUTE = 'off';
+
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../machine/src/fixtures/${name}`, import.meta.url), 'utf8'));
 /** The sample with the spares a normal level needs. */
 const withSpares = (spec: object) => ({ ...spec, spares: [{ kind: 'trampoline' }, { kind: 'fan' }] });

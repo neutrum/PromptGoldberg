@@ -4,6 +4,8 @@ import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
 import { designMachine, difficultyOf, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
 import type { Physics } from './physics';
+import { designRoute, routable, routeFromWords } from './route';
+import type { RouteGraph, RouteGraphInput } from '@og/machine';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
 export type Emit = (event: MachineStreamEvent) => void;
@@ -146,7 +148,55 @@ async function designOnly(deps: MachinePipelineDeps, emit: Emit, loop: {
   return { type: 'machine', machine: design.spec, solved: false, verified: false, attempts: 1, notes: ['Level set up; nobody has run it.'], cached: false, result: UNRUN, moved: [], attempt: 1 };
 }
 
-export function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
+/** Route graphs are on unless MACHINE_ROUTE=off. */
+const routeOn = () => process.env.MACHINE_ROUTE !== 'off';
+
+/**
+ * The fast path: a route graph from the AI (or from the mission's words), laid out by the compiler
+ * in the physics pool. The level that comes back has been run end to end.
+ */
+async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> & { llm?: LlmBackend }, prompt: string, emit: Emit, opts: { graph?: RouteGraphInput; note?: string } = {}): Promise<MachineEvent> {
+  const calls: Completion[] = [];
+  emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: 1, message: opts.graph ? 'Building a level from your words.' : 'Sketching the route for your idea.' });
+  const graph: RouteGraphInput = opts.graph ?? await designRoute(deps.llm!, prompt, calls);
+  const g = graph as RouteGraph;
+  emit({ type: 'stage', stage: 'verifying', attempt: 1, maxAttempts: 1, message: `Laying out ${g.links.map((l) => l.via).join(', then ')}, ending in ${g.end === 'dominoes' ? 'dominoes' : `a ${g.end}`}, and running it.` });
+  const seed = Math.floor(Math.random() * 1e6);
+  const flat = wantsFlat(prompt);
+  // The graph as written, then shorter (a third link rarely fits the stage), then from the
+  // mission's words with the AI's names and title: each is laid out in a second or two.
+  const words = routeFromWords(prompt, seed);
+  const tries: RouteGraphInput[] = [graph, graph, ...(g.links.length > 1 ? [{ ...graph, links: g.links.slice(0, g.links.length - 1) }] : []), { ...graph, links: words.links, end: g.end }];
+  for (const [k, attempt] of tries.entries()) {
+    if (deps.signal?.aborted) throw new SolverError('aborted');
+    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, signal: deps.signal });
+    if (!res) continue;
+    const spec: MachineSpec = opts.note ? { ...res.spec, closest: res.spec.closest ?? opts.note } : res.spec;
+    const check = await deps.physics.check(spec, { signal: deps.signal });
+    if (!check.result.success) continue;
+    emit({ type: 'draft', machine: spec, status: 'solved', attempt: 1, result: check.result });
+    return {
+      type: 'machine', machine: spec, solved: true, verified: true, attempts: 1, cached: false, result: check.result, moved: [], attempt: 1,
+      notes: [`Route graph (${g.links.map((l) => `${l.via} ${l.turn ?? 'straight'}`).join(', ')} -> ${g.end}${res.adapted ? `, adapted to ${res.adapted}` : ''}) laid out in ${res.tries} layout(s), ${res.sims} runs.`],
+    };
+  }
+  throw new SolverError('the route could not be laid out');
+}
+
+/** A level with no AI at all: the compiler builds one from the mission's words (the AI is down or out of budget). */
+export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'>, prompt: string, emit: Emit): Promise<MachineEvent> {
+  return routeLevel(deps, prompt, emit, { graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'The AI designer is resting, so this level was built straight from your words.' });
+}
+
+export async function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
+  if (routeOn() && routable(prompt)) {
+    try {
+      return await routeLevel(deps, prompt, emit);
+    } catch (err) {
+      if (deps.signal?.aborted) throw err;
+      emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: deps.maxAttempts, message: 'That route did not fit the stage; designing it part by part instead.' });
+    }
+  }
   const twist = pickTwist(prompt);
   const loop = {
     firstStage: 'designing' as const,

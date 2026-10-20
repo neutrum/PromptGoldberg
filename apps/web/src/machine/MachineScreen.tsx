@@ -267,7 +267,7 @@ function FixPanel() {
         {level && <p className="mission">Mission: “{level.mission}”</p>}
         <Closest text={fix.puzzle.solution.closest} />
         <p>{fix.solved
-          ? `${fix.puzzle.verified === false ? 'Solved' : 'Fixed'} in ${tries(fix.tries)} with ${fix.placed.length} part${fix.placed.length === 1 ? '' : 's'}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
+          ? `${fix.kind === 'connect' ? 'Solved' : 'Fixed'} in ${tries(fix.tries)} with ${fix.placed.length} part${fix.placed.length === 1 ? '' : 's'}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
           : fix.puzzle.verified === false
             ? `The AI set the stage and picked the parts, but nobody has solved this level yet. Physics decides. Its own idea used ${par} of the ${fix.hand.length} parts below.`
             : KIND_LABEL[fix.kind].blurb}</p>
