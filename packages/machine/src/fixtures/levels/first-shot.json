@@ -1,0 +1,95 @@
+{
+  "title": "River Crossing Shot",
+  "caption": "Fire the ball over the river and into the bucket on the far bank.",
+  "terrain": [
+    {
+      "name": "river",
+      "x": 0,
+      "z": 10,
+      "w": 24,
+      "d": 2,
+      "h": -1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 3,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 2,
+      "y": 3,
+      "z": 5,
+      "yaw": 0,
+      "length": 6,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 7,
+      "y": 3,
+      "z": 5,
+      "yaw": 90
+    },
+    {
+      "id": "bucket",
+      "kind": "bucket",
+      "x": 6,
+      "y": 0,
+      "z": 14,
+      "yaw": 0,
+      "dx": 0.23239517211914062,
+      "dz": 0.30757994769192365
+    },
+    {
+      "id": "bank",
+      "kind": "wall",
+      "x": 9,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "fixed": true
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "bucket",
+      "part": "bucket"
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "ramp"
+    },
+    {
+      "kind": "platform",
+      "length": 2
+    }
+  ],
+  "level": {
+    "emoji": "🎯",
+    "name": "First Shot",
+    "mission": "An easy one: fire the ball over the river into the bucket on the far bank",
+    "order": 1
+  }
+}

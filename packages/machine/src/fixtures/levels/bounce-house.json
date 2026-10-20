@@ -1,0 +1,108 @@
+{
+  "title": "Trampoline Bounce Ring",
+  "caption": "Fire the ball from the cannon onto the trampoline so it bounces up and rings the bell.",
+  "terrain": [
+    {
+      "name": "floor",
+      "x": 0,
+      "z": 8,
+      "w": 24,
+      "d": 2,
+      "h": -1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 5,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0,
+      "length": 4,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 10,
+      "y": 0,
+      "z": 5,
+      "yaw": 90
+    },
+    {
+      "id": "trampoline",
+      "kind": "trampoline",
+      "x": 9,
+      "y": 0,
+      "z": 12,
+      "yaw": 0
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 9,
+      "y": 0,
+      "z": 23,
+      "yaw": 0,
+      "dx": 0.25008201599121094,
+      "dz": 0.4
+    },
+    {
+      "id": "wall",
+      "kind": "wall",
+      "x": 12,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "fixed": true
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "touch",
+      "part": "trampoline"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "ramp"
+    },
+    {
+      "kind": "platform",
+      "length": 3
+    }
+  ],
+  "level": {
+    "emoji": "🏀",
+    "name": "Bounce House",
+    "mission": "Fire the ball out of a cannon onto a trampoline that bounces it on to ring the bell",
+    "order": 4
+  }
+}

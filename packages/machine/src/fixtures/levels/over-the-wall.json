@@ -77,10 +77,11 @@
     }
   ],
   "duration": 12,
+  "spares": [{ "kind": "trampoline" }, { "kind": "fan" }],
   "level": {
     "emoji": "🧱",
     "name": "Over the wall",
     "mission": "Get the ball over the garden wall and into the bucket on the other side",
-    "order": 1
+    "order": 6
   }
 }

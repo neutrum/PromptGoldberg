@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import demo from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import { parseMachine, PUZZLE_KINDS, TARGET_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
 import { CARDS, dealCards, EDIT_IDEAS } from './cards';
-import { LEVELS } from './levels';
+import { clearShareLink, LEVELS, readShareLink, sharedAsLevel, shareLink } from './levels';
 import { MachineScene } from './MachineScene';
 import { DAILY_LADDER, HINT_COST, parOf, useMachine } from './machineStore';
 
@@ -17,7 +17,7 @@ const KIND_LABEL: Record<PuzzleKind, { name: string; blurb: string }> = {
   connect: { name: 'build the route', blurb: 'The ball, the targets and the scenery are where they are. Build the route between them from the parts below. Any build that works counts.' },
   missing: { name: '1 part missing', blurb: 'One part is held back. Pick it below, then click the stage where the chain needs it.' },
   missing2: { name: '2 parts missing', blurb: 'Two parts are held back. Put both where the chain needs them.' },
-  moved: { name: 'a part moved', blurb: 'Every part is here, but one is in the wrong place. Click it to pick it up, then drop it where it belongs.' },
+  moved: { name: 'a part moved', blurb: 'Every part is here, but one is in the wrong place. Drag it (or click it, then click) to where it belongs.' },
 };
 
 /** The goal chain with its current state, shared by the build and fix panels. */
@@ -80,7 +80,7 @@ function LevelStrip({ onPick }: { onPick: () => void }) {
         <button key={l.slug} className={`level ${current === l.slug ? 'active' : ''}`} disabled={busy} onClick={() => { onPick(); void useMachine.getState().playLevel(l); }} title={`“${l.mission}”`}>
           <span className="card-face">{l.emoji}</span>
           <span className="card-title">{l.name}</span>
-          <span className="stars" aria-label={`${stars[l.slug] ?? 0} of 3 stars`}>{starRow(stars[l.slug] ?? 0)}</span>
+          {stars[l.slug] ? <span className="stars" aria-label={`${stars[l.slug]} of 3 stars`}>{starRow(stars[l.slug])}</span> : <span className="muted small">#{l.order}</span>}
         </button>
       ))}
     </div>
@@ -225,6 +225,38 @@ function AiLog() {
 }
 
 const tries = (n: number) => `${n} ${n === 1 ? 'try' : 'tries'}`;
+
+/** Copy a link to the level on screen (with the player's score once solved); the daily shares its result line. */
+function ShareButton() {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const daily = useMachine((s) => s.daily);
+  const share = async () => {
+    const s = useMachine.getState();
+    let text: string;
+    if (daily.date) {
+      text = `Prompt Goldberg daily ${daily.date}: ${daily.stage > DAILY_LADDER.length || (s.fix?.solved && daily.stage >= DAILY_LADDER.length) ? `all ${DAILY_LADDER.length} stages in ${tries(daily.tries)}` : `stage ${Math.min(daily.stage, DAILY_LADDER.length)}/${DAILY_LADDER.length}, ${tries(daily.tries)} so far`}. ${location.origin}${location.pathname}`;
+    } else {
+      const level = s.shareable();
+      if (!level) return;
+      const link = await shareLink(level);
+      text = level.score
+        ? `I solved “${level.spec.title}” in Prompt Goldberg ${'★'.repeat(level.score.stars)}${'☆'.repeat(3 - level.score.stars)} (${tries(level.score.tries)}, ${level.score.parts} parts). Can you beat it? ${link}`
+        : `Can you build the route? “${level.spec.title}” in Prompt Goldberg: ${link}`;
+    }
+    const ok = await navigator.clipboard.writeText(text).then(() => true, () => false);
+    setState(ok ? 'copied' : 'failed');
+    setTimeout(() => setState('idle'), 2500);
+  };
+  return <button onClick={() => void share()} title="Copy a link to this level">{state === 'copied' ? '✓ Link copied' : state === 'failed' ? 'Copy failed' : daily.date ? '📋 Share result' : '🔗 Share'}</button>;
+}
+
+/** Someone shared a level with you: the sender's score, as the bar to beat. */
+function SharedBanner() {
+  const shared = useMachine((s) => s.sharedScore);
+  const level = useMachine((s) => s.level);
+  if (!shared || level?.slug !== 'shared') return null;
+  return <p className="closest">🔗 A friend solved this {'★'.repeat(shared.stars)}{'☆'.repeat(3 - shared.stars)} in {tries(shared.tries)} with {shared.parts} parts. Beat it!</p>;
+}
 const starRow = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
 /** The AI could not build the mission as asked: say so, plainly, instead of pretending. */
@@ -266,6 +298,7 @@ function FixPanel() {
         <h2>{stageLabel}{fix.puzzle.solution.title}</h2>
         {level && <p className="mission">Mission: “{level.mission}”</p>}
         <Closest text={fix.puzzle.solution.closest} />
+        <SharedBanner />
         <p>{fix.solved
           ? `${fix.kind === 'connect' ? 'Solved' : 'Fixed'} in ${tries(fix.tries)} with ${fix.placed.length} part${fix.placed.length === 1 ? '' : 's'}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
           : fix.puzzle.verified === false
@@ -311,6 +344,7 @@ function FixPanel() {
         {fix.solved && inDaily && !lastStage && <button className="primary" onClick={() => void nextDailyStage()} disabled={phase === 'simulating'}>Next: {KIND_LABEL[DAILY_LADDER[daily.stage]].name} →</button>}
         {fix.solved && inDaily && lastStage && <span className="badge ok">Daily done in {tries(daily.tries)}{daily.best[daily.date] ? ` · best ${daily.best[daily.date]}` : ''}</span>}
         {fix.solved && !inDaily && !breaking && <button onClick={() => setBreaking(true)}>🔧 Break it again</button>}
+        <ShareButton />
         <button onClick={leaveFix}>{fix.solved ? '▶ Watch it whole' : 'Give up'}</button>
       </div>
       {breaking && (
@@ -386,9 +420,18 @@ export function MachineScreen() {
   const prompting = mode !== 'fix' || solved;
   const [welcome, setWelcome] = useState(() => !flag(WELCOME_KEY));
   const inputRef = useRef<HTMLInputElement>(null);
-  // Something runs the moment the screen opens: a sample machine until the visitor builds one.
+  // A shared link opens its level at once; otherwise a sample machine runs until the visitor builds one.
   useEffect(() => {
     if (useMachine.getState().machine) return;
+    let cancelled = false;
+    void readShareLink().then((shared) => {
+      if (cancelled || !shared) return;
+      clearShareLink();
+      setWelcome(false);
+      useMachine.setState({ sharedScore: shared.score ?? null });
+      void useMachine.getState().playLevel(sharedAsLevel(shared));
+    });
+    if (location.hash.includes('pg=')) return () => { cancelled = true; };
     const parsed = parseMachine({ ...demo, caption: 'A sample machine, to show the idea. Yours goes below.' });
     if (parsed.ok) void useMachine.getState().load(parsed.spec, { rank: 2, proven: true });
   }, []);

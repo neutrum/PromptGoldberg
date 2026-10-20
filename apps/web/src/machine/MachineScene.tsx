@@ -25,8 +25,10 @@ function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
   return g;
 }
 
-function BodyMesh({ body, meshRef, ghost, onClick, onHover, glow, cursor = 'grab' }: {
+function BodyMesh({ body, meshRef, ghost, onClick, onGrab, onHover, glow, cursor = 'grab' }: {
   body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string; onClick?: () => void; onHover?: (over: boolean) => void; glow?: boolean; cursor?: string;
+  /** Pressed on: start dragging it. */
+  onGrab?: () => void;
 }) {
   const geometry = useMemo(() => {
     const s = body.shape;
@@ -58,8 +60,9 @@ function BodyMesh({ body, meshRef, ghost, onClick, onHover, glow, cursor = 'grab
       castShadow={!sensor}
       receiveShadow
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(); } : undefined}
-      onPointerOver={onClick ? (e) => { e.stopPropagation(); document.body.style.cursor = cursor; onHover?.(true); } : undefined}
-      onPointerOut={onClick ? () => { document.body.style.cursor = ''; onHover?.(false); } : undefined}
+      onPointerDown={onGrab ? (e) => { if (e.button !== 0) return; e.stopPropagation(); onGrab(); } : undefined}
+      onPointerOver={onClick || onGrab ? (e) => { e.stopPropagation(); document.body.style.cursor = cursor; onHover?.(true); } : undefined}
+      onPointerOut={onClick || onGrab ? () => { document.body.style.cursor = ''; onHover?.(false); } : undefined}
     >
       {air
         ? <meshBasicMaterial color="#7de0a7" transparent opacity={0.1} depthWrite={false} />
@@ -126,6 +129,53 @@ function Confetti() {
   );
 }
 
+// ---- Flashes: a ring that grows and fades where a part fires, bounces, rings or catches.
+
+interface Flash { pos: THREE.Vector3; color: THREE.Color; born: number }
+const flashes: Flash[] = [];
+const FLASH_MS = 550;
+const FLASH_COLOR: Partial<Record<string, string>> = { fired: '#ffb15a', bounce: '#ff8fd1', bell: '#ffe066', bucket: '#7de0a7', topple: '#ffd166' };
+
+export function flashAt(pos: THREE.Vector3, color: string) {
+  flashes.push({ pos: pos.clone(), color: new THREE.Color(color), born: performance.now() });
+  if (flashes.length > 24) flashes.shift();
+}
+
+/** What each recorded event sounds like. */
+function partSound(type: string, kind?: string) {
+  switch (type) {
+    case 'fired': sfx.cannon(); break;
+    case 'bounce': sfx.boing(); break;
+    case 'bell': sfx.ding(); break;
+    case 'bucket': sfx.plop(); break;
+    case 'topple': sfx.clack(); break;
+    case 'touch': if (kind === 'fan') sfx.whoosh(); else if (kind === 'dominoes') sfx.clack(); break;
+  }
+}
+
+function Flashes() {
+  const group = useRef<THREE.Group>(null);
+  const rings = useMemo(() => Array.from({ length: 24 }, () => new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 32), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }))), []);
+  useEffect(() => () => rings.forEach((r) => { r.geometry.dispose(); (r.material as THREE.Material).dispose(); }), [rings]);
+  useFrame(({ camera }) => {
+    const now = performance.now();
+    for (let i = flashes.length - 1; i >= 0; i--) if (now - flashes[i].born > FLASH_MS) flashes.splice(i, 1);
+    rings.forEach((r, i) => {
+      const f = flashes[i];
+      r.visible = !!f;
+      if (!f) return;
+      const age = (now - f.born) / FLASH_MS;
+      r.position.copy(f.pos);
+      r.quaternion.copy(camera.quaternion);
+      r.scale.setScalar(0.1 + age * 0.5);
+      const m = r.material as THREE.MeshBasicMaterial;
+      m.color.copy(f.color);
+      m.opacity = 0.9 * (1 - age);
+    });
+  });
+  return <group ref={group}>{rings.map((r, i) => <primitive key={i} object={r} />)}</group>;
+}
+
 const tmpQ = new THREE.Quaternion();
 const tmpQ2 = new THREE.Quaternion();
 const ballPos = new THREE.Vector3(NaN, 0, 0);
@@ -135,10 +185,21 @@ function Playback({ run, dynamic }: { run: MachineRun; dynamic: Map<string, THRE
   const ballIdx = run.dynamicIds.indexOf(run.spec.parts.find((p) => p.kind === 'ball')!.id);
   const keys = useMemo(() => (useMachine.getState().result?.steps ?? []).flatMap((s) => (s.satisfied && s.t !== undefined ? [s.t] : [])), [run]);
   const finished = useRef(false);
+  // Every event the physics recorded gets its sound and a flash as playback passes it.
+  const heard = useRef({ next: 0, t: 0 });
   useFrame((_, delta) => {
     const s = useMachine.getState();
     let t = s.time;
+    if (t < heard.current.t) heard.current.next = 0;
+    heard.current.t = t;
     if (s.phase === 'playing') {
+      while (heard.current.next < run.events.length && run.events[heard.current.next].t <= t) {
+        const e = run.events[heard.current.next++];
+        const part = 'part' in e ? run.spec.parts.find((p) => p.id === e.part) : undefined;
+        if (e.type === 'touch' && part && part.kind !== 'fan' && part.kind !== 'dominoes') continue;
+        partSound(e.type, part?.kind);
+        if (part && e.type !== 'touch') flashAt(new THREE.Vector3(...partCentre(part)), FLASH_COLOR[e.type] ?? '#ffffff');
+      }
       // Slow motion around each goal event, so the payoff is readable.
       let slow = 1;
       for (const k of keys) slow = Math.min(slow, 1 - 0.75 * Math.exp(-(((t - k) / 0.22) ** 2)));
@@ -222,8 +283,12 @@ function MachineCamera({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] 
     camera.position.add(delta);
     c.update();
   });
-  return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI * 0.49} minDistance={2} maxDistance={40} />;
+  const dragging = useMachine((s) => s.dragging);
+  return <OrbitControls ref={controls} enabled={!dragging} makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI * 0.49} minDistance={2} maxDistance={40} />;
 }
+
+/** When the last drag ended, so its trailing click does not drop the next part too. */
+let droppedAt = 0;
 
 /**
  * Fix mode: hover the stage to see where the part in hand would land (the floor, or the platform
@@ -245,15 +310,26 @@ function Placement({ part, parts, lift, terrain }: { part: Part; parts: Part[]; 
   const ghost = useMemo(() => (landing ? assemblePart(landing).bodies : []), [landing]);
   const cells = useMemo(() => (cell ? footprint({ ...part, x: cell.x, y, z: cell.z }) : []), [part, cell, y]);
   const platforms = useMemo(() => parts.filter((p) => p.kind === 'platform' && p.id !== part.id), [parts, part.id]);
+  const drop = (c: { x: number; z: number } | null) => {
+    if (!c) return;
+    if (useMachine.getState().placeAt(c.x, c.z)) sfx.place();
+    else sfx.miss();
+  };
   const handlers = {
     onPointerMove: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setCell(toCell(e)); },
     onPointerOut: () => setCell(null),
+    // A dragged part drops where the pointer is let go; the click that follows is the same gesture.
+    onPointerUp: (e: ThreeEvent<PointerEvent>) => {
+      if (!useMachine.getState().dragging) return;
+      e.stopPropagation();
+      useMachine.setState({ dragging: false });
+      droppedAt = performance.now();
+      drop(toCell(e));
+    },
     onClick: (e: ThreeEvent<MouseEvent>) => {
       e.stopPropagation();
-      const c = toCell(e);
-      if (!c) return;
-      if (useMachine.getState().placeAt(c.x, c.z)) sfx.place();
-      else sfx.miss();
+      if (performance.now() - droppedAt < 300) return;
+      drop(toCell(e));
     },
   };
   const color = landing ? '#ffd27a' : '#ff5a4e';
@@ -378,6 +454,12 @@ function Machine3D() {
   const picking = fix && fix.picking !== null && !fix.solved ? fix.hand[fix.picking] : null;
   const hints = useMemo(() => (fix?.hint ? assemble(fix.puzzle.missing).bodies : []), [fix?.hint, fix?.puzzle]);
   const framed = fix ? [...fix.puzzle.spec.parts, ...fix.puzzle.missing] : parts;
+  // Let go off the stage: the drag ends and the part stays in hand, to drop with a click.
+  useEffect(() => {
+    const end = () => setTimeout(() => { if (useMachine.getState().dragging) useMachine.setState({ dragging: false }); }, 0);
+    window.addEventListener('pointerup', end);
+    return () => window.removeEventListener('pointerup', end);
+  }, []);
   // Parts the player put down (or found moved) can be picked up again by clicking them.
   const liftable = fix && !fix.solved && phase !== 'playing' ? new Set(fix.placed.map((p) => p.id)) : null;
   return (
@@ -393,17 +475,29 @@ function Machine3D() {
           glow={!!liftable?.has(b.part) || hover === b.part}
           cursor={liftable?.has(b.part) ? 'grab' : 'copy'}
           onHover={names?.has(b.part) ? (over) => setHover(over ? b.part : (h) => (h === b.part ? null : h)) : undefined}
-          onClick={liftable?.has(b.part)
-            ? () => { useMachine.getState().pickPlaced(b.part); sfx.place(); }
-            : names?.has(b.part) ? () => { useMachine.getState().insertPart(b.part); sfx.place(); } : undefined}
+          onGrab={liftable?.has(b.part) ? () => { useMachine.getState().pickPlaced(b.part); useMachine.setState({ dragging: true }); sfx.place(); } : undefined}
+          onClick={liftable?.has(b.part) ? () => {} : names?.has(b.part) ? () => { useMachine.getState().insertPart(b.part); sfx.place(); } : undefined}
         />
       ))}
       {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
       {picking && phase !== 'playing' && <Placement part={picking} parts={parts} lift={fix?.lift ?? 0} terrain={terrain} />}
       <Confetti />
+      <Flashes />
     </>
   );
+}
+
+/** Dev only: lets headless browser checks turn a world point into a screen point (drag tests). */
+function DevHook() {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    (window as unknown as { __project: (p: [number, number, number]) => [number, number] }).__project = (p) => {
+      const v = new THREE.Vector3(...p).project(camera);
+      return [((v.x + 1) / 2) * size.width, ((1 - v.y) / 2) * size.height];
+    };
+  }, [camera, size]);
+  return null;
 }
 
 export function MachineScene() {
@@ -414,6 +508,7 @@ export function MachineScene() {
       <hemisphereLight args={['#dfe8ff', '#1a1430', 0.7]} />
       <directionalLight position={[6, 12, 4]} intensity={1.6} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-10} shadow-camera-right={10} shadow-camera-top={10} shadow-camera-bottom={-10} />
       <Machine3D />
+      {import.meta.env.DEV && <DevHook />}
     </Canvas>
   );
 }

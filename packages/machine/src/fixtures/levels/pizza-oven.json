@@ -67,10 +67,11 @@
     }
   ],
   "duration": 14,
+  "spares": [{ "kind": "trampoline" }, { "kind": "ramp" }],
   "level": {
     "emoji": "🍕",
     "name": "Pizza delivery",
     "mission": "Get the pizza into the oven, but there is a guard wall in the way",
-    "order": 3
+    "order": 8
   }
 }

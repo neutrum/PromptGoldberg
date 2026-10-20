@@ -108,10 +108,11 @@
     }
   ],
   "duration": 14,
+  "spares": [{ "kind": "fan" }, { "kind": "trampoline" }],
   "level": {
     "emoji": "🐱",
     "name": "Wake the cat",
     "mission": "Wake the cat on the top shelf by ringing the bell next to it",
-    "order": 4
+    "order": 9
   }
 }

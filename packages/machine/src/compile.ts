@@ -11,7 +11,7 @@ import { facing, KIT } from './kit';
 import { layoutProblems, obstacles, terrainInWay } from './names';
 import { mulberry32 } from './nudge';
 import { makeConnectPuzzle } from './puzzle';
-import { CELL, GRID, Spare, TERRAIN_MIN, type MachineGoal, type MachineSpec, type Part, type Terrain, type Yaw } from './schema';
+import { CELL, checkMachine, GRID, Spare, TERRAIN_MIN, type MachineGoal, type MachineSpec, type Part, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
 
@@ -211,6 +211,8 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   }
   const ball = parts[0];
   const goal: MachineGoal[] = [];
+  /** An id no part has yet: "wall", then "wall2", "wall3"... */
+  const fresh = (base: string) => { let out = base; for (let k = 2; parts.some((p) => p.id === out); k++) out = `${base}${k}`; return out; };
   const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, terrain: terrain.length ? [...terrain] : undefined, parts: [...parts], goal: [...goal], duration: 15 });
 
   let samples = track(run(spec()));
@@ -223,7 +225,8 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
 
   for (const [n, link] of links.entries()) {
     const out = turnYaw(landed.yaw, link.turn);
-    const pid = links.filter((l, i) => l.via === link.via && i <= n).length > 1 ? `${link.via}${n + 1}` : link.via;
+    const pid = fresh(link.via);
+    const wallId = fresh(id(names.scenery, 'wall'));
     const candidates: Part[] = [];
     /** Scenery that goes with a candidate (the wall a fan link blows the ball off). */
     const withWall = new Map<Part, Part>();
@@ -253,7 +256,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
           const f = step(c.x, c.z, away, 1);
           const fan: Part = { id: pid, kind: 'fan', x: f.x, y: g(f.x, f.z), z: f.z, yaw: out };
           candidates.push(fan);
-          withWall.set(fan, { id: id(names.scenery, 'wall'), kind: 'wall', x: w.x, y: g(w.x, w.z), z: w.z, yaw: landed.yaw, fixed: true });
+          withWall.set(fan, { id: wallId, kind: 'wall', x: w.x, y: g(w.x, w.z), z: w.z, yaw: landed.yaw, fixed: true });
         }
       } else {
         for (const k of [1, 2, 0, 3]) { const c = step(landed.x, landed.z, landed.yaw, k); const f = step(c.x, c.z, turnYaw(landed.yaw, 'right'), 1); candidates.push({ id: pid, kind: 'fan', x: f.x, y: g(f.x, f.z), z: f.z, yaw: landed.yaw }); }
@@ -272,7 +275,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
         const w = step(base.x, base.z, landed.yaw, 1);
         const backed: Part = { ...base };
         candidates.push(backed);
-        withWall.set(backed, { id: id(names.scenery, 'wall'), kind: 'wall', x: w.x, y: g(w.x, w.z), z: w.z, yaw: landed.yaw, fixed: true });
+        withWall.set(backed, { id: wallId, kind: 'wall', x: w.x, y: g(w.x, w.z), z: w.z, yaw: landed.yaw, fixed: true });
       }
     }
     let placed = false;
@@ -307,7 +310,8 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   }
 
   // The end: a bucket where a flying ball lands (or in a pit on a rolling ball's path), a bell or a row of dominoes on its path.
-  const target = id(names.target, graph.end === 'bucket' ? 'bucket' : 'bell');
+  const target = fresh(id(names.target, graph.end === 'bucket' ? 'bucket' : 'bell'));
+const rowId = fresh('row');
   const path = groundPath(samples, spec().terrain, landed.t - 0.01);
   const endTries: (() => void)[] = [];
   const pushEnd = (ps: Part[], gs: MachineGoal[], ground?: Terrain) => endTries.push(() => { parts.push(...ps); goal.push(...gs); if (ground) terrain.push(ground); });
@@ -340,7 +344,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
       const d = landed.yaw;
       const bell = step(c.x, c.z, d, 3);
       const y = groundAt(spec().terrain, c.x, c.z);
-      pushEnd([{ id: 'row', kind: 'dominoes', x: c.x, y, z: c.z, yaw: d, length: 5 }, { id: target, kind: 'bell', x: bell.x, y, z: bell.z, yaw: 0 }], [{ type: 'topple', part: 'row' }, { type: 'bell', part: target, times: 1 }]);
+      pushEnd([{ id: rowId, kind: 'dominoes', x: c.x, y, z: c.z, yaw: d, length: 5 }, { id: target, kind: 'bell', x: bell.x, y, z: bell.z, yaw: 0 }], [{ type: 'topple', part: rowId }, { type: 'bell', part: target, times: 1 }]);
     }
   }
   let done: MachineSpec | null = null;
@@ -376,7 +380,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     for (const k of [2, 3, 1]) {
       const w = step(turnAt.x, turnAt.z, turnAt.inYaw, k);
       if (!inStage(w.x, w.z) || parts.some((p) => p.x === w.x && p.z === w.z)) continue;
-      const wall: Part = { id: id(names.scenery, 'wall'), kind: 'wall', x: w.x, y: groundAt(spec().terrain, w.x, w.z), z: w.z, yaw: turnAt.inYaw, fixed: true };
+      const wall: Part = { id: fresh(id(names.scenery, 'wall')), kind: 'wall', x: w.x, y: groundAt(spec().terrain, w.x, w.z), z: w.z, yaw: turnAt.inYaw, fixed: true };
       if (keepIf(() => parts.push(wall), () => parts.pop())) break;
     }
   }
@@ -407,12 +411,14 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     }
     for (let k = 0; k < 4 && spots.length; k++) {
       const at = spots.splice(Math.floor(rand() * spots.length), 1)[0];
-      const wall: Part = { id: id(names.scenery, 'wall') + (parts.some((p) => p.kind === 'wall') ? '2' : ''), kind: 'wall', x: at.x, y: groundAt(spec().terrain, at.x, at.z), z: at.z, yaw: 0, fixed: true };
+      const wall: Part = { id: fresh(id(names.scenery, 'wall')), kind: 'wall', x: at.x, y: groundAt(spec().terrain, at.x, at.z), z: at.z, yaw: 0, fixed: true };
       if (keepIf(() => parts.push(wall), () => parts.pop())) break;
     }
   }
   const final = done as MachineSpec;
   const withSpares: MachineSpec = { ...final, spares: graph.spares?.length ? graph.spares : defaultSpares(final, pick) };
+  const issues = checkMachine(withSpares);
+  if (issues.length) return why(issues[0].message);
   const lp = layoutProblems(withSpares, { flat: opts.flat });
   if (lp.length) return why(lp[0].slice(0, 140));
   // A level needs something to build: without the route it must fail.

@@ -1,0 +1,118 @@
+{
+  "title": "Ramp Round the Corner",
+  "caption": "Let the ball drop onto the ramp, let it roll round the corner, and watch it knock the dominoes over.",
+  "terrain": [
+    {
+      "name": "floor",
+      "x": 7,
+      "z": 11,
+      "w": 2,
+      "d": 2,
+      "h": -1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 5,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0,
+      "length": 4,
+      "fixed": true
+    },
+    {
+      "id": "ramp2",
+      "kind": "ramp",
+      "x": 8,
+      "y": 0,
+      "z": 5,
+      "yaw": 90,
+      "dx": -0.04814208609105464,
+      "dz": 0
+    },
+    {
+      "id": "wall",
+      "kind": "wall",
+      "x": 9,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 8,
+      "y": 0,
+      "z": 7,
+      "yaw": 90,
+      "length": 5
+    },
+    {
+      "id": "dominoes",
+      "kind": "bell",
+      "x": 8,
+      "y": 0,
+      "z": 10,
+      "yaw": 0
+    },
+    {
+      "id": "wall2",
+      "kind": "wall",
+      "x": 4,
+      "y": 0,
+      "z": 9,
+      "yaw": 0,
+      "fixed": true
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "ramp2"
+    },
+    {
+      "type": "topple",
+      "part": "row"
+    },
+    {
+      "type": "bell",
+      "part": "dominoes",
+      "times": 1
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "trampoline"
+    },
+    {
+      "kind": "platform",
+      "length": 3
+    }
+  ],
+  "level": {
+    "emoji": "🛝",
+    "name": "Ramp Run",
+    "mission": "Drop the ball onto a ramp that turns it round the corner into a row of dominoes",
+    "order": 3
+  }
+}

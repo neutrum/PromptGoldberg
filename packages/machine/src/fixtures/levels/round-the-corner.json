@@ -97,10 +97,11 @@
     }
   ],
   "duration": 15,
+  "spares": [{ "kind": "fan" }, { "kind": "platform", "length": 3 }],
   "level": {
     "emoji": "↪️",
     "name": "Round the corner",
     "mission": "Ring the bell that hides round the corner of the castle wall",
-    "order": 2
+    "order": 7
   }
 }

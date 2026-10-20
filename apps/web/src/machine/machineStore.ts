@@ -5,7 +5,7 @@ import {
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
 import { getDailyMachine, makePuzzle, simulateInWorker, streamMachine } from './machineClient';
-import type { Level } from './levels';
+import type { Level, SharedLevel } from './levels';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -76,6 +76,8 @@ interface MachineState {
   puzzle: boolean;
   /** The machine is being broken for the player: do not draw it, it is the solution. */
   veiled: boolean;
+  /** A placed part is being dragged to a new cell (the camera holds still meanwhile). */
+  dragging: boolean;
   setPuzzle: (on: boolean) => void;
 
   run: MachineRun | null;
@@ -108,6 +110,10 @@ interface MachineState {
   playLevel: (level: Level) => Promise<void>;
   /** Best stars per example level (slug -> 1..3). */
   stars: Record<string, number>;
+  /** The score of whoever shared the level being played, if it came from a link. */
+  sharedScore: SharedLevel['score'] | null;
+  /** The level on screen as a link payload (with the player's score once solved), or null. */
+  shareable: () => SharedLevel | null;
   /** Today's shared fix-it ladder: the same machine broken three ways, tries add up. */
   daily: { date: string; loading: boolean; best: Record<string, number>; stage: number; tries: number };
   playDaily: () => Promise<void>;
@@ -282,16 +288,34 @@ export const useMachine = create<MachineState>((set, get) => {
     edits: 0,
     puzzle: loadPuzzleMode(),
     veiled: false,
+    dragging: false,
     setPuzzle(on) {
       set({ puzzle: on });
       try { localStorage.setItem(PUZZLE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
     },
     level: null,
     stars: loadStars(),
+    sharedScore: null,
     async playLevel(level) {
       aiAbort?.abort();
-      set((s) => ({ ai: idleAi, working: false, error: null, level, daily: { ...s.daily, date: '', stage: 0, tries: 0 }, machine: level.spec, rank: 2, proven: true, moved: [], mode: 'build', fix: null, veiled: true }));
-      if (!(await get().startFix('connect'))) await get().load(level.spec, { rank: 2, proven: true });
+      const proven = level.verified !== false;
+      set((s) => ({ ai: idleAi, working: false, error: null, level, daily: { ...s.daily, date: '', stage: 0, tries: 0 }, machine: level.spec, rank: 2, proven, moved: [], mode: 'build', fix: null, veiled: true }));
+      // A shared level nobody has run plays like a fresh AI level: its idea plus spares, no answer sheet.
+      const started = proven ? await get().startFix('connect') : await get().startLevel(level.spec);
+      if (!started) await get().load(level.spec, { rank: 2, proven });
+    },
+    shareable() {
+      const { fix, level, machine } = get();
+      const spec = fix ? fix.puzzle.solution : machine;
+      if (!spec) return null;
+      // The spares go along, so the receiver gets the same bin.
+      const spares = fix?.puzzle.spares?.map((p) => ({ kind: p.kind as Exclude<Part['kind'], 'ball'>, ...(p.length ? { length: p.length } : {}) }));
+      return {
+        mission: level?.mission ?? get().prompt ?? spec.title,
+        spec: { ...spec, spares: spares?.length ? spares : spec.spares },
+        verified: fix ? fix.puzzle.verified !== false : get().proven,
+        score: fix?.solved ? { stars: fix.stars, tries: fix.tries, parts: fix.placed.length } : undefined,
+      };
     },
     daily: { date: '', loading: false, best: loadBest(), stage: 0, tries: 0 },
     run: null,
@@ -486,7 +510,7 @@ export const useMachine = create<MachineState>((set, get) => {
       if (result?.success) {
         set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: starsFor(s.fix) } } : {}));
         const { level, fix: won, stars } = get();
-        if (level && won && won.stars > (stars[level.slug] ?? 0)) {
+        if (level && level.slug !== 'shared' && won && won.stars > (stars[level.slug] ?? 0)) {
           const next = { ...stars, [level.slug]: won.stars };
           try { localStorage.setItem(STARS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
           set({ stars: next });

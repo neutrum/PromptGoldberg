@@ -97,10 +97,11 @@
     }
   ],
   "duration": 16,
+  "spares": [{ "kind": "ramp" }, { "kind": "fan" }],
   "level": {
     "emoji": "⛪",
     "name": "Across the river",
     "mission": "Ring the church bell from across the river",
-    "order": 5
+    "order": 10
   }
 }

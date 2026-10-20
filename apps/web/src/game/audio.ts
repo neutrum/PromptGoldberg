@@ -87,4 +87,53 @@ export const sfx = {
   star: (i: number) => tone(880 * Math.pow(1.26, i), 0, 0.35, 'sine', 0.2),
   place: () => tone(220, 0, 0.25, 'sine', 0.3, 440),
   click: () => tone(660, 0, 0.06, 'triangle', 0.08),
+  // Prompt Goldberg's parts: a baked sample when one is loaded (see loadSamples), else a synth stand-in.
+  cannon: () => sample('cannon') || (noise(0, 0.35, 0.8, 1800, 80), tone(90, 0, 0.3, 'sine', 0.4, 40)),
+  boing: () => sample('boing') || tone(180, 0, 0.35, 'sine', 0.3, 520),
+  ding: () => sample('ding') || (tone(1318.5, 0, 1.2, 'sine', 0.25), tone(2637, 0, 0.6, 'sine', 0.06)),
+  plop: () => sample('plop') || tone(300, 0, 0.18, 'sine', 0.3, 120),
+  clack: () => sample('clack') || noise(0, 0.05, 0.4, 3000, 1500),
+  whoosh: () => sample('whoosh') || noise(0, 0.6, 0.35, 400, 1600),
 };
+
+/** Sound effects baked once (ElevenLabs, see CREDITS.md) and served from /sfx; missing files fall back to the synth. */
+const SAMPLE_NAMES = ['cannon', 'boing', 'ding', 'plop', 'clack', 'whoosh'] as const;
+const samples = new Map<string, AudioBuffer>();
+const lastPlayed = new Map<string, number>();
+let loading: Promise<void> | null = null;
+
+export function loadSamples(): Promise<void> {
+  return (loading ??= (async () => {
+    const c = ac();
+    if (!c) return;
+    await Promise.all(SAMPLE_NAMES.map(async (name) => {
+      try {
+        const res = await fetch(`/sfx/${name}.mp3`);
+        if (!res.ok) return;
+        samples.set(name, await c.decodeAudioData(await res.arrayBuffer()));
+      } catch {
+        // No sample: the synth plays instead.
+      }
+    }));
+  })());
+}
+
+/** Play a baked sample; false when there is none (or it just played: a domino row is one clatter, not twenty). */
+function sample(name: string): boolean {
+  const c = ac();
+  const buf = samples.get(name);
+  if (!c || !master || !buf) {
+    if (c && !loading) void loadSamples();
+    return false;
+  }
+  const now = performance.now();
+  if (now - (lastPlayed.get(name) ?? 0) < 90) return true;
+  lastPlayed.set(name, now);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const g = c.createGain();
+  g.gain.value = 0.8;
+  src.connect(g).connect(master);
+  src.start();
+  return true;
+}
