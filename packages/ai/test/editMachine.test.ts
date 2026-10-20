@@ -6,6 +6,7 @@ import { FakeLlm } from './helpers';
 
 // These cover the full designer; the route-graph fast path has its own tests.
 process.env.MACHINE_ROUTE = 'off';
+process.env.EDIT_OPS = 'off';
 
 const fixture = (name: string): MachineSpec => JSON.parse(readFileSync(new URL(`../../machine/src/fixtures/${name}`, import.meta.url), 'utf8'));
 const reply = (spec: object) => '```json\n' + JSON.stringify({ ...spec, caption: 'Watch it go.' }) + '\n```';

@@ -5,6 +5,7 @@ import type { Validation } from '../llm/design';
 import { designMachine, difficultyOf, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
 import type { Physics } from './physics';
 import { designRoute, routable, routeFromWords } from './route';
+import { editByOps } from './editOps';
 import type { RouteGraph, RouteGraphInput } from '@og/machine';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
@@ -212,7 +213,18 @@ export function editMachine(deps: MachinePipelineDeps, machine: MachineSpec, ins
   const loop = {
     firstStage: 'editing' as const,
     firstMessage: `Applying your change: ${instruction}`,
-    design: (calls: Completion[], onProgress: (textSoFar: string) => void) => editMachineDesign(deps.llm, machine, instruction, calls, onProgress),
+    // A few ops on a fast model first; the full rewrite when the ops do not make a valid edit.
+    design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => {
+      if (process.env.EDIT_OPS !== 'off') {
+        try {
+          return await editByOps(deps.llm, machine, instruction, calls);
+        } catch (err) {
+          if (deps.signal?.aborted) throw err;
+          emit({ type: 'stage', stage: 'editing', attempt: 1, maxAttempts: deps.maxAttempts, message: 'Rewriting the machine for that change.' });
+        }
+      }
+      return editMachineDesign(deps.llm, machine, instruction, calls, onProgress);
+    },
     request: editMachineRequest(machine, instruction),
     validate: validateMachineEdit(machine),
   };
