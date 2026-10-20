@@ -34,28 +34,31 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 
 ## Week 1 (to Oct 17): prove the nugget
 
-- [ ] Run the 10-prompt eval, read every failing machine, fix the kit or the prompt, repeat until 5/10 and the machines are fun to watch (long chains, visible cause and effect).
-- [ ] Levels without an answer sheet can be unsolvable (the AI's own idea failed blind 1/1). Watch for it: log the player's give-ups per level, and consider an offline solvability pass for the built-in example levels only (nudge with a big budget, keep the ones that solve) so the first five levels are guaranteed. The example levels in `fixtures/levels/` are still verified ones (3 with terrain, 2 flat); regenerate the flat two with the new prompt and verify offline.
-- [ ] Next from the challenge plan: decoy parts and par (the AI's part count; fewer beats it), difficulty words in the prompt mapped to enforced parameters, hints cost tries, mission cards and copy ("describe a goal and a place", not a machine). The designer's levels all look alike (shelf, cannon over the wall, ledge, dominoes, bell): ask for variety (around via fan, over via trampoline, through a gap in a wall pair).
-- [ ] Bins are still thin on some prompts ("two rows of dominoes" hands out one ramp): ask the designer for 3+ mechanism parts between start and targets, or add decoy parts (TIM had surplus parts).
-- [ ] Nicer parts: distinct shapes (fan blades, bell with a clapper, cannon barrel), part labels, a bounce/ring flash.
-- [ ] Deterministic hash check browser vs server (log the hash on both sides and compare).
+- [x] Gate eval (2026-10-20, watch mode): 7/10 working machines (gate 5/10). Prompt Goldberg stays the entry.
+- [x] Route graphs (2026-10-20, user's "graphify" idea): the AI writes the level's story as a small graph (`RouteGraph`: start, 1–3 links that turn the route, an ending, the mission's names, spares) on Haiku 5.5; `compileRoute` lays it out by following the ball (place a link, simulate, read where the ball lands, put the next part there), adds scenery only while it still works, and every level comes out verified. Puzzle eval, 15 prompts incl. 5 curveballs: 10/10 route levels verified in 1.4–5.3 s; the full designer (11–22 s, unrun) only for missions the graph cannot say (seesaw, "twice", "only three parts"). Kinematics in the commit message of 2a8653c.
+- [x] Solvable built-in levels: `scripts/levels.ts` checks every level runs and leaves a bin (`--fix` nudges and writes). Ten levels: five new ones made through the AI route path (`packages/ai/scripts/gen-levels.ts`, one mechanism each: cannon, fan, ramp turn, cannon+trampoline, cannon+fan) then the older five, all with spares.
+- [x] Par (the AI's route length), three stars (solve, par or fewer parts, 3 tries or fewer), hints cost 2 tries, best stars per level. Difficulty words ("easy", "hard", "fiendish") map to enforced spread and bin sizes.
+- [x] Bins: puzzle levels must hand out 2+ route parts and 2+ spares (`binProblems`); connect puzzles hand out the spares too.
+- [x] Nicer parts: spinning fan blades, a bell dome, a tilted cannon barrel on wheels; a sound and a ring flash for every physics event.
+- [x] Browser vs server determinism: `/api/machine/verify` re-runs a solved build; all ten levels bit-identical, "✓ server agrees" badge.
+- [ ] Log give-ups per level (no telemetry yet).
 
 ## Week 2 (Oct 18–24): reliable and legible
 
-- [ ] Validation + one repair retry + canned fallback machines when the AI is unavailable or the cap is hit.
-- [ ] Edits as diff ops on Haiku 5.5 (add/remove/move/rotate/swap) instead of whole-machine rewrites; keep untouched parts in place.
-- [ ] Curveball handling: any prompt maps to a theme plus a goal from the fixed set, with an honest "closest I could build" banner.
-- [ ] Eval at 15 prompts incl. 5 curveballs; track fraction verified, time to first part, time to verified.
-- [ ] Drag parts by hand (reuse the piece-placement code), then "verify" again.
+- [x] Fallback without an AI: `/api/machine` builds a verified level from the mission's words (`createMachineOffline`) when no backend is set or the daily cap is hit; the daily does the same and keeps it for the day.
+- [x] Edits as diff ops on Haiku 5.5 (`editOps.ts`): 1–6 s, 70–230 output tokens; the full rewrite is the fallback (`EDIT_OPS=off`).
+- [x] Curveballs: the designer sets an honest `closest` note; the compiler adds one when it has to swap the ending.
+- [x] Eval at 15 prompts incl. 5 curveballs (`--puzzle`), with the path (route/full) per prompt.
+- [x] Drag placed parts by hand; build during the opening replay.
+- [ ] Route links the compiler cannot do yet: seesaw, a long domino chain as a link, "ring it twice". Each would move a mission from the slow designer to the fast path.
 
 ## Week 3 (Oct 25–31): the game around it
 
-- [ ] Daily board: part count, run time, tries; share a daily result as text.
-- [ ] Replay share links and a gallery (reuse the level gallery code).
-- [ ] A fixed SFX set baked once from ElevenLabs, ~30 cached "engineer" voice lines.
-- [ ] Six challenge prompts doubling as the tutorial ("use only three parts", "make it take longer than 10 seconds").
-- [ ] Mobile layout check; CREDITS.md for every asset and licence.
+- [x] Share: 🔗 copies a link carrying the whole level (and, once solved, the sender's stars to beat); the daily shares a result line.
+- [ ] A community gallery of machine levels (reuse `GalleryStore`), and a server-side daily leaderboard (the verify endpoint is the anti-cheat base).
+- [x] SFX baked once from ElevenLabs (free plan, credited in CREDITS.md and on the welcome card). [ ] The ~30 "engineer" voice lines.
+- [ ] Challenge prompts with constraints ("use only three parts", "longer than 10 seconds"); the opening five levels already teach one mechanism each.
+- [x] Mobile layout check at 390x844 with touch taps; CREDITS.md updated.
 
 ## Week 4 (Nov 1–7): harden and record
 
