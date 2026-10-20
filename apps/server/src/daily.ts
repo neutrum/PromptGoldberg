@@ -43,6 +43,8 @@ export class DailyStore {
     private dir: string,
     private create: ((request: MachineRequest) => Promise<CreateMachineResult>) | null,
     private playable: (machine: MachineSpec) => Promise<boolean> = async () => true,
+    /** Builds a level with no AI (the route compiler, from the prompt's words): the day still gets its own machine. */
+    private offline: ((prompt: string) => Promise<CreateMachineResult>) | null = null,
   ) {}
 
   private file(date: string) {
@@ -77,6 +79,20 @@ export class DailyStore {
         } catch {
           // Try the next prompt; the fallback below always works.
         }
+      }
+    }
+    if (this.offline) {
+      try {
+        const prompt = DAILY_PROMPTS[start];
+        const res = await this.offline(prompt);
+        if (res.solved && (await this.playable(res.machine))) {
+          // Kept for the day like an AI one, so everyone gets the same machine.
+          const daily = { date, prompt, machine: res.machine, generated: false };
+          await writeFileAtomic(this.file(date), JSON.stringify(daily)).catch(() => undefined);
+          return daily;
+        }
+      } catch {
+        // The classic below always works.
       }
     }
     const machine = MachineSpec.parse({ ...sample, caption: 'The AI is resting today, so here is a classic.' });

@@ -84,6 +84,7 @@ export async function buildApp(opts: AppOptions) {
     opts.llm && ((request) => createMachine(request, { llm: llm!, physics, maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs })),
     // The daily ends with "build the chain", so the machine must have connecting parts to hand out.
     async (machine) => (await physics.puzzle(machine, 'connect', 1)) !== null,
+    (prompt) => createMachineOffline(prompt, { physics }),
   );
   const llmLimiter = new RateLimiter(limits.perMinute, limits.perDay);
   const coachLimiter = new RateLimiter(limits.coachPerMinute, limits.coachPerMinute * 60 * 24);
