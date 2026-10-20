@@ -4,7 +4,7 @@ import { parseMachine, PUZZLE_KINDS, TARGET_KINDS, type PartKind, type PuzzleKin
 import { CARDS, dealCards, EDIT_IDEAS } from './cards';
 import { LEVELS } from './levels';
 import { MachineScene } from './MachineScene';
-import { DAILY_LADDER, useMachine } from './machineStore';
+import { DAILY_LADDER, HINT_COST, parOf, useMachine } from './machineStore';
 
 const WELCOME_KEY = 'pg.welcomed';
 const COACH_KEY = 'pg.coached';
@@ -72,6 +72,7 @@ function CardDeck({ onPick, big = false }: { onPick: () => void; big?: boolean }
 function LevelStrip({ onPick }: { onPick: () => void }) {
   const busy = useMachine((s) => s.ai.busy);
   const current = useMachine((s) => s.level?.slug);
+  const stars = useMachine((s) => s.stars);
   if (!LEVELS.length) return null;
   return (
     <div className="levels">
@@ -79,6 +80,7 @@ function LevelStrip({ onPick }: { onPick: () => void }) {
         <button key={l.slug} className={`level ${current === l.slug ? 'active' : ''}`} disabled={busy} onClick={() => { onPick(); void useMachine.getState().playLevel(l); }} title={`“${l.mission}”`}>
           <span className="card-face">{l.emoji}</span>
           <span className="card-title">{l.name}</span>
+          <span className="stars" aria-label={`${stars[l.slug] ?? 0} of 3 stars`}>{starRow(stars[l.slug] ?? 0)}</span>
         </button>
       ))}
     </div>
@@ -223,6 +225,13 @@ function AiLog() {
 }
 
 const tries = (n: number) => `${n} ${n === 1 ? 'try' : 'tries'}`;
+const starRow = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+/** The AI could not build the mission as asked: say so, plainly, instead of pretending. */
+function Closest({ text }: { text?: string }) {
+  if (!text) return null;
+  return <p className="closest" title="The closest the AI could build with this kit">🤔 {text}</p>;
+}
 
 /** The game: something is wrong with the machine; put it right. */
 function FixPanel() {
@@ -249,17 +258,22 @@ function FixPanel() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pick]);
+  const par = parOf(fix.puzzle);
   const label = (kind: string, length?: number) => kind === 'dominoes' || kind === 'platform' ? `${kind} x${length ?? (kind === 'dominoes' ? 5 : 3)}` : kind;
   return (
     <div className="mgoal mfix">
       <div className="mtitle">
         <h2>{stageLabel}{fix.puzzle.solution.title}</h2>
         {level && <p className="mission">Mission: “{level.mission}”</p>}
+        <Closest text={fix.puzzle.solution.closest} />
         <p>{fix.solved
-          ? `${fix.puzzle.verified === false ? 'Solved' : 'Fixed'} in ${tries(fix.tries)}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
+          ? `${fix.puzzle.verified === false ? 'Solved' : 'Fixed'} in ${tries(fix.tries)} with ${fix.placed.length} part${fix.placed.length === 1 ? '' : 's'}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
           : fix.puzzle.verified === false
-            ? `The AI set the stage and picked the parts, but nobody has solved this level yet. Physics decides. Its own idea used ${fix.puzzle.missing.length} of the ${fix.hand.length} parts below.`
+            ? `The AI set the stage and picked the parts, but nobody has solved this level yet. Physics decides. Its own idea used ${par} of the ${fix.hand.length} parts below.`
             : KIND_LABEL[fix.kind].blurb}</p>
+        {fix.solved
+          ? <p className="starline"><span className="stars big">{starRow(fix.stars)}</span> <span className="muted small">{fix.placed.length <= par ? `★ par ${par} parts or fewer` : `☆ par is ${par} parts`} · {fix.tries <= 3 ? '★ 3 tries or fewer' : '☆ 3 tries or fewer'}</span></p>
+          : <p className="muted small">Par: {par} part{par === 1 ? '' : 's'} · ★ solve it · ★ use {par} or fewer · ★ in 3 tries{fix.hand.length > par ? ` · ${fix.hand.length - par} spare${fix.hand.length - par === 1 ? '' : 's'} in the bin` : ''}</p>}
       </div>
       <ChainList goal={fix.puzzle.solution.goal} parts={fix.puzzle.solution.parts} />
       {!fix.solved && (
@@ -293,7 +307,7 @@ function FixPanel() {
       <div className="mactions">
         {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={!fix.placed.length || phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'You can test it before every part is down'}>▶ Run ({tries(fix.tries)})</button>}
         {!fix.solved && <button onClick={clearPlaced} disabled={!fix.placed.length}>Clear</button>}
-        {!fix.solved && !fix.hint && fix.tries >= 2 && <button onClick={showHint} title={fix.puzzle.verified === false ? 'Shows the AI\'s own idea; nobody has tested it' : ''}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'}</button>}
+        {!fix.solved && !fix.hint && fix.tries >= 2 && <button onClick={showHint} title={fix.puzzle.verified === false ? `Shows the AI's own idea; nobody has tested it. Costs ${HINT_COST} tries.` : `Shows where the parts go. Costs ${HINT_COST} tries.`}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'} (+{HINT_COST} tries)</button>}
         {fix.solved && inDaily && !lastStage && <button className="primary" onClick={() => void nextDailyStage()} disabled={phase === 'simulating'}>Next: {KIND_LABEL[DAILY_LADDER[daily.stage]].name} →</button>}
         {fix.solved && inDaily && lastStage && <span className="badge ok">Daily done in {tries(daily.tries)}{daily.best[daily.date] ? ` · best ${daily.best[daily.date]}` : ''}</span>}
         {fix.solved && !inDaily && !breaking && <button onClick={() => setBreaking(true)}>🔧 Break it again</button>}
@@ -328,6 +342,7 @@ function GoalPanel() {
       <div className="mtitle">
         <h2>{machine.title}</h2>
         {machine.caption && <p>{machine.caption}</p>}
+        <Closest text={machine.closest} />
       </div>
       <ChainList goal={machine.goal} parts={machine.parts} />
       <div className="mbadges">

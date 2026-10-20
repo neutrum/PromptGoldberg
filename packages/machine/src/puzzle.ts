@@ -174,10 +174,40 @@ export function makeConnectPuzzle(solution: MachineSpec): Puzzle | null {
   const loose = removable(solution).filter((p) => !fixed.has(p.id));
   if (!loose.length) return null;
   const ids = new Set(loose.map((p) => p.id));
-  const spec: MachineSpec = { ...solution, parts: solution.parts.filter((p) => !ids.has(p.id)) };
+  const spec: MachineSpec = { ...solution, parts: solution.parts.filter((p) => !ids.has(p.id)), spares: undefined };
   const failedAt = fails(spec);
   if (failedAt === null) return null; // Works without them: nothing to connect.
-  return { kind: 'connect', spec, missing: chainOrder(solution, loose), start: [], solution, failedAt };
+  return { kind: 'connect', spec, missing: chainOrder(solution, loose), start: [], solution: { ...solution, spares: undefined }, failedAt, spares: sparesOf(solution) };
+}
+
+/** The designer's spares as hand parts (kinds only; the player picks where). */
+function sparesOf(level: MachineSpec): Part[] {
+  return (level.spares ?? []).map((s, i) => ({ id: `spare${i + 1}`, kind: s.kind, x: 0, y: 0, z: 0, yaw: 0 as const, length: s.length }));
+}
+
+/** The parts of a design's route that a connect puzzle would hand out (no physics: layout only). */
+export function routeParts(level: MachineSpec): Part[] {
+  const fixed = fixedParts(level);
+  return removable(level).filter((p) => !fixed.has(p.id));
+}
+
+/** How full the bin must be: the route's own parts, and the spares on top. */
+export interface BinRule { minRoute: number; minSpares: number }
+
+/**
+ * Why a design would make a thin bin (one ramp to place is not a puzzle), one line per problem.
+ * Only parts the player can put down count: they stand on the ground or a shelf and are not the
+ * ball, a target, scenery or a shelf under them.
+ */
+export function binProblems(level: MachineSpec, rule: BinRule): string[] {
+  const problems: string[] = [];
+  const route = routeParts(level);
+  if (route.length < rule.minRoute) {
+    problems.push(`the player's bin would hold only ${route.length} part${route.length === 1 ? '' : 's'} of your route (${route.map((p) => p.kind).join(', ') || 'none'}): the route between the start and the targets needs at least ${rule.minRoute} parts that stand on the ground or a shelf (ramps, shelves that are not "fixed", fans, trampolines, seesaws, a cannon, walls that are not "fixed"), so building it is a puzzle`);
+  }
+  const spares = level.spares?.length ?? 0;
+  if (spares < rule.minSpares) problems.push(`give ${rule.minSpares} or more "spares" (extra kinds for the bin that your route does not use); there are ${spares}`);
+  return problems;
 }
 
 /** Parts in chain order, so the bin reads like a recipe, with a shelf ahead of whatever stands on it. */
@@ -206,7 +236,7 @@ export function makeLevelPuzzle(level: MachineSpec): Puzzle | null {
   if (!loose.length) return null;
   const ids = new Set(loose.map((p) => p.id));
   const spec: MachineSpec = { ...level, parts: level.parts.filter((p) => !ids.has(p.id)), spares: undefined };
-  const spares: Part[] = (level.spares ?? []).map((s, i) => ({ id: `spare${i + 1}`, kind: s.kind, x: 0, y: 0, z: 0, yaw: 0 as const, length: s.length }));
+  const spares = sparesOf(level);
   return { kind: 'connect', spec, missing: chainOrder(level, loose), start: [], solution: { ...level, spares: undefined }, failedAt: -1, verified: false, spares };
 }
 

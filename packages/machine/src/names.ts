@@ -24,7 +24,8 @@ export function spread(spec: MachineSpec): number {
  * Why a design is not a level yet: the goal sits right next to the start, or a part floats where
  * no hand could put it. Empty when it is fine.
  */
-export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean } = {}): string[] {
+export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean; spreadMin?: number } = {}): string[] {
+  const spreadMin = opts.spreadMin ?? SPREAD_MIN;
   const problems: string[] = [];
   const d = spread(spec);
   const ball = spec.parts.find((p) => p.kind === 'ball');
@@ -39,8 +40,8 @@ export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean } = {})
   if (ball && ball.y < groundAt(spec.terrain, ball.x, ball.z)) {
     problems.push(`the ball (x ${ball.x}, z ${ball.z}) is inside the ground: the ground there is ${groundAt(spec.terrain, ball.x, ball.z)} cells high, so its y must be at least that`);
   }
-  if (d < SPREAD_MIN) {
-    problems.push(`the farthest goal part is only ${d} cells from the ball (x ${ball?.x}, y ${ball?.y}, z ${ball?.z}); it must be at least ${SPREAD_MIN} cells away counting x, y and z, so the player has a route to build. Move the goal parts across the stage and add parts (shelves, a cannon, a fan, a second ramp) to carry the ball there`);
+  if (d < spreadMin) {
+    problems.push(`the farthest goal part is only ${d} cells from the ball (x ${ball?.x}, y ${ball?.y}, z ${ball?.z}); it must be at least ${spreadMin} cells away counting x, y and z, so the player has a route to build. Move the goal parts across the stage and add parts (shelves, a cannon, a fan, a second ramp) to carry the ball there`);
   }
   if (ball && target && (Math.abs(target.x - ball.x) < TURN_MIN || Math.abs(target.z - ball.z) < TURN_MIN)) {
     problems.push(`the farthest target "${target.id}" (x ${target.x}, z ${target.z}) is straight ahead of the ball (x ${ball.x}, z ${ball.z}): the route must turn a corner. Put it at least ${TURN_MIN} cells away along x AND ${TURN_MIN} along z, and turn the route with a cannon or fan facing 90 or 270, or a ramp and shelf running along z`);

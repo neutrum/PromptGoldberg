@@ -66,6 +66,7 @@ export type MachineGoal = z.infer<typeof MachineGoal>;
 export const MachineSpec = z.object({
   title: z.string(),
   caption: z.string().optional().describe('one sentence for players: what should happen, no numbers'),
+  closest: z.string().optional().describe('only when the request could not be built as asked: one honest sentence for the player saying what was built instead'),
   terrain: z.array(Terrain).max(6).optional().describe('the shape of the ground: ditches, rivers, pits, banks and hills the route has to deal with; leave out for flat ground'),
   parts: z.array(Part).min(1).max(40),
   spares: z.array(Spare).max(4).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),

@@ -38,6 +38,19 @@ export interface FixState {
   tries: number;
   solved: boolean;
   hint: boolean;
+  /** Stars for a solved puzzle (1 to 3), or 0. */
+  stars: number;
+}
+
+/** What a hint costs, in tries. */
+export const HINT_COST = 2;
+
+/** The AI's route length: use as few parts as it did (or fewer) for the parts star. */
+export const parOf = (puzzle: Puzzle) => puzzle.missing.length;
+
+/** One star for solving, one for using no more parts than par, one for 3 tries or fewer (hints count). */
+export function starsFor(fix: Pick<FixState, 'puzzle' | 'placed' | 'tries'>): number {
+  return 1 + (fix.placed.length <= parOf(fix.puzzle) ? 1 : 0) + (fix.tries <= 3 ? 1 : 0);
 }
 
 interface MachineState {
@@ -93,6 +106,8 @@ interface MachineState {
   /** The example level being played, if any (its mission sentence is shown as what to type). */
   level: Level | null;
   playLevel: (level: Level) => Promise<void>;
+  /** Best stars per example level (slug -> 1..3). */
+  stars: Record<string, number>;
   /** Today's shared fix-it ladder: the same machine broken three ways, tries add up. */
   daily: { date: string; loading: boolean; best: Record<string, number>; stage: number; tries: number };
   playDaily: () => Promise<void>;
@@ -120,6 +135,10 @@ interface MachineState {
 const idleAi: MachineAiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null };
 
 const BEST_KEY = 'pg.daily.best';
+const STARS_KEY = 'pg.level.stars';
+function loadStars(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(STARS_KEY) ?? '{}') as Record<string, number>; } catch { return {}; }
+}
 const PUZZLE_KEY = 'pg.puzzle';
 /** The daily ladder: easy, sneaky, then build the whole chain. */
 export const DAILY_LADDER: PuzzleKind[] = ['missing', 'moved', 'connect'];
@@ -268,6 +287,7 @@ export const useMachine = create<MachineState>((set, get) => {
       try { localStorage.setItem(PUZZLE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
     },
     level: null,
+    stars: loadStars(),
     async playLevel(level) {
       aiAbort?.abort();
       set((s) => ({ ai: idleAi, working: false, error: null, level, daily: { ...s.daily, date: '', stage: 0, tries: 0 }, machine: level.spec, rank: 2, proven: true, moved: [], mode: 'build', fix: null, veiled: true }));
@@ -382,7 +402,7 @@ export const useMachine = create<MachineState>((set, get) => {
         set({ phase: 'idle', veiled: false, error: kind === 'missing' ? 'This machine has no part that can be taken out; try another one.' : 'This machine cannot be broken that way; try another kind.' });
         return false;
       }
-      set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: puzzle.missing.map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false } });
+      set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: handOf(puzzle).map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       // Show the broken machine fail first, so the player sees what is wrong.
       await simulate(withPlacements(puzzle, puzzle.start));
       return true;
@@ -394,7 +414,7 @@ export const useMachine = create<MachineState>((set, get) => {
         set({ veiled: false, error: 'This level has no parts to hand out; ask for another one.' });
         return false;
       }
-      set({ mode: 'fix', veiled: false, phase: 'simulating', error: null, fix: { puzzle, kind: 'connect', hand: handOf(puzzle).map((m) => ({ ...m })), placed: [], picking: 0, lift: 1, tries: 0, solved: false, hint: false } });
+      set({ mode: 'fix', veiled: false, phase: 'simulating', error: null, fix: { puzzle, kind: 'connect', hand: handOf(puzzle).map((m) => ({ ...m })), placed: [], picking: 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       // The stage as it is: the ball drops and nothing happens yet.
       await simulate(withPlacements(puzzle, []));
       return true;
@@ -464,7 +484,13 @@ export const useMachine = create<MachineState>((set, get) => {
       set({ fix: { ...fix, tries: fix.tries + 1 } });
       const result = await simulate(withPlacements(fix.puzzle, fix.placed));
       if (result?.success) {
-        set((s) => (s.fix ? { fix: { ...s.fix, solved: true } } : {}));
+        set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: starsFor(s.fix) } } : {}));
+        const { level, fix: won, stars } = get();
+        if (level && won && won.stars > (stars[level.slug] ?? 0)) {
+          const next = { ...stars, [level.slug]: won.stars };
+          try { localStorage.setItem(STARS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+          set({ stars: next });
+        }
         // The daily ladder adds up tries; the last stage records a personal best.
         const { daily, fix: done } = get();
         if (daily.date && done) {
@@ -478,7 +504,7 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     showHint() {
-      set((s) => (s.fix ? { fix: { ...s.fix, hint: true } } : {}));
+      set((s) => (s.fix && !s.fix.hint ? { fix: { ...s.fix, hint: true, tries: s.fix.tries + HINT_COST } } : {}));
     },
 
     leaveFix() {

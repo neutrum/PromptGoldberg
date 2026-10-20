@@ -2,7 +2,7 @@ import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
-import { designMachine, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
+import { designMachine, difficultyOf, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
 import type { Physics } from './physics';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
@@ -151,9 +151,9 @@ export function generateMachine(deps: MachinePipelineDeps, prompt: string, emit:
   const loop = {
     firstStage: 'designing' as const,
     firstMessage: 'Designing a level for your idea.',
-    design: (calls: Completion[], onProgress: (textSoFar: string) => void) => designMachine(deps.llm, prompt, calls, onProgress, { twist }),
+    design: (calls: Completion[], onProgress: (textSoFar: string) => void) => designMachine(deps.llm, prompt, calls, onProgress, { twist, bin: opts.verify === false }),
     request: `Design a machine for this request:\n\n${prompt}`,
-    validate: (json: unknown) => validateMachineDesign(json, { flat: wantsFlat(prompt) }),
+    validate: (json: unknown) => validateMachineDesign(json, { flat: wantsFlat(prompt), difficulty: difficultyOf(prompt) }),
   };
   return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);
 }

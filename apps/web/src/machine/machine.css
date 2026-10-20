@@ -86,3 +86,7 @@
 .levels .level.active { border-color: #7dffb0; box-shadow: 0 0 0 1px #7dffb0 inset; }
 .levels .level .card-face { font-size: 26px; }
 .mfix .mission { font-style: italic; color: #ffd27a; margin: 2px 0 6px; }
+.stars { color: #ffd166; font-size: 12px; letter-spacing: 1px; }
+.stars.big { font-size: 22px; letter-spacing: 3px; }
+.starline { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.closest { margin: 4px 0 6px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 210, 122, 0.1); border: 1px solid rgba(255, 210, 122, 0.35); color: #ffd27a; font-size: 13px; }

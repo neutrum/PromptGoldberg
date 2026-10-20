@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, Terrain, TERRAIN_MAX, TERRAIN_MIN, TURN_MIN, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
+import { binProblems, layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, Terrain, TERRAIN_MAX, TERRAIN_MIN, TURN_MIN, type BinRule, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
 import example from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
@@ -41,7 +41,9 @@ SCENERY: a wall or platform with "fixed": true is part of the level: it stays on
 
 VARIETY: levels must not all look alike. "Ramp, cannon over the wall, bucket" is the shape to avoid: use a cannon in at most one level in three, and never as a reflex. Pick the main link from the mission and the twist in the request: a fan beside the path pushing the ball sideways, a trampoline up to a ledge, a seesaw tipping the ball down onto a ramp facing the other way, a long row of dominoes turning the corner, drops from shelf to lower shelf, a hill start with two legs on different rows, a gap in a pair of walls. Mix which part turns the corner, which scenery blocks the way and where the ball starts.
 
-SPARES: give the player 2 or 3 "spares", extra parts beyond your route (a ramp, a shelf, a trampoline, a fan, a wall): the player gets your route's parts and the spares mixed in the bin with no positions, so the spares make them think and offer another way. Spares are kinds only, no positions.
+THE BIN: every part of your route that is not the ball, a target, scenery or a shelf under a target or the ball goes into the player's bin. A bin of one ramp is not a puzzle: build the route from 3 to 5 such parts (ramps, free shelves, fans, trampolines, a seesaw, at most one cannon), each standing on the ground or a free shelf, so the player has to work out the order.
+
+SPARES: give the player 2 or 3 "spares" (as many as the difficulty says), extra parts beyond your route (a ramp, a shelf, a trampoline, a fan, a wall): the player gets your route's parts and the spares mixed in the bin with no positions, so the spares make them think and offer another way. Spares are kinds only, no positions.
 
 GOALS: an ordered list of 1 to 4 events the machine must make happen, in order:
 - {"type": "bucket", "part": id}: the ball settles in that bucket.
@@ -61,6 +63,7 @@ DESIGN RULES
 - Ids: short lowercase words (ball, ramp1, row, bell). Do not set dx or dz.
 - "title": 2 to 5 playful words. "caption": one sentence for players describing what should happen, no numbers.
 - If the request is not about machines, reinterpret it playfully as a machine (a pizza delivery becomes a ball rolling into a bucket called "oven"); use the request's words in the title, caption and ids.
+- If the request asks for something the kit cannot do (a part that is not in the kit, water flowing, two balls, a loop-the-loop, a moving target), build the closest level you can and set "closest" to one honest, friendly sentence for the player saying what you built instead ("No elephants in the kit, so a heavy ball plays the elephant"). Leave "closest" out when you built what was asked.
 
 JSON schema of the machine:
 ${MACHINE_SCHEMA}
@@ -103,10 +106,30 @@ export function pickTwist(request: string, seed?: number): string | undefined {
   return TWISTS[n];
 }
 
+export type Difficulty = 'easy' | 'normal' | 'hard';
+
+/** What a difficulty word in the mission means, enforced at validation: how far the route runs and how full the bin is. */
+export const DIFFICULTY: Record<Difficulty, { spreadMin: number; bin: BinRule; brief: string }> = {
+  easy: { spreadMin: 8, bin: { minRoute: 1, minSpares: 1 }, brief: 'EASY: a short route (8 to 11 cells), one turn, 2 or 3 route parts and 1 spare; a first-timer should solve it in a try or two' },
+  normal: { spreadMin: SPREAD_MIN, bin: { minRoute: 2, minSpares: 2 }, brief: 'NORMAL: 3 or 4 route parts and 2 spares' },
+  hard: { spreadMin: 14, bin: { minRoute: 3, minSpares: 3 }, brief: 'HARD: a long route (14 or more cells) with two turns or a height change, 4 to 6 route parts and 3 spares that look useful' },
+};
+
+/** The difficulty a mission asks for in plain words ("an easy one", "make it fiendish"); normal when it says nothing. */
+export function difficultyOf(request: string): Difficulty {
+  if (/\b(hard|harder|difficult|tricky|tough|expert|fiendish|brutal|insane|evil)\b/i.test(request)) return 'hard';
+  if (/\b(easy|easier|simple|beginners?|tiny|gentle|kids?|first)\b/i.test(request)) return 'easy';
+  return 'normal';
+}
+
 /** True when the request asks for flat ground, the one case where the designer may leave the terrain out. */
 export const wantsFlat = (request: string) => /\bflat\b/i.test(request);
 
-export function validateMachineDesign(json: unknown, opts: { layout?: boolean; flat?: boolean } = {}): Validation<MachineDesign> {
+/**
+ * `difficulty` sets how far the route must run; `bin` (puzzle levels, where the player builds the
+ * route) also wants the bin full enough to be a puzzle.
+ */
+export function validateMachineDesign(json: unknown, opts: { layout?: boolean; flat?: boolean; difficulty?: Difficulty; bin?: boolean } = {}): Validation<MachineDesign> {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { ok: false, problems: '- expected a JSON object' };
   const { machine: nested, ...rest } = json as Record<string, unknown>;
   const raw = nested && typeof nested === 'object' ? nested : rest;
@@ -115,10 +138,12 @@ export function validateMachineDesign(json: unknown, opts: { layout?: boolean; f
   const spec: MachineSpec = {
     ...parsed.spec,
     caption: text(parsed.spec.caption, 240),
+    closest: text(parsed.spec.closest, 200),
     parts: parsed.spec.parts.map(({ dx: _dx, dz: _dz, ...p }) => p),
   };
   // A level, not just a machine: the goal has to be far enough from the start to build a route.
-  const layout = opts.layout === false ? [] : layoutProblems(spec, { flat: opts.flat });
+  const rules = opts.difficulty ? DIFFICULTY[opts.difficulty] : undefined;
+  const layout = opts.layout === false ? [] : [...layoutProblems(spec, { flat: opts.flat, spreadMin: rules?.spreadMin }), ...(rules && opts.bin ? binProblems(spec, rules.bin) : [])];
   if (layout.length) return { ok: false, problems: layout.map((l) => `- ${l}`).join('\n') };
   return { ok: true, value: { spec, notes: [] } };
 }
@@ -198,12 +223,13 @@ function completeObjects<T>(textSoFar: string, key: string, schema: { safeParse:
 
 const MODEL = () => process.env.CLAUDE_MACHINE_MODEL ?? 'claude-sonnet-5-5';
 
-export async function designMachine(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void, opts: { twist?: string } = {}): Promise<MachineDesign> {
+export async function designMachine(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void, opts: { twist?: string; bin?: boolean } = {}): Promise<MachineDesign> {
   const twist = opts.twist ? `\n\nThis level's twist, use it: ${opts.twist}.` : '';
+  const difficulty = difficultyOf(userPrompt);
   return requestValidated(
     llm,
-    { system: MACHINE_PROMPT, prompt: `Design a level for this mission:\n\n${userPrompt}${twist}`, thinking: 'off', maxTokens: 4000, model: MODEL() },
-    (json) => validateMachineDesign(json, { flat: wantsFlat(userPrompt) }),
+    { system: MACHINE_PROMPT, prompt: `Design a level for this mission:\n\n${userPrompt}${twist}\n\nDifficulty: ${DIFFICULTY[difficulty].brief}.`, thinking: 'off', maxTokens: 4000, model: MODEL() },
+    (json) => validateMachineDesign(json, { flat: wantsFlat(userPrompt), difficulty, bin: opts.bin }),
     calls,
     2,
     onProgress,
