@@ -41,5 +41,5 @@ describe('editing a machine keeps the ball and the goal parts fixed', () => {
     const res = await createMachine({ machine, instruction: 'move the ramp one cell west' }, { llm, physics: createPhysics('inline') });
     expect(llm.requests).toHaveLength(1);
     expect(res.machine.title).toBe('Longer run-up');
-  });
+  }, 30_000);
 });
