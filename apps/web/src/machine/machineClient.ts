@@ -147,3 +147,41 @@ export async function streamMachine(
   }
   if (buffer.trim()) flush(buffer);
 }
+
+/** A best build on a level's or the daily's board. */
+export interface Score { name: string; parts: number; tries: number; at: string }
+export interface MachineItem { id: string; title: string; mission: string; author: string; plays: number; clears: number; board: Score[]; createdAt: string }
+export interface Placed { board: Score[]; rank: number }
+
+async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method: init?.method ?? 'GET',
+      headers: init?.body !== undefined ? { 'content-type': 'application/json' } : undefined,
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+  } catch {
+    throw new Error(unreachable);
+  }
+  if (res.status === 204) return undefined as T;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+  return data as T;
+}
+
+/** Community levels, most played first. */
+export const listMachines = (sort: 'top' | 'new' = 'top') => api<{ items: MachineItem[] }>(`/machines?sort=${sort}&limit=12`).then((r) => r.items);
+export const getMachine = (id: string) => api<MachineItem & { machine: MachineSpec }>(`/machines/${encodeURIComponent(id)}`);
+/** Publish a level with the build that solved it; the server runs it before it is listed. */
+export const publishMachine = (body: { machine: MachineSpec; mission: string; author: string; tries: number; parts: number }) => api<MachineItem>('/machines', { method: 'POST', body });
+export const playedMachine = (id: string) => api<unknown>(`/machines/${encodeURIComponent(id)}/play`, { method: 'POST' }).catch(() => undefined);
+/** Send a winning build; the server re-runs it before it goes on the board. */
+export const clearMachine = (id: string, body: { placed: unknown[]; tries: number; name: string }) => api<Placed>(`/machines/${encodeURIComponent(id)}/clear`, { method: 'POST', body });
+export const dailyScores = () => api<{ date: string; board: Score[] }>('/machine/daily/scores');
+export const submitDaily = (body: { date: string; name: string; tries: number; builds: unknown[][] }) => api<Placed & { date: string }>('/machine/daily/score', { method: 'POST', body });
+
+/** How a play went, for finding the levels people give up on. Fire and forget. */
+export function logPlay(level: string, event: 'start' | 'solve' | 'giveup' | 'hint', tries: number, placed: number): void {
+  void api('/machine/event', { method: 'POST', body: { level, event, tries, placed } }).catch(() => undefined);
+}

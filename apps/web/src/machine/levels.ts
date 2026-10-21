@@ -14,6 +14,8 @@ export interface Level {
   spec: MachineSpec;
   /** False for a level nobody has run: played as the AI's idea plus spares. Built-in levels are verified. */
   verified?: boolean;
+  /** A community level: clears go on its board on the server. */
+  gallery?: boolean;
 }
 
 interface LevelFile { level?: { emoji: string; name: string; mission: string; order?: number } }
@@ -62,6 +64,11 @@ export async function readShareLink(): Promise<SharedLevel | null> {
 
 export function clearShareLink() {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+}
+
+/** A community level from the server, played like an example level (its slug is its id, "m-..."). */
+export function galleryAsLevel(item: { id: string; title: string; mission: string; machine: MachineSpec }): Level {
+  return { slug: item.id, emoji: '🌍', name: item.title, mission: item.mission || item.title, order: 0, spec: item.machine, verified: true, gallery: true };
 }
 
 /** A shared level, played like an example level. */

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import demo from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import { parseMachine, PUZZLE_KINDS, rulesLine, TARGET_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
 import { CARDS, dealCards, EDIT_IDEAS } from './cards';
-import { clearShareLink, LEVELS, readShareLink, sharedAsLevel, shareLink } from './levels';
+import { clearShareLink, galleryAsLevel, LEVELS, readShareLink, sharedAsLevel, shareLink } from './levels';
+import { getMachine, listMachines, type MachineItem, type Score } from './machineClient';
 import { MachineScene } from './MachineScene';
 import { DAILY_LADDER, HINT_COST, parOf, useMachine } from './machineStore';
 
@@ -87,6 +88,113 @@ function LevelStrip({ onPick }: { onPick: () => void }) {
   );
 }
 
+/** Levels players made and published, each solved by its publisher's build. */
+function CommunityStrip({ onPick }: { onPick: () => void }) {
+  const busy = useMachine((s) => s.ai.busy);
+  const [items, setItems] = useState<MachineItem[] | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    listMachines('top').then((xs) => live && setItems(xs), () => live && setItems([]));
+    return () => { live = false; };
+  }, []);
+  if (!items?.length) return null;
+  const open = async (id: string) => {
+    setOpening(id);
+    try {
+      const entry = await getMachine(id);
+      const parsed = parseMachine(entry.machine);
+      if (!parsed.ok) throw new Error('That level no longer loads.');
+      onPick();
+      await useMachine.getState().playLevel(galleryAsLevel({ ...entry, machine: parsed.spec }));
+    } catch (err) {
+      useMachine.setState({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setOpening(null);
+    }
+  };
+  return (
+    <>
+      <p className="muted small">Levels other players made:</p>
+      <div className="levels community">
+        {items.slice(0, 8).map((m) => (
+          <button key={m.id} className="level" disabled={busy || !!opening} onClick={() => void open(m.id)} title={m.mission ? `“${m.mission}” by ${m.author}` : `by ${m.author}`}>
+            <span className="card-face">{opening === m.id ? '◌' : '🌍'}</span>
+            <span className="card-title">{m.title}</span>
+            <span className="muted small">{m.author} · {m.clears} solved{m.board[0] ? ` · best ${m.board[0].parts} parts` : ''}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** Best builds: a community level's (fewest parts) or today's daily (fewest tries). */
+function BoardView({ rows, rank, kind }: { rows: Score[]; rank?: number; kind: 'level' | 'daily' }) {
+  if (!rows.length) return null;
+  return (
+    <ol className="board">
+      {rows.slice(0, 5).map((r, i) => (
+        <li key={r.name} className={rank === i + 1 ? 'me' : ''}>
+          <span>{i + 1}. {r.name}</span>
+          <span className="muted">{kind === 'daily' ? `${tries(r.tries)} · ${r.parts} parts` : `${r.parts} parts · ${tries(r.tries)}`}</span>
+        </li>
+      ))}
+      {rank !== undefined && rank > 5 && <li className="me"><span>{rank}. you</span></li>}
+    </ol>
+  );
+}
+
+/** The name that goes on boards and published levels; kept in this browser. */
+function NameField() {
+  const name = useMachine((s) => s.playerName);
+  return <input className="name-field" value={name} onChange={(e) => useMachine.getState().setPlayerName(e.target.value)} placeholder="Your name" maxLength={24} aria-label="Your name for the boards" />;
+}
+
+/** After solving: the board for a community level, the daily board, or a button to publish the level. */
+function AfterSolve({ inDaily, lastStage }: { inDaily: boolean; lastStage: boolean }) {
+  const board = useMachine((s) => s.board);
+  const level = useMachine((s) => s.level);
+  const { postDaily, publish } = useMachine.getState();
+  const [published, setPublished] = useState<{ title: string } | { error: string } | 'busy' | null>(null);
+  if (inDaily) {
+    if (!lastStage) return null;
+    const posted = board?.kind === 'daily' && board.rank;
+    return (
+      <div className="after-solve">
+        {!posted && <div className="mactions"><NameField /><button className="primary" disabled={board?.busy} onClick={() => void postDaily()}>🏆 Post to today's board</button></div>}
+        {board?.kind === 'daily' && board.error && <div className="mnote">{board.error}</div>}
+        {board?.kind === 'daily' && <BoardView rows={board.rows} rank={board.rank} kind="daily" />}
+      </div>
+    );
+  }
+  if (level?.gallery) {
+    return (
+      <div className="after-solve">
+        {board?.busy && <div className="muted small">◌ The server is checking your build…</div>}
+        {board?.error && <div className="mnote">{board.error}</div>}
+        {board?.kind === 'level' && board.rank ? <div className="muted small">Your build is #{board.rank} on this level's board (fewest parts wins).</div> : null}
+        {board?.kind === 'level' && <BoardView rows={board.rows} rank={board.rank} kind="level" />}
+      </div>
+    );
+  }
+  // Built-in levels are already for everyone; anything else (an AI level, a shared one) can be published.
+  if (level && !level.gallery && level.slug !== 'shared') return null;
+  return (
+    <div className="after-solve">
+      {published && typeof published === 'object' && 'title' in published
+        ? <div className="muted small">🌍 Published “{published.title}”: it is in the community levels now.</div>
+        : (
+          <div className="mactions">
+            <NameField />
+            <button disabled={published === 'busy'} onClick={() => { setPublished('busy'); publish().then((m) => setPublished({ title: m.title }), (err: unknown) => setPublished({ error: err instanceof Error ? err.message : String(err) })); }} title="Your winning build goes up with it: the server runs it before the level is listed">🌍 Publish this level</button>
+          </div>
+        )}
+      {published && typeof published === 'object' && 'error' in published && <div className="mnote">{published.error}</div>}
+    </div>
+  );
+}
+
 /** First visit: what this is, and three ways in. The sample machine keeps running behind it. */
 function Welcome({ onClose }: { onClose: () => void }) {
   const daily = useMachine((s) => s.daily);
@@ -97,6 +205,7 @@ function Welcome({ onClose }: { onClose: () => void }) {
         <p className="tagline">Tell the AI <b>a goal and a place</b>. It builds the level: the targets, the walls, and a route it keeps to itself. <b>You get the parts and build the route.</b> Real physics is the judge.</p>
         {LEVELS.length > 0 && <p className="muted small">Play a level the AI already made:</p>}
         <LevelStrip onPick={onClose} />
+        <CommunityStrip onPick={onClose} />
         <p className="muted small">{LEVELS.length ? 'Or make your own. Pick a mission:' : 'Pick a mission:'}</p>
         <CardDeck onPick={onClose} big />
         <div className="welcome-actions">
@@ -349,6 +458,7 @@ function FixPanel() {
         <ShareButton />
         <button onClick={leaveFix}>{fix.solved ? '▶ Watch it whole' : 'Give up'}</button>
       </div>
+      {fix.solved && <AfterSolve inDaily={inDaily} lastStage={lastStage} />}
       {breaking && (
         <div className="mbin mbreak">
           <span className="muted">How?</span>

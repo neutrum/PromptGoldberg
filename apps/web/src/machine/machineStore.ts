@@ -1,10 +1,10 @@
 import {
-  dropAt, GRID, handOf, isSupported, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, ruleProblems, samePlace, withPlacements,
+  DAILY_LADDER, dailySeed, dropAt, GRID, handOf, isSupported, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, ruleProblems, samePlace, withPlacements,
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
 import { sfx } from '../game/audio';
-import { getDailyMachine, makePuzzle, simulateInWorker, streamMachine, verifyOnServer } from './machineClient';
+import { clearMachine, getDailyMachine, logPlay, makePuzzle, playedMachine, publishMachine, simulateInWorker, streamMachine, submitDaily, verifyOnServer, type MachineItem, type Score } from './machineClient';
 import type { Level, SharedLevel } from './levels';
 
 export interface MachineAiLog {
@@ -118,8 +118,17 @@ interface MachineState {
   sharedScore: SharedLevel['score'] | null;
   /** The level on screen as a link payload (with the player's score once solved), or null. */
   shareable: () => SharedLevel | null;
-  /** Today's shared fix-it ladder: the same machine broken three ways, tries add up. */
-  daily: { date: string; loading: boolean; best: Record<string, number>; stage: number; tries: number };
+  /** Today's shared fix-it ladder: the same machine broken three ways, tries add up. builds: the winning parts per stage, for the board. */
+  daily: { date: string; loading: boolean; best: Record<string, number>; stage: number; tries: number; builds: Part[][] };
+  /** The name that goes on boards (kept in the browser). */
+  playerName: string;
+  setPlayerName: (name: string) => void;
+  /** The board for what was just solved: a community level's best builds, or today's daily. */
+  board: { kind: 'level' | 'daily'; rows: Score[]; rank?: number; error?: string; busy?: boolean } | null;
+  /** Put today's daily result on the board (every stage's build is re-run on the server). */
+  postDaily: () => Promise<void>;
+  /** Publish the solved level to the community gallery with the build that solved it. */
+  publish: () => Promise<MachineItem>;
   playDaily: () => Promise<void>;
   /** After a daily stage is solved: break the machine the next way. */
   nextDailyStage: () => Promise<void>;
@@ -150,8 +159,11 @@ function loadStars(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(STARS_KEY) ?? '{}') as Record<string, number>; } catch { return {}; }
 }
 const PUZZLE_KEY = 'pg.puzzle';
-/** The daily ladder: easy, sneaky, then build the whole chain. */
-export const DAILY_LADDER: PuzzleKind[] = ['missing', 'moved', 'connect'];
+const NAME_KEY = 'pg.name';
+function loadName(): string {
+  try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; }
+}
+export { DAILY_LADDER };
 function loadPuzzleMode(): boolean {
   try { return localStorage.getItem(PUZZLE_KEY) !== '0'; } catch { return true; }
 }
@@ -193,11 +205,25 @@ export const useMachine = create<MachineState>((set, get) => {
     }
   };
 
+  /** What a play is called in the play log: a built-in slug, a community id, the daily stage, or an AI level. */
+  const playKey = (): string => {
+    const { level, daily, fix } = get();
+    if (daily.date) return `daily:${daily.date}:${daily.stage}`;
+    if (level) return level.slug === 'shared' ? 'shared' : level.slug;
+    return fix?.puzzle.verified === false ? 'ai:unrun' : 'ai';
+  };
+  /** Leaving a puzzle that was tried but never solved counts as giving up on it. */
+  const abandon = () => {
+    const { fix } = get();
+    if (fix && !fix.solved && fix.tries > 0) logPlay(playKey(), 'giveup', fix.tries, fix.placed.length);
+  };
+
   const aiStream = async (path: '/machine' | '/machine/edit', body: unknown) => {
+    abandon();
     aiAbort?.abort();
     aiAbort = new AbortController();
     // A new or changed machine is never the daily or an example level any more: its tries must not count as a daily best.
-    set((s) => ({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null, level: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
+    set((s) => ({ ai: { busy: true, lines: [], progress: 0, error: null, sketch: null }, working: true, mode: 'build', fix: null, level: null, board: null, daily: { ...s.daily, date: '', stage: 0, tries: 0 } }));
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let delivered = false;
     const accept = async (raw: MachineSpec, rank: MachineRank, moved: { id: string; cells: number }[] = []) => {
@@ -301,7 +327,10 @@ export const useMachine = create<MachineState>((set, get) => {
     stars: loadStars(),
     sharedScore: null,
     async playLevel(level) {
+      abandon();
       aiAbort?.abort();
+      if (level.gallery) void playedMachine(level.slug);
+      set({ board: null });
       const proven = level.verified !== false;
       set((s) => ({ ai: idleAi, working: false, error: null, level, daily: { ...s.daily, date: '', stage: 0, tries: 0 }, machine: level.spec, rank: 2, proven, moved: [], mode: 'build', fix: null, veiled: true }));
       // A shared level nobody has run plays like a fresh AI level: its idea plus spares, no answer sheet.
@@ -321,7 +350,40 @@ export const useMachine = create<MachineState>((set, get) => {
         score: fix?.solved ? { stars: fix.stars, tries: fix.tries, parts: fix.placed.length } : undefined,
       };
     },
-    daily: { date: '', loading: false, best: loadBest(), stage: 0, tries: 0 },
+    daily: { date: '', loading: false, best: loadBest(), stage: 0, tries: 0, builds: [] },
+    playerName: loadName(),
+    setPlayerName(name) {
+      const clean = name.replace(/\s+/g, ' ').slice(0, 24);
+      set({ playerName: clean });
+      try { localStorage.setItem(NAME_KEY, clean.trim()); } catch { /* private mode */ }
+    },
+    board: null,
+    async postDaily() {
+      const { daily, playerName } = get();
+      if (!daily.date) return;
+      set((s) => ({ board: { kind: 'daily', rows: s.board?.rows ?? [], busy: true } }));
+      try {
+        const r = await submitDaily({ date: daily.date, name: playerName.trim() || 'Anonymous', tries: daily.tries, builds: daily.builds });
+        set({ board: { kind: 'daily', rows: r.board, rank: r.rank } });
+      } catch (err) {
+        set((s) => ({ board: { kind: 'daily', rows: s.board?.rows ?? [], error: err instanceof Error ? err.message : String(err) } }));
+      }
+    },
+    async publish() {
+      const { fix, level, prompt, playerName } = get();
+      if (!fix?.solved) throw new Error('Solve it first: a level is published with the build that solved it.');
+      const build = withPlacements(fix.puzzle, fix.placed);
+      // The bin travels too: the parts the player left unused become spares, with the level's own.
+      const unused = handOf(fix.puzzle).filter((h) => !fix.placed.some((p) => p.id === h.id)).map((h) => ({ kind: h.kind as Exclude<Part['kind'], 'ball'>, ...(h.length ? { length: h.length } : {}) }));
+      const spares = unused.slice(0, 4);
+      return publishMachine({
+        machine: { ...build, spares: spares.length ? spares : undefined },
+        mission: level?.mission ?? prompt ?? build.title,
+        author: playerName.trim() || 'Anonymous',
+        tries: fix.tries,
+        parts: fix.placed.length,
+      });
+    },
     run: null,
     result: null,
     hash: null,
@@ -390,8 +452,9 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     async playDaily() {
+      abandon();
       aiAbort?.abort();
-      set((s) => ({ ai: idleAi, working: false, daily: { ...s.daily, loading: true }, error: null }));
+      set((s) => ({ ai: idleAi, working: false, board: null, daily: { ...s.daily, loading: true, builds: [] }, error: null }));
       try {
         const d = await getDailyMachine();
         const parsed = parseMachine(d.machine);
@@ -418,7 +481,7 @@ export const useMachine = create<MachineState>((set, get) => {
       const { machine, proven, daily } = get();
       if (!machine || !proven) return false;
       set({ phase: 'simulating', error: null });
-      const seed = daily.date ? Number(daily.date.replace(/-/g, '')) : Math.floor(Math.random() * 1e9);
+      const seed = daily.date ? dailySeed(daily.date) : Math.floor(Math.random() * 1e9);
       let puzzle: Puzzle | null = null;
       try {
         puzzle = await makePuzzle(machine, kind, seed);
@@ -431,6 +494,7 @@ export const useMachine = create<MachineState>((set, get) => {
         return false;
       }
       set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: handOf(puzzle).map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
+      logPlay(playKey(), 'start', 0, 0);
       // Show the broken machine fail first, so the player sees what is wrong.
       await simulate(withPlacements(puzzle, puzzle.start));
       return true;
@@ -443,6 +507,7 @@ export const useMachine = create<MachineState>((set, get) => {
         return false;
       }
       set({ mode: 'fix', veiled: false, phase: 'simulating', error: null, fix: { puzzle, kind: 'connect', hand: handOf(puzzle).map((m) => ({ ...m })), placed: [], picking: 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
+      logPlay(playKey(), 'start', 0, 0);
       // The stage as it is: the ball drops and nothing happens yet.
       await simulate(withPlacements(puzzle, []));
       return true;
@@ -526,6 +591,14 @@ export const useMachine = create<MachineState>((set, get) => {
           set((s) => (s.fix?.solved ? { fix: { ...s.fix, server } } : {}));
         });
         const { level, fix: won, stars } = get();
+        if (won) logPlay(playKey(), 'solve', won.tries, won.placed.length);
+        // A community level: the server re-runs the build before it goes on the level's board.
+        if (level?.gallery && won) {
+          set({ board: { kind: 'level', rows: [], busy: true } });
+          void clearMachine(level.slug, { placed: won.placed, tries: won.tries, name: get().playerName.trim() || 'Anonymous' })
+            .then((r) => set({ board: { kind: 'level', rows: r.board, rank: r.rank } }))
+            .catch((err: unknown) => set({ board: { kind: 'level', rows: [], error: err instanceof Error ? err.message : String(err) } }));
+        }
         if (level && level.slug !== 'shared' && won && won.stars > (stars[level.slug] ?? 0)) {
           const next = { ...stars, [level.slug]: won.stars };
           try { localStorage.setItem(STARS_KEY, JSON.stringify(next)); } catch { /* private mode */ }
@@ -538,16 +611,19 @@ export const useMachine = create<MachineState>((set, get) => {
           const last = daily.stage >= DAILY_LADDER.length;
           const best = last && (!daily.best[daily.date] || tries < daily.best[daily.date]) ? { ...daily.best, [daily.date]: tries } : daily.best;
           if (best !== daily.best) { try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch { /* private mode */ } }
-          set({ daily: { ...daily, tries, best } });
+          set({ daily: { ...daily, tries, best, builds: [...daily.builds, done.placed] } });
         }
       }
     },
 
     showHint() {
+      const { fix } = get();
+      if (fix && !fix.hint) logPlay(playKey(), 'hint', fix.tries, fix.placed.length);
       set((s) => (s.fix && !s.fix.hint ? { fix: { ...s.fix, hint: true, tries: s.fix.tries + HINT_COST } } : {}));
     },
 
     leaveFix() {
+      abandon();
       const { machine, fix } = get();
       // A solved puzzle: what plays on is the player's build, not the AI's idea of one.
       const whole = fix?.solved ? withPlacements(fix.puzzle, fix.placed) : machine;

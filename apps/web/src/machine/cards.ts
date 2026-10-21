@@ -30,9 +30,6 @@ export const CARDS: PromptCard[] = [
   { emoji: '🚂', title: 'Domino train', prompt: 'A long domino chain across the station platform rings the departure bell' },
 ];
 
-/** Cards whose mission carries a challenge the game enforces (a parts limit, a time bar). */
-export const CHALLENGE_CARDS = CARDS.filter((c) => /only w+ parts|slowest|longer than/i.test(c.prompt));
-
 /** `n` cards starting at `offset`, wrapping around the deck. */
 export function dealCards(offset: number, n = 3): PromptCard[] {
   return Array.from({ length: n }, (_, k) => CARDS[(offset + k) % CARDS.length]);

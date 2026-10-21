@@ -221,3 +221,62 @@ describe('POST /api/machine without an AI', () => {
     expect(done?.machine?.closest).toMatch(/resting/);
   }, 30_000);
 });
+
+describe('machine levels: gallery, clears, daily board, play log', () => {
+  it('publishes a solved level, counts a clear only for a build the server runs', async () => {
+    const { initPhysics, makeConnectPuzzle, parseMachine } = await import('@og/machine');
+    const sample = (await import('@og/machine/fixtures/levels/first-shot.json', { with: { type: 'json' } })).default;
+    await initPhysics();
+    const spec = parseMachine(sample);
+    if (!spec.ok) throw new Error('fixture');
+    const app = await setup(null);
+    const pub = await app.inject({ method: 'POST', url: '/api/machines', payload: { machine: spec.spec, mission: 'fire it in', author: 'Ada', tries: 2, parts: 2 } });
+    expect(pub.statusCode).toBe(201);
+    const id = pub.json().id as string;
+    expect(pub.json().board[0]).toMatchObject({ name: 'Ada', tries: 2 });
+    const broken = { ...spec.spec, parts: spec.spec.parts.filter((p) => !p.fixed && p.kind !== 'cannon') };
+    expect((await app.inject({ method: 'POST', url: '/api/machines', payload: { machine: broken } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/machines' })).json().items.map((i: { id: string }) => i.id)).toContain(id);
+    expect((await app.inject({ method: 'POST', url: `/api/machines/${id}/play` })).statusCode).toBe(200);
+
+    const puzzle = makeConnectPuzzle(spec.spec)!;
+    const clear = await app.inject({ method: 'POST', url: `/api/machines/${id}/clear`, payload: { placed: puzzle.missing, tries: 1, name: 'Bo' } });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json().rank).toBe(1);
+    const cheat = await app.inject({ method: 'POST', url: `/api/machines/${id}/clear`, payload: { placed: [{ id: 'extra', kind: 'cannon', x: 1, y: 0, z: 1, yaw: 0 }], tries: 1, name: 'Cy' } });
+    expect(cheat.statusCode).toBe(400);
+    const none = await app.inject({ method: 'POST', url: `/api/machines/${id}/clear`, payload: { placed: [], tries: 1, name: 'Cy' } });
+    expect(none.statusCode).toBe(400);
+    const entry = (await app.inject({ method: 'GET', url: `/api/machines/${id}` })).json();
+    expect(entry).toMatchObject({ plays: 1, clears: 1 });
+    expect(entry.board.map((b: { name: string }) => b.name)).toEqual(expect.arrayContaining(['Ada', 'Bo']));
+  }, 60_000);
+
+  it('logs how plays end and sums them per level', async () => {
+    const app = await setup(null);
+    for (const event of ['start', 'start', 'giveup', 'solve', 'hint']) {
+      expect((await app.inject({ method: 'POST', url: '/api/machine/event', payload: { level: 'first-shot', event, tries: 4, placed: 2 } })).statusCode).toBe(204);
+    }
+    expect((await app.inject({ method: 'POST', url: '/api/machine/event', payload: { level: 'x', event: 'cheer' } })).statusCode).toBe(400);
+    const stats = (await app.inject({ method: 'GET', url: '/api/machine/stats' })).json();
+    expect(stats.levels[0]).toMatchObject({ level: 'first-shot', starts: 2, giveups: 1, solves: 1, hints: 1, giveupRate: 0.5, medianGiveupTries: 4 });
+  });
+
+  it('puts a daily on the board only with a build for every stage', async () => {
+    const { DAILY_LADDER, dailySeed, makePuzzleOfKind, initPhysics } = await import('@og/machine');
+    await initPhysics();
+    const app = await setup(null);
+    const daily = (await app.inject({ method: 'GET', url: '/api/machine/daily' })).json();
+    const builds = [];
+    for (const kind of DAILY_LADDER) {
+      const p = makePuzzleOfKind(daily.machine, kind, { seed: dailySeed(daily.date) });
+      if (p) builds.push(p.missing);
+    }
+    const res = await app.inject({ method: 'POST', url: '/api/machine/daily/score', payload: { date: daily.date, name: 'Ada', tries: 5, builds } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ rank: 1 });
+    const short = await app.inject({ method: 'POST', url: '/api/machine/daily/score', payload: { date: daily.date, name: 'Bo', tries: 1, builds: builds.slice(1) } });
+    expect(short.statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/machine/daily/scores' })).json().board).toHaveLength(1);
+  }, 90_000);
+});

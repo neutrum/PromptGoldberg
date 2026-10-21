@@ -5,9 +5,10 @@ import {
   type CoachRequest, type GallerySort, type Level, type LevelStreamEvent,
 } from '@og/shared';
 import { LevelCache } from './cache';
-import { DailyStore } from './daily';
+import { DailyStore, todayUtc } from './daily';
+import { checkBuild, DailyBoard, MachineGallery, PLAY_EVENTS, playerName, PlayLog, type PlayEvent } from './machines';
 import { GalleryStore } from './gallery';
-import { parseMachine, PUZZLE_KINDS, type MachineStreamEvent, type PuzzleKind } from '@og/machine';
+import { DAILY_LADDER, dailySeed, parseMachine, PUZZLE_KINDS, type MachineStreamEvent, type PuzzleKind } from '@og/machine';
 import {
   coachTip, createLevel, createMachine, createMachineOffline, createPhysics, createSolver, designSystem, LlmError, SolverError,
   type CreateLevelResult, type CreateMachineResult, type LevelRequest, type LlmBackend, type MachineRequest, type Physics, type Solver, type SolverMode,
@@ -86,6 +87,9 @@ export async function buildApp(opts: AppOptions) {
     async (machine) => (await physics.puzzle(machine, 'connect', 1)) !== null,
     (prompt) => createMachineOffline(prompt, { physics }),
   );
+  const machines = await MachineGallery.open(opts.dataDir);
+  const dailyBoard = await DailyBoard.open(opts.dataDir);
+  const plays = new PlayLog(join(opts.dataDir, 'plays'));
   const llmLimiter = new RateLimiter(limits.perMinute, limits.perDay);
   const coachLimiter = new RateLimiter(limits.coachPerMinute, limits.coachPerMinute * 60 * 24);
   const publishLimiter = new RateLimiter(limits.publishPerMinute, limits.publishPerDay);
@@ -389,6 +393,98 @@ export async function buildApp(opts: AppOptions) {
     const item = await gallery.recordResult(req.params.id, req.body.cleared, shots);
     return item ?? reply.code(404).send({ error: 'level not found' });
   });
+
+  // Community levels: published with a build that solves them (the server runs it), played as
+  // "build the route" puzzles, and each clear is a build the server runs too.
+  const MACHINE_INVALID = (issues: { message: string }[]) => `The level is invalid: ${issues.slice(0, 3).map((i) => i.message).join('; ')}`;
+
+  app.get<{ Querystring: { sort?: string; limit?: string } }>('/api/machines', async (req) => ({
+    items: machines.list(req.query.sort === 'new' ? 'new' : 'top', num(req.query.limit, 24)),
+  }));
+
+  app.get<{ Params: { id: string } }>('/api/machines/:id', async (req, reply) => {
+    const e = machines.get(req.params.id);
+    return e ?? reply.code(404).send({ error: 'level not found' });
+  });
+
+  app.post<{ Body: { machine?: unknown; mission?: unknown; author?: unknown; tries?: unknown; parts?: unknown } }>('/api/machines', async (req, reply) => {
+    const limited = publishLimiter.take(req.ip);
+    if (limited) return reply.code(429).header('retry-after', limited.retryAfterS).send({ error: limited.error });
+    const parsed = parseMachine(req.body?.machine);
+    if (!parsed.ok) return reply.code(400).send({ error: MACHINE_INVALID(parsed.issues) });
+    const { result } = await physics.check(parsed.spec);
+    if (!result.success) return reply.code(400).send({ error: 'the level does not work as sent: publish the build that solved it' });
+    if (!(await physics.puzzle(parsed.spec, 'connect', 1))) return reply.code(400).send({ error: 'the level has nothing for a player to build' });
+    const tries = Math.max(1, Math.min(99, Math.round(Number(req.body?.tries) || 1)));
+    const parts = Math.max(1, Math.min(12, Math.round(Number(req.body?.parts) || 1)));
+    const item = await machines.publish(parsed.spec, req.body?.mission, req.body?.author, { parts, tries });
+    req.log.info({ id: item.id }, 'machine level published');
+    return reply.code(201).send(item);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/machines/:id/play', async (req, reply) => {
+    const limited = resultLimiter.take(req.ip);
+    if (limited) return reply.code(429).send({ error: limited.error });
+    return (await machines.played(req.params.id)) ? { ok: true } : reply.code(404).send({ error: 'level not found' });
+  });
+
+  app.post<{ Params: { id: string }; Body: { placed?: unknown; tries?: unknown; name?: unknown } }>('/api/machines/:id/clear', async (req, reply) => {
+    const limited = resultLimiter.take(req.ip);
+    if (limited) return reply.code(429).send({ error: limited.error });
+    const entry = machines.get(req.params.id);
+    if (!entry) return reply.code(404).send({ error: 'level not found' });
+    const puzzle = await physics.puzzle(entry.machine, 'connect', 1);
+    if (!puzzle) return reply.code(409).send({ error: 'this level cannot be played any more' });
+    const checked = await checkBuild(physics, puzzle, req.body?.placed);
+    if (!checked.ok) return reply.code(400).send({ error: `Not counted: ${checked.error}.` });
+    const tries = Math.max(1, Math.min(99, Math.round(Number(req.body?.tries) || 1)));
+    return machines.cleared(entry.id, { name: playerName(req.body?.name), parts: checked.parts, tries });
+  });
+
+  // The daily leaderboard: every stage's build is re-run on the server against the day's puzzles.
+  app.get<{ Querystring: { date?: string } }>('/api/machine/daily/scores', async (req) => {
+    const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : todayUtc();
+    return { date, board: dailyBoard.top(date) };
+  });
+
+  app.post<{ Body: { date?: unknown; name?: unknown; tries?: unknown; builds?: unknown } }>('/api/machine/daily/score', async (req, reply) => {
+    const limited = resultLimiter.take(req.ip);
+    if (limited) return reply.code(429).send({ error: limited.error });
+    const date = req.body?.date;
+    if (date !== todayUtc()) return reply.code(400).send({ error: "Only today's daily counts." });
+    const builds = req.body?.builds;
+    if (!Array.isArray(builds)) return reply.code(400).send({ error: 'expected { date, name, tries, builds: placed parts per stage }' });
+    const today = await daily.get(date);
+    let stage = 0;
+    let parts = 0;
+    for (const kind of DAILY_LADDER) {
+      const puzzle = await physics.puzzle(today.machine, kind, dailySeed(date));
+      if (!puzzle) continue; // The client skips a stage the machine cannot offer, and so does the board.
+      const checked = await checkBuild(physics, puzzle, builds[stage]);
+      if (!checked.ok) return reply.code(400).send({ error: `Stage ${stage + 1} not counted: ${checked.error}.` });
+      parts += checked.parts;
+      stage++;
+    }
+    if (builds.length !== stage) return reply.code(400).send({ error: `expected ${stage} stage builds` });
+    const tries = Math.max(stage, Math.min(999, Math.round(Number(req.body?.tries) || stage)));
+    return { date, ...(await dailyBoard.add(date, { name: playerName(req.body?.name), tries, parts })) };
+  });
+
+  // Where players give up: start, solve, give-up and hint events per level, nothing about the player.
+  app.post<{ Body: { level?: unknown; event?: unknown; tries?: unknown; placed?: unknown } }>('/api/machine/event', async (req, reply) => {
+    const limited = resultLimiter.take(req.ip);
+    if (limited) return reply.code(429).send({ error: limited.error });
+    const level = typeof req.body?.level === 'string' ? req.body.level.replace(/[^\w:. -]/g, '').slice(0, 60) : '';
+    const event = req.body?.event as PlayEvent;
+    if (!level || !PLAY_EVENTS.includes(event)) return reply.code(400).send({ error: `expected { level, event: ${PLAY_EVENTS.join('|')} }` });
+    const n = (v: unknown) => Math.max(0, Math.min(999, Math.round(Number(v) || 0)));
+    await plays.add({ level, event, tries: n(req.body?.tries), placed: n(req.body?.placed) });
+    return reply.code(204).send();
+  });
+
+  app.get<{ Querystring: { days?: string } }>('/api/machine/stats', async (req) => ({
+    levels: await plays.stats(Math.max(1, Math.min(30, num(req.query.days, 7)))),
+  }));
 
   return app;
 }

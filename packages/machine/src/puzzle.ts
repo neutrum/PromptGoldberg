@@ -18,6 +18,9 @@ import { simulateSync } from './sim';
 export type PuzzleKind = 'connect' | 'missing' | 'missing2' | 'moved';
 
 export const PUZZLE_KINDS: PuzzleKind[] = ['connect', 'missing', 'missing2', 'moved'];
+/** The daily ladder: easy, sneaky, then build the whole chain. Its puzzles are seeded by the date (2026-10-21 is 20261021). */
+export const DAILY_LADDER: PuzzleKind[] = ['missing', 'moved', 'connect'];
+export const dailySeed = (date: string) => Number(date.replace(/-/g, ''));
 
 export interface Puzzle {
   kind: PuzzleKind;
