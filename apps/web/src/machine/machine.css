@@ -109,7 +109,9 @@
 .closest { margin: 4px 0 6px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 210, 122, 0.1); border: 1px solid rgba(255, 210, 122, 0.35); color: #ffd27a; font-size: 13px; }
 @media (max-width: 600px) {
   .machine-screen .hud-right .label { display: none; }
-  .machine-screen .hud-right { flex-wrap: nowrap; }
-  .machine-screen .hud-top .brand { font-size: 14px; padding: 4px 6px; }
+  .machine-screen .hud-right { flex-wrap: nowrap; gap: 3px; }
+  .machine-screen .hud-right button { padding: 4px 5px; }
+  .machine-screen .mswitch button { padding: 4px 5px; }
+  .machine-screen .hud-top .brand { font-size: 13px; padding: 4px 2px; }
   .machine-screen .mside { top: 56px; }
 }

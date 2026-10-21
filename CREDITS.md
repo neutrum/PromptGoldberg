@@ -28,4 +28,5 @@ All third-party code and assets used in Prompt Goldberg and Orbital Goldberg. Pe
 ## Assets
 
 - Sound effects in `apps/web/public/sfx/` (cannon, boing, ding, plop, clack, whoosh): generated once with ElevenLabs sound effects (elevenlabs.io), October 2026, on the free plan, which requires attribution: **Sound effects by ElevenLabs.** If the project is used commercially, regenerate them on a paid plan. Without the files the game falls back to its built-in WebAudio synth.
+- Voice lines in `apps/web/public/voice/` (31 short "engineer" lines): generated once with ElevenLabs text to speech, premade voice "Will", October 2026, free plan, same attribution: **Voice by ElevenLabs.** The 🗣️ button turns them off; without the files the game is silent there.
 - No third-party art or fonts.

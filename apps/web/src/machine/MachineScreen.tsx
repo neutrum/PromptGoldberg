@@ -5,6 +5,7 @@ import { CARDS, dealCards, EDIT_IDEAS } from './cards';
 import { clearShareLink, galleryAsLevel, LEVELS, readShareLink, sharedAsLevel, shareLink } from './levels';
 import { getMachine, listMachines, type MachineItem, type Score } from './machineClient';
 import { MachineScene } from './MachineScene';
+import { voice } from '../game/audio';
 import { DAILY_LADDER, HINT_COST, parOf, useMachine } from './machineStore';
 
 const WELCOME_KEY = 'pg.welcomed';
@@ -187,7 +188,7 @@ function AfterSolve({ inDaily, lastStage }: { inDaily: boolean; lastStage: boole
         : (
           <div className="mactions">
             <NameField />
-            <button disabled={published === 'busy'} onClick={() => { setPublished('busy'); publish().then((m) => setPublished({ title: m.title }), (err: unknown) => setPublished({ error: err instanceof Error ? err.message : String(err) })); }} title="Your winning build goes up with it: the server runs it before the level is listed">🌍 Publish this level</button>
+            <button disabled={published === 'busy'} onClick={() => { setPublished('busy'); publish().then((m) => { setPublished({ title: m.title }); voice.say('publish'); }, (err: unknown) => setPublished({ error: err instanceof Error ? err.message : String(err) })); }} title="Your winning build goes up with it: the server runs it before the level is listed">🌍 Publish this level</button>
           </div>
         )}
       {published && typeof published === 'object' && 'error' in published && <div className="mnote">{published.error}</div>}
@@ -212,7 +213,7 @@ function Welcome({ onClose }: { onClose: () => void }) {
           <button className="primary" onClick={onClose}>✍️ I'll write my own mission</button>
           <button onClick={() => { onClose(); void useMachine.getState().playDaily(); }} disabled={daily.loading}>📅 Today's level</button>
         </div>
-        <p className="muted small">Drag to look around · wheel to zoom · sound effects by ElevenLabs</p>
+        <p className="muted small">Drag to look around · wheel to zoom · sound effects and voice by ElevenLabs</p>
       </div>
     </div>
   );
@@ -512,6 +513,12 @@ function GoalPanel() {
   );
 }
 
+/** The engineer's voice lines on or off (sound effects stay). */
+function VoiceToggle() {
+  const [on, setOn] = useState(voice.on);
+  return <button onClick={() => { voice.set(!on); setOn(!on); }} title={on ? 'Mute the engineer (sound effects stay on)' : 'Let the engineer talk'} aria-pressed={on}>{on ? '🗣️' : '🤐'}<span className="label">{on ? ' Voice' : ' Quiet'}</span></button>;
+}
+
 function DailyButton() {
   const daily = useMachine((s) => s.daily);
   const busy = useMachine((s) => s.ai.busy);
@@ -556,7 +563,7 @@ export function MachineScreen() {
           <button className="brand" onClick={() => setWelcome(true)} title="What is this?">Prompt <b>Goldberg</b></button>
           <span className="mtag">One sentence makes a level. You build the route. Physics judges.</span>
         </div>
-        <div className="hud-right"><ModeSwitch />{LEVELS.length > 0 && <button onClick={() => setWelcome(true)} title="Example levels and missions">🎮<span className="label"> Levels</span></button>}<DailyButton /></div>
+        <div className="hud-right"><ModeSwitch />{LEVELS.length > 0 && <button onClick={() => setWelcome(true)} title="Example levels and missions">🎮<span className="label"> Levels</span></button>}<DailyButton /><VoiceToggle /></div>
       </div>
       <div className="mside">
         <GoalPanel />

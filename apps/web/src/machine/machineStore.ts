@@ -3,7 +3,7 @@ import {
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
-import { sfx } from '../game/audio';
+import { sfx, voice } from '../game/audio';
 import { clearMachine, getDailyMachine, logPlay, makePuzzle, playedMachine, publishMachine, simulateInWorker, streamMachine, submitDaily, verifyOnServer, type MachineItem, type Score } from './machineClient';
 import type { Level, SharedLevel } from './levels';
 
@@ -215,7 +215,10 @@ export const useMachine = create<MachineState>((set, get) => {
   /** Leaving a puzzle that was tried but never solved counts as giving up on it. */
   const abandon = () => {
     const { fix } = get();
-    if (fix && !fix.solved && fix.tries > 0) logPlay(playKey(), 'giveup', fix.tries, fix.placed.length);
+    if (fix && !fix.solved && fix.tries > 0) {
+      logPlay(playKey(), 'giveup', fix.tries, fix.placed.length);
+      voice.say('giveup');
+    }
   };
 
   const aiStream = async (path: '/machine' | '/machine/edit', body: unknown) => {
@@ -365,6 +368,7 @@ export const useMachine = create<MachineState>((set, get) => {
       try {
         const r = await submitDaily({ date: daily.date, name: playerName.trim() || 'Anonymous', tries: daily.tries, builds: daily.builds });
         set({ board: { kind: 'daily', rows: r.board, rank: r.rank } });
+        voice.say('board');
       } catch (err) {
         set((s) => ({ board: { kind: 'daily', rows: s.board?.rows ?? [], error: err instanceof Error ? err.message : String(err) } }));
       }
@@ -406,6 +410,7 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     create(prompt) {
+      voice.say('build');
       set({ prompt, machine: null, run: null, result: null, rank: 0, proven: false, moved: [], phase: 'idle', time: 0, celebrated: 0 });
       return aiStream('/machine', { prompt, verify: !get().puzzle });
     },
@@ -443,6 +448,8 @@ export const useMachine = create<MachineState>((set, get) => {
       if (phase !== 'playing') return;
       set({ phase: 'done' });
       if (result?.success && !fix?.broke?.length) sfx.success();
+      // The engineer has a word once the run has played out.
+      if (mode === 'fix' && fix && fix.tries > 0) voice.say(fix.solved ? (fix.stars === 3 ? 'stars' : 'solve') : fix.broke?.length ? 'broke' : 'miss', 0.6);
       else if (mode === 'fix') sfx.miss();
     },
 
@@ -495,6 +502,7 @@ export const useMachine = create<MachineState>((set, get) => {
       }
       set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: handOf(puzzle).map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       logPlay(playKey(), 'start', 0, 0);
+      if (!daily.date || daily.stage === 1) voice.say(daily.date ? 'daily' : 'start', 0.3);
       // Show the broken machine fail first, so the player sees what is wrong.
       await simulate(withPlacements(puzzle, puzzle.start));
       return true;
@@ -508,6 +516,7 @@ export const useMachine = create<MachineState>((set, get) => {
       }
       set({ mode: 'fix', veiled: false, phase: 'simulating', error: null, fix: { puzzle, kind: 'connect', hand: handOf(puzzle).map((m) => ({ ...m })), placed: [], picking: 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       logPlay(playKey(), 'start', 0, 0);
+      voice.say('start', 0.3);
       // The stage as it is: the ball drops and nothing happens yet.
       await simulate(withPlacements(puzzle, []));
       return true;
@@ -618,7 +627,7 @@ export const useMachine = create<MachineState>((set, get) => {
 
     showHint() {
       const { fix } = get();
-      if (fix && !fix.hint) logPlay(playKey(), 'hint', fix.tries, fix.placed.length);
+      if (fix && !fix.hint) { logPlay(playKey(), 'hint', fix.tries, fix.placed.length); voice.say('hint'); }
       set((s) => (s.fix && !s.fix.hint ? { fix: { ...s.fix, hint: true, tries: s.fix.tries + HINT_COST } } : {}));
     },
 

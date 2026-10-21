@@ -137,3 +137,54 @@ function sample(name: string): boolean {
   src.start();
   return true;
 }
+
+/**
+ * The engineer: short spoken lines at the moments that matter (a level starts, a run fails or
+ * works, a hint). Baked once with ElevenLabs (see CREDITS.md) into /voice/<moment>-<n>.mp3,
+ * fetched on first use, one line at a time, and off with the speech toggle.
+ */
+export const VOICE_LINES = {
+  start: 4, build: 2, miss: 6, solve: 6, stars: 3, hint: 3, broke: 2, giveup: 2, daily: 1, board: 1, publish: 1,
+} as const;
+export type VoiceMoment = keyof typeof VOICE_LINES;
+
+const VOICE_KEY = 'pg.voice';
+let voiceOn = (() => { try { return localStorage.getItem(VOICE_KEY) !== '0'; } catch { return true; } })();
+const voiceCache = new Map<string, Promise<AudioBuffer | null>>();
+const lastLine = new Map<VoiceMoment, number>();
+let speakingUntil = 0;
+
+export const voice = {
+  get on() { return voiceOn; },
+  set(on: boolean) {
+    voiceOn = on;
+    try { localStorage.setItem(VOICE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
+  },
+  /** Say a line for this moment (never the same one twice running, never over another line). */
+  say(moment: VoiceMoment, delayS = 0) {
+    const c = ac();
+    if (!voiceOn || !c || !master) return;
+    if (c.currentTime < speakingUntil) return;
+    const n = VOICE_LINES[moment];
+    let k = 1 + Math.floor(Math.random() * n);
+    if (n > 1 && k === lastLine.get(moment)) k = (k % n) + 1;
+    lastLine.set(moment, k);
+    const name = `${moment}-${k}`;
+    if (!voiceCache.has(name)) {
+      voiceCache.set(name, fetch(`/voice/${name}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? c.decodeAudioData(b) : null)).catch(() => null));
+    }
+    // Hold the slot while the line loads, so two moments in a row do not talk over each other.
+    speakingUntil = c.currentTime + 1;
+    void voiceCache.get(name)!.then((buf) => {
+      if (!buf || !master || !voiceOn) return;
+      const at = Math.max(c.currentTime, c.currentTime + delayS);
+      speakingUntil = at + buf.duration;
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      const g = c.createGain();
+      g.gain.value = 1.4;
+      src.connect(g).connect(master);
+      src.start(at);
+    });
+  },
+};
