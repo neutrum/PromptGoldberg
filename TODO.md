@@ -41,7 +41,7 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 - [x] Bins: puzzle levels must hand out 2+ route parts and 2+ spares (`binProblems`); connect puzzles hand out the spares too.
 - [x] Nicer parts: spinning fan blades, a bell dome, a tilted cannon barrel on wheels; a sound and a ring flash for every physics event.
 - [x] Browser vs server determinism: `/api/machine/verify` re-runs a solved build; all ten levels bit-identical, "✓ server agrees" badge.
-- [ ] Log give-ups per level (no telemetry yet).
+- [x] Give-up telemetry (2026-10-21): start/solve/give-up/hint per level to `data/plays/*.jsonl` (no player data), `GET /api/machine/stats` gives give-up rate and median tries.
 
 ## Week 2 (Oct 18–24): reliable and legible
 
@@ -50,14 +50,14 @@ Orbital Goldberg stays in the repo and gets submitted as entry #2 (the Terms all
 - [x] Curveballs: the designer sets an honest `closest` note; the compiler adds one when it has to swap the ending.
 - [x] Eval at 15 prompts incl. 5 curveballs (`--puzzle`), with the path (route/full) per prompt.
 - [x] Drag placed parts by hand; build during the opening replay.
-- [ ] Route links the compiler cannot do yet: seesaw, a long domino chain as a link, "ring it twice". Each would move a mission from the slow designer to the fast path.
+- [x] Route links (2026-10-21): seesaw (catches a falling ball, straight), bell endings that ring 2-3 times (a trench the ball rattles in), domino chains up to 16 (rows end to end). Benchmark 57/57; live: "slowest", "seesaw then trampoline", "ring twice", "only three parts" and a long chain all take the fast path now (1.9-8.7 s, verified). Only "every part" and two-ball missions still go to the full designer.
 
 ## Week 3 (Oct 25–31): the game around it
 
 - [x] Share: 🔗 copies a link carrying the whole level (and, once solved, the sender's stars to beat); the daily shares a result line.
-- [ ] A community gallery of machine levels (reuse `GalleryStore`), and a server-side daily leaderboard (the verify endpoint is the anti-cheat base).
-- [x] SFX baked once from ElevenLabs (free plan, credited in CREDITS.md and on the welcome card). [ ] The ~30 "engineer" voice lines.
-- [ ] Challenge prompts with constraints ("use only three parts", "longer than 10 seconds"); the opening five levels already teach one mechanism each.
+- [x] Community levels (2026-10-21): publish after solving (the server runs the build), a strip on the welcome card, a best-build board per level; daily leaderboard where every stage build is re-run on the server against the seeded puzzles. Tries are self-reported (the builds are not).
+- [x] SFX baked once from ElevenLabs (free plan, credited in CREDITS.md and on the welcome card). [x] 31 "engineer" voice lines (ElevenLabs TTS, premade voice, free plan, credited), 🗣️ toggle.
+- [x] Challenges (2026-10-21): `rules` on the spec (maxParts, minSeconds) read from the mission, kept by the compiled route or eased honestly ("this route runs about 6 s, so the bar is 5 s"); checked after a run that meets the goal, in the browser and on the server. Note: no compiled route runs past ~6 s, so "longer than 10 seconds" is always eased.
 - [x] Mobile layout check at 390x844 with touch taps; CREDITS.md updated.
 
 ## Week 4 (Nov 1–7): harden and record

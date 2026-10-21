@@ -149,6 +149,12 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
   let sims = 0;
   const run = (spec: MachineSpec) => { sims++; return simulateSync(spec, { record: true }); };
   const links = withTurn(graph.links, rand() < 0.5 ? 'left' : 'right');
+  // A link that needs a falling ball after one that leaves it rolling is left out: say so.
+  const dropped = graph.links.filter((l) => (l.via === 'seesaw' || l.via === 'trampoline') && !links.some((k) => k.via === l.via));
+  if (dropped.length && !graph.closest) {
+    const what = [...new Set(dropped.map((l) => l.via))].join(' and the ');
+    graph.closest = `The ${what} had to go: by then the ball is rolling, and ${dropped.length > 1 ? 'they need' : 'it needs'} a falling ball.`;
+  }
   // A level that works but breaks the challenge is kept in case nothing keeps it: the rule is then
   // eased to what this route does, and the level says so.
   let eased: MachineSpec | null = null;

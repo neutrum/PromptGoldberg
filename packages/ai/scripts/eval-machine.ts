@@ -24,6 +24,7 @@ const PROMPTS: { prompt: string; curveball?: boolean }[] = [
   { prompt: 'an elephant rings the dinner gong', curveball: true },
   { prompt: 'make it rain', curveball: true },
   { prompt: 'a really hard level with lava and a castle', curveball: true },
+  { prompt: 'A long domino chain across the station rings the departure bell' },
 ];
 
 const args = process.argv.slice(2);
