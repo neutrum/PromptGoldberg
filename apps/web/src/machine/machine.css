@@ -62,7 +62,7 @@
   .mside { top: 52px; width: calc(100% - 20px); }
   .mtitle p { display: none; }
   /* The mission, the par line and an honest note still matter on a phone. */
-  .mtitle p.mission, .mtitle p.closest, .mtitle p.starline { display: block; }
+  .mtitle p.mission, .mtitle p.closest, .mtitle p.challenge, .mtitle p.starline { display: block; }
   .welcome-card .logo { font-size: 30px; }
   .cards.big .card { min-width: 120px; }
 }
@@ -99,6 +99,7 @@
 .stars { color: #ffd166; font-size: 12px; letter-spacing: 1px; }
 .stars.big { font-size: 22px; letter-spacing: 3px; }
 .starline { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.challenge { margin: 4px 0 6px; padding: 6px 8px; border-radius: 8px; background: rgba(125, 200, 255, 0.1); border: 1px solid rgba(125, 200, 255, 0.4); color: #9fd8ff; font-size: 13px; }
 .closest { margin: 4px 0 6px; padding: 6px 8px; border-radius: 8px; background: rgba(255, 210, 122, 0.1); border: 1px solid rgba(255, 210, 122, 0.35); color: #ffd27a; font-size: 13px; }
 @media (max-width: 600px) {
   .machine-screen .hud-right .label { display: none; }

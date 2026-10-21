@@ -63,6 +63,13 @@ export const TouchGoal = z.object({ type: z.literal('touch'), part: z.string().d
 export const MachineGoal = z.discriminatedUnion('type', [BucketGoal, BellGoal, ToppleGoal, TouchGoal]);
 export type MachineGoal = z.infer<typeof MachineGoal>;
 
+/** A challenge on top of the goal: build it with few parts, or make the run last. */
+export const Rules = z.object({
+  maxParts: z.number().int().min(1).max(8).optional().describe('the player may place at most this many parts'),
+  minSeconds: z.number().min(1).max(14).optional().describe('the last goal step must happen this many seconds in or later'),
+});
+export type Rules = z.infer<typeof Rules>;
+
 export const MachineSpec = z.object({
   title: z.string(),
   caption: z.string().optional().describe('one sentence for players: what should happen, no numbers'),
@@ -72,6 +79,7 @@ export const MachineSpec = z.object({
   spares: z.array(Spare).max(4).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),
   goal: z.array(MachineGoal).min(1).max(4).describe('ordered events; the machine works when all happen in order'),
   duration: z.number().min(4).max(30).default(15).describe('seconds to simulate'),
+  rules: Rules.optional().describe('challenge rules, set by the game, not the designer'),
 });
 export type MachineSpec = z.infer<typeof MachineSpec>;
 export type MachineSpecInput = z.input<typeof MachineSpec>;

@@ -13,3 +13,4 @@ export * from './placement';
 export * from './names';
 export * from './terrain';
 export * from './compile';
+export * from './rules';

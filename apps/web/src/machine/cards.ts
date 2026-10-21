@@ -25,8 +25,13 @@ export const CARDS: PromptCard[] = [
   { emoji: '🏔️', title: 'Mountain pass', prompt: 'Carry the ball over the mountain wall and down into the village bell' },
   { emoji: '🧪', title: 'The lab', prompt: 'A mad lab: the ball must cross the room, dodge the bench wall, and ring the alarm bell' },
   { emoji: '🎪', title: 'Circus act', prompt: 'A circus act: the ball flies over the lion wall into the clown bucket on the other side of the ring' },
-  { emoji: '🧩', title: 'Tiny level', prompt: 'The fewest parts you can to ring a bell round a corner, behind a wall' },
+  { emoji: '🧩', title: 'Three parts only', prompt: 'Use only three parts to ring the bell round the corner behind the wall' },
+  { emoji: '🐌', title: 'Slow motion', prompt: 'The slowest machine ever: a long domino chain that takes its time before the bell rings' },
+  { emoji: '🚂', title: 'Domino train', prompt: 'A long domino chain across the station platform rings the departure bell' },
 ];
+
+/** Cards whose mission carries a challenge the game enforces (a parts limit, a time bar). */
+export const CHALLENGE_CARDS = CARDS.filter((c) => /only w+ parts|slowest|longer than/i.test(c.prompt));
 
 /** `n` cards starting at `offset`, wrapping around the deck. */
 export function dealCards(offset: number, n = 3): PromptCard[] {

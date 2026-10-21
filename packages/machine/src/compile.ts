@@ -7,19 +7,20 @@
  */
 import { z } from 'zod';
 import { evaluateMachine } from './goal';
-import { facing, KIT } from './kit';
+import { facing, KIT, sideways } from './kit';
 import { layoutProblems, obstacles, terrainInWay } from './names';
 import { mulberry32 } from './nudge';
-import { makeConnectPuzzle } from './puzzle';
-import { CELL, checkMachine, GRID, Spare, TERRAIN_MIN, type MachineGoal, type MachineSpec, type Part, type Terrain, type Yaw } from './schema';
+import { makeConnectPuzzle, routeParts } from './puzzle';
+import { finishTime } from './rules';
+import { CELL, checkMachine, GRID, Spare, TERRAIN_MIN, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
 
-export const LINK_KINDS = ['cannon', 'fan', 'trampoline', 'ramp'] as const;
+export const LINK_KINDS = ['cannon', 'fan', 'trampoline', 'ramp', 'seesaw'] as const;
 export type LinkKind = (typeof LINK_KINDS)[number];
 
 export const RouteLink = z.object({
-  via: z.enum(LINK_KINDS).describe('cannon: catches the rolling ball and fires it 6 to 9 cells; fan: blows the rolling ball sideways; trampoline: bounces a falling ball up and on; ramp: a falling ball lands on it and rolls off the way it faces'),
+  via: z.enum(LINK_KINDS).describe('cannon: catches the rolling ball and fires it 6 to 9 cells; fan: blows the rolling ball sideways; trampoline: bounces a falling ball up and on; ramp: a falling ball lands on it and rolls off the way it faces; seesaw: a falling ball lands on its plank, tips it and rolls on; always straight'),
   turn: z.enum(['left', 'right', 'straight']).default('straight').describe('which way the route bends at this link'),
 });
 export type RouteLink = z.infer<typeof RouteLink>;
@@ -33,6 +34,8 @@ export const RouteGraph = z.object({
   start: z.enum(['shelf', 'hill']).default('shelf').describe('the ball starts on a high shelf, or on top of a hill'),
   links: z.array(RouteLink).min(1).max(3).describe('what moves the ball on, in order; at least one turns left or right'),
   end: z.enum(['bucket', 'bell', 'dominoes']).describe('bucket: the ball lands in it; bell: the ball rings it; dominoes: the ball knocks a row over that rings a bell'),
+  rings: z.number().int().min(1).max(3).default(1).describe('bell and dominoes endings: how many times the bell must ring ("ring it twice" is 2)'),
+  row: z.number().int().min(3).max(16).optional().describe('dominoes ending: how many dominoes in the chain (default 5; a long chain is 10 to 16)'),
   ground: z.enum(['river', 'pit', 'hill', 'auto']).default('auto').describe('the shaped ground in the way: a river under a cannon flight, a pit, a hill start'),
   names: z.object({ target: Name, scenery: Name, ground: Name, ball: Name }).partial().optional().describe('the mission\'s words for the target, the wall, the ground block and the ball'),
   spares: z.array(Spare).max(4).optional(),
@@ -46,6 +49,8 @@ export interface CompileOptions {
   attempts?: number;
   /** Flat ground only (the mission said so). */
   flat?: boolean;
+  /** A challenge the level carries; the compiled route must keep it (or the rule is eased and the level says so). */
+  rules?: Rules;
 }
 
 export interface CompileResult {
@@ -53,8 +58,8 @@ export interface CompileResult {
   /** Layouts tried, and simulations run. */
   tries: number;
   sims: number;
-  /** Set when the graph's ending could not be built and another one stands in. */
-  adapted?: RouteGraph['end'];
+  /** Set when the graph's ending could not be built and another one stands in ("once": the bell rings once, not as often as asked). */
+  adapted?: RouteGraph['end'] | 'once';
 }
 
 type Sample = { t: number; x: number; y: number; z: number };
@@ -144,32 +149,82 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
   let sims = 0;
   const run = (spec: MachineSpec) => { sims++; return simulateSync(spec, { record: true }); };
   const links = withTurn(graph.links, rand() < 0.5 ? 'left' : 'right');
+  // A level that works but breaks the challenge is kept in case nothing keeps it: the rule is then
+  // eased to what this route does, and the level says so.
+  let eased: MachineSpec | null = null;
   for (let tryNo = 1; tryNo <= attempts; tryNo++) {
     const spec = layOut(graph, links, rand, run, opts);
-    if (spec) return { spec, tries: tryNo, sims };
+    if (!spec) continue;
+    if (!opts.rules) return { spec, tries: tryNo, sims };
+    const kept = withRules(spec, opts.rules, run);
+    if (kept.ok) return { spec: kept.spec, tries: tryNo, sims };
+    eased ??= kept.spec;
+  }
+  if (eased) return { spec: eased, tries: attempts, sims };
+  const ruled = (spec: MachineSpec) => (opts.rules ? withRules(spec, opts.rules, run).spec : spec);
+  let tries = attempts;
+  // A bell that must ring more than once and never does on this route: once, and say so.
+  if (graph.rings > 1) {
+    const once: RouteGraph = { ...graph, rings: 1, closest: graph.closest ?? 'The bell rings once on this route: ringing it again would not fit.' };
+    for (let tryNo = 1; tryNo <= Math.ceil(attempts / 2); tryNo++) {
+      const spec = layOut(once, links, rand, run, opts);
+      if (spec) return { spec: ruled(spec), tries: tries + tryNo, sims, adapted: 'once' };
+    }
+    tries += Math.ceil(attempts / 2);
   }
   // The ending the graph asked for never fits this route: build the nearest one that does, and say so.
   for (const end of ADAPT[graph.end]) {
-    const adapted: RouteGraph = { ...graph, end, closest: graph.closest ?? ADAPT_NOTE[end] };
+    const adapted: RouteGraph = { ...graph, end, rings: 1, closest: graph.closest ?? ADAPT_NOTE[end] };
     for (let tryNo = 1; tryNo <= Math.ceil(attempts / 2); tryNo++) {
       const spec = layOut(adapted, links, rand, run, opts);
-      if (spec) return { spec, tries: attempts + tryNo, sims, adapted: end };
+      if (spec) return { spec: ruled(spec), tries: tries + tryNo, sims, adapted: end };
     }
+    tries += Math.ceil(attempts / 2);
   }
   return null;
 }
 
+/** The level with its challenge: kept as asked when the route keeps it, else eased to what the route does (with a note). */
+function withRules(spec: MachineSpec, rules: Rules, run: (s: MachineSpec) => MachineRun): { ok: boolean; spec: MachineSpec } {
+  const parts = routeParts(spec).length;
+  const t = finishTime(evaluateMachine(spec.goal, run(spec))) ?? 0;
+  const out: Rules = {};
+  const notes: string[] = [];
+  if (rules.maxParts !== undefined) {
+    out.maxParts = Math.max(rules.maxParts, parts);
+    if (out.maxParts > rules.maxParts) notes.push(`this route needs ${parts} parts, so the limit is ${parts}`);
+  }
+  if (rules.minSeconds !== undefined) {
+    // Half a second of slack below what the route does, so a build as good as the AI's counts.
+    const reach = Math.floor((t - 0.5) * 2) / 2;
+    out.minSeconds = Math.max(1, Math.min(rules.minSeconds, reach));
+    if (out.minSeconds < rules.minSeconds) notes.push(`this route runs about ${t.toFixed(0)} s, so the bar is ${out.minSeconds} s`);
+  }
+  const closest = notes.length ? [spec.closest, `Challenge eased: ${notes.join('; ')}.`].filter(Boolean).join(' ') : spec.closest;
+  return { ok: !notes.length, spec: { ...spec, rules: out, closest } };
+}
+
 /**
- * A level must turn a corner, and a trampoline cannot turn: a graph whose turns are all on links
+ * A level must turn a corner, and a trampoline or a seesaw cannot turn (a falling ball is too fast for the plank to bend its path): a graph whose turns are all on links
  * that cannot make them gets the first link that can bent, or a ramp turn after the last fall.
  */
 function withTurn(links: RouteLink[], turn: 'left' | 'right'): RouteLink[] {
-  const canTurn = (l: RouteLink) => l.via !== 'trampoline';
-  const fixed = links.map((l) => (canTurn(l) ? l : { ...l, turn: 'straight' as const }));
+  const canTurn = (l: RouteLink) => l.via !== 'trampoline' && l.via !== 'seesaw';
+  // A ramp, a seesaw or a trampoline needs a falling ball; on a rolling one a ramp turn becomes a
+  // fan turn and the others are left out.
+  const fixed: RouteLink[] = [];
+  let flying = true;
+  for (const l of links) {
+    const needsFall = l.via === 'ramp' || l.via === 'seesaw' || l.via === 'trampoline';
+    if (needsFall && !flying && l.via !== 'ramp') continue;
+    const link: RouteLink = needsFall && !flying ? { via: 'fan', turn: l.turn } : canTurn(l) ? l : { ...l, turn: 'straight' };
+    fixed.push(link);
+    flying = link.via === 'cannon' || link.via === 'trampoline';
+  }
   if (fixed.some((l) => l.turn !== 'straight')) return fixed;
   const i = fixed.findIndex(canTurn);
   if (i >= 0) return fixed.map((l, k) => (k === i ? { ...l, turn } : l));
-  return [...fixed, { via: 'ramp', turn }];
+  return [...fixed, { via: flying ? 'ramp' : 'fan', turn }];
 }
 
 const ADAPT: Record<RouteGraph['end'], RouteGraph['end'][]> = { bucket: ['dominoes', 'bell'], bell: ['dominoes'], dominoes: ['bell'] };
@@ -264,6 +319,17 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     } else if (link.via === 'trampoline') {
       if (!flying) return why('trampoline on a rolling ball');
       for (const k of [0, 1, -1]) { const c = step(landed.x, landed.z, landed.yaw, k); candidates.push({ id: pid, kind: 'trampoline', x: c.x, y: g(c.x, c.z), z: c.z, yaw: 0 }); }
+    } else if (link.via === 'seesaw') {
+      if (!flying) return why('seesaw under a rolling ball');
+      // The plank lies along the ball's way and catches it as it comes down: it tips and the ball
+      // rolls on. Fine offsets line the plank up under the falling ball.
+      const top = KIT.seesaw.pivotHeight + KIT.seesaw.thickness;
+      const d = descent(samples, after + 0.1, g(landed.x, landed.z) * CELL + top + KIT.ballRadius);
+      const at = d ?? { x: landed.x, z: landed.z, dx: 0, dz: 0 };
+      for (const k of [0, -1, 1]) for (const fine of [true, false]) {
+        const c = step(at.x, at.z, out, k);
+        candidates.push({ id: pid, kind: 'seesaw', x: c.x, y: g(c.x, c.z), z: c.z, yaw: out, ...(fine && d ? { dx: d.dx, dz: d.dz } : {}) });
+      }
     } else {
       if (!flying) return why('ramp under a rolling ball');
       // The high end right where the ball comes down through the ramp's top, then the cells around.
@@ -311,7 +377,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
 
   // The end: a bucket where a flying ball lands (or in a pit on a rolling ball's path), a bell or a row of dominoes on its path.
   const target = fresh(id(names.target, graph.end === 'bucket' ? 'bucket' : 'bell'));
-const rowId = fresh('row');
+  const rowId = fresh('row');
   const path = groundPath(samples, spec().terrain, landed.t - 0.01);
   const endTries: (() => void)[] = [];
   const pushEnd = (ps: Part[], gs: MachineGoal[], ground?: Terrain) => endTries.push(() => { parts.push(...ps); goal.push(...gs); if (ground) terrain.push(ground); });
@@ -338,13 +404,45 @@ const rowId = fresh('row');
     }
     else if (!opts.flat) for (const c of path.slice(2, 6)) pushEnd([{ id: target, kind: 'bucket', x: c.x, y: -2, z: c.z, yaw: 0 }], [{ type: 'bucket', part: target }], { name: names.ground ?? 'pit', x: c.x, z: c.z, w: 1, d: 1, h: -2 });
   } else if (graph.end === 'bell') {
-    for (const c of path.slice(1, 6)) for (const fine of [true, false]) pushEnd([{ id: target, kind: 'bell', x: c.x, y: groundAt(spec().terrain, c.x, c.z), z: c.z, yaw: 0, ...(fine ? { dx: c.dx, dz: c.dz } : {}) }], [{ type: 'bell', part: target, times: 1 }]);
+    const times = graph.rings;
+    for (const c of path.slice(1, 6)) for (const fine of [true, false]) pushEnd([{ id: target, kind: 'bell', x: c.x, y: groundAt(spec().terrain, c.x, c.z), z: c.z, yaw: 0, ...(fine ? { dx: c.dx, dz: c.dz } : {}) }], [{ type: 'bell', part: target, times }]);
+    // Rung more than once: the bell in a pit the ball rattles around in, a little further on so the route still turns its corner first.
+    if (times > 1) for (const c of path.slice(2, 10)) {
+      const y = groundAt(spec().terrain, c.x, c.z);
+      if (!opts.flat) for (const depth of [1, 2]) for (const long of [1, 2, 3]) {
+        if (y - depth < TERRAIN_MIN) continue;
+        // A trench along the ball's way with the bell at its far end: the ball drops in, rings the
+        // bell, bounces back off the near wall and rings it again.
+        const far = step(c.x, c.z, landed.yaw, long - 1);
+        const x0 = Math.min(c.x, far.x), z0 = Math.min(c.z, far.z);
+        const pit: Terrain = { name: names.ground ?? 'pit', x: x0, z: z0, w: Math.abs(far.x - c.x) + 1, d: Math.abs(far.z - c.z) + 1, h: y - depth };
+        if (x0 < 0 || z0 < 0 || x0 + pit.w > GRID.x || z0 + pit.d > GRID.z) continue;
+        const along = facing(landed.yaw);
+        const fines = [{ dx: c.dx, dz: c.dz }, { dx: along[0] ? 0 : c.dx, dz: along[2] ? 0 : c.dz }, {}];
+        for (const fine of long === 1 ? fines : fines.slice(1)) pushEnd([{ id: target, kind: 'bell', x: far.x, y: y - depth, z: far.z, yaw: 0, ...fine }], [{ type: 'bell', part: target, times }], pit);
+      }
+    }
   } else {
+    // The chain: rows of up to 8 dominoes laid end to end along the ball's way, then the bell.
+    const n = graph.row ?? 5;
+    const count = Math.ceil(n / 8);
+    const sizes = Array.from({ length: count }, (_, k) => Math.floor(n / count) + (k < n % count ? 1 : 0));
+    const gap = KIT.domino.spacing / CELL;
     for (const c of path.slice(1, 4)) {
       const d = landed.yaw;
-      const bell = step(c.x, c.z, d, 3);
-      const y = groundAt(spec().terrain, c.x, c.z);
-      pushEnd([{ id: rowId, kind: 'dominoes', x: c.x, y, z: c.z, yaw: d, length: 5 }, { id: target, kind: 'bell', x: bell.x, y, z: bell.z, yaw: 0 }], [{ type: 'topple', part: rowId }, { type: 'bell', part: target, times: 1 }]);
+      const f = facing(d);
+      const rows: Part[] = [];
+      let at = 0;
+      sizes.forEach((len, k) => {
+        const whole = Math.round(at), fine = at - whole;
+        const p = step(c.x, c.z, d, whole);
+        rows.push({ id: k ? `${rowId}${k + 1}` : rowId, kind: 'dominoes', x: p.x, y: groundAt(spec().terrain, p.x, p.z), z: p.z, yaw: d, length: len, ...(fine ? (f[0] ? { dx: fine * f[0] } : { dz: fine * f[2] }) : {}) });
+        at += len * gap;
+      });
+      // The bell just over a cell past the last domino: near enough to be hit, far enough for it to fall all the way.
+      const reach = at - gap + 1.08, whole = Math.round(reach), fine = reach - whole;
+      const bell = step(c.x, c.z, d, whole);
+      pushEnd([...rows, { id: target, kind: 'bell', x: bell.x, y: groundAt(spec().terrain, bell.x, bell.z), z: bell.z, yaw: 0, ...(Math.abs(fine) > 0.01 ? (f[0] ? { dx: fine * f[0] } : { dz: fine * f[2] }) : {}) }], [...rows.map((r) => ({ type: 'topple' as const, part: r.id })), { type: 'bell', part: target, times: graph.rings }]);
     }
   }
   let done: MachineSpec | null = null;
@@ -352,7 +450,9 @@ const rowId = fresh('row');
     const keep = { parts: parts.length, goal: goal.length, terrain: terrain.length };
     tryEnd();
     const s = spec();
-    if (s.parts.every((p) => inStage(p.x, p.z)) && evaluateMachine(s.goal, run(s)).success) { done = s; break; }
+    const res = s.parts.every((p) => inStage(p.x, p.z)) ? evaluateMachine(s.goal, run(s)) : null;
+    if (process.env.COMPILE_DEBUG === '2') console.log('    end:', s.parts.filter((p) => p.kind === 'dominoes').map((p) => `${p.x},${p.z} L${p.length} d${p.dx ?? 0},${p.dz ?? 0}`).join(' '), res ? res.steps.map((x) => x.note).join(' | ') : 'off stage');
+    if (res?.success) { done = s; break; }
     parts.length = keep.parts; goal.length = keep.goal; terrain.length = keep.terrain;
   }
   if (!done) return why(`no end ${graph.end} fits (${endTries.length} tried, flying ${flying}, path ${path.length})`);

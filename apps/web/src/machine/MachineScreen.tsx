@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import demo from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
-import { parseMachine, PUZZLE_KINDS, TARGET_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
+import { parseMachine, PUZZLE_KINDS, rulesLine, TARGET_KINDS, type PartKind, type PuzzleKind } from '@og/machine';
 import { CARDS, dealCards, EDIT_IDEAS } from './cards';
 import { clearShareLink, LEVELS, readShareLink, sharedAsLevel, shareLink } from './levels';
 import { MachineScene } from './MachineScene';
@@ -298,6 +298,7 @@ function FixPanel() {
         <h2>{stageLabel}{fix.puzzle.solution.title}</h2>
         {level && <p className="mission">Mission: “{level.mission}”</p>}
         <Closest text={fix.puzzle.solution.closest} />
+        {rulesLine(fix.puzzle.solution.rules) && <p className="challenge">🎯 {rulesLine(fix.puzzle.solution.rules)}</p>}
         <SharedBanner />
         <p>{fix.solved
           ? `${fix.kind === 'connect' ? 'Solved' : 'Fixed'} in ${tries(fix.tries)} with ${fix.placed.length} part${fix.placed.length === 1 ? '' : 's'}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
@@ -337,6 +338,7 @@ function FixPanel() {
         </div>
       )}
       {failed && !fix.solved && <div className="mnote">✗ {failed.note}</div>}
+      {phase === 'done' && !fix.solved && fix.broke?.map((b) => <div key={b} className="mnote">✗ It works, but: {b}</div>)}
       <div className="mactions">
         {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={!fix.placed.length || phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'You can test it before every part is down'}>▶ Run ({tries(fix.tries)})</button>}
         {!fix.solved && <button onClick={clearPlaced} disabled={!fix.placed.length}>Clear</button>}

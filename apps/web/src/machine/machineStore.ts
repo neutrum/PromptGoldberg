@@ -1,5 +1,5 @@
 import {
-  dropAt, GRID, handOf, isSupported, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, samePlace, withPlacements,
+  dropAt, GRID, handOf, isSupported, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, ruleProblems, samePlace, withPlacements,
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
@@ -42,6 +42,8 @@ export interface FixState {
   stars: number;
   /** The server's re-run of the solved build: 'agrees' when its trace hash matches the browser's. */
   server?: 'checking' | 'agrees' | 'differs' | 'offline';
+  /** The last run met the goal but broke the level's challenge rules (too many parts, too quick). */
+  broke?: string[];
 }
 
 /** What a hint costs, in tries. */
@@ -375,10 +377,10 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     finish() {
-      const { phase, result, mode } = get();
+      const { phase, result, mode, fix } = get();
       if (phase !== 'playing') return;
       set({ phase: 'done' });
-      if (result?.success) sfx.success();
+      if (result?.success && !fix?.broke?.length) sfx.success();
       else if (mode === 'fix') sfx.miss();
     },
 
@@ -509,9 +511,12 @@ export const useMachine = create<MachineState>((set, get) => {
     async runFix() {
       const { fix } = get();
       if (!fix || fix.solved) return;
-      set({ fix: { ...fix, tries: fix.tries + 1 } });
+      set({ fix: { ...fix, tries: fix.tries + 1, broke: undefined } });
       const result = await simulate(withPlacements(fix.puzzle, fix.placed));
-      if (result?.success) {
+      // The goal happened, but a challenge level also wants it done its way.
+      const broke = result?.success ? ruleProblems(fix.puzzle.solution.rules, result, fix.placed.length) : [];
+      if (broke.length) set((s) => (s.fix ? { fix: { ...s.fix, broke } } : {}));
+      if (result?.success && !broke.length) {
         set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: starsFor(s.fix), server: 'checking' } } : {}));
         // The server runs the same build: the same physics must give the same trace, bit for bit.
         const browserHash = get().hash;

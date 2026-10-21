@@ -1,4 +1,4 @@
-import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine';
+import { routeParts, rulesOf, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -164,13 +164,17 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   emit({ type: 'stage', stage: 'verifying', attempt: 1, maxAttempts: 1, message: `Laying out ${g.links.map((l) => l.via).join(', then ')}, ending in ${g.end === 'dominoes' ? 'dominoes' : `a ${g.end}`}, and running it.` });
   const seed = Math.floor(Math.random() * 1e6);
   const flat = wantsFlat(prompt);
+  // A challenge in the mission ("only three parts", "make it last"): the compiled route keeps it,
+  // so a parts limit leaves room for the start ramp and one part per link.
+  const rules = rulesOf(prompt);
+  const fit = (gr: RouteGraphInput): RouteGraphInput => (rules?.maxParts && gr.links.length > rules.maxParts - 1 ? { ...gr, links: gr.links.slice(0, Math.max(1, rules.maxParts - 1)) } : gr);
   // The graph as written, then shorter (a third link rarely fits the stage), then from the
   // mission's words with the AI's names and title: each is laid out in a second or two.
   const words = routeFromWords(prompt, seed);
-  const tries: RouteGraphInput[] = [graph, graph, ...(g.links.length > 1 ? [{ ...graph, links: g.links.slice(0, g.links.length - 1) }] : []), { ...graph, links: words.links, end: g.end }];
+  const tries: RouteGraphInput[] = [graph, graph, ...(g.links.length > 1 ? [{ ...graph, links: g.links.slice(0, g.links.length - 1) }] : []), { ...graph, links: words.links, end: g.end }].map(fit);
   for (const [k, attempt] of tries.entries()) {
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, signal: deps.signal });
+    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, signal: deps.signal });
     if (!res) continue;
     const spec: MachineSpec = opts.note ? { ...res.spec, closest: res.spec.closest ?? opts.note } : res.spec;
     const check = await deps.physics.check(spec, { signal: deps.signal });
@@ -189,6 +193,19 @@ export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal
   return routeLevel(deps, prompt, emit, { graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'The AI designer is resting, so this level was built straight from your words.' });
 }
 
+/**
+ * A full design for a mission with a challenge: nobody has run it, so only a parts limit the AI's
+ * own route keeps is safe to set (a time bar would be a guess).
+ */
+function withChallenge(design: MachineDesign, prompt: string): MachineDesign {
+  const rules = rulesOf(prompt);
+  if (!rules?.maxParts) return design;
+  const need = routeParts(design.spec).length;
+  const maxParts = Math.max(rules.maxParts, need);
+  const note = maxParts > rules.maxParts ? `Challenge eased: this level's route needs ${need} parts, so the limit is ${need}.` : undefined;
+  return { ...design, spec: { ...design.spec, rules: { maxParts }, closest: [design.spec.closest, note].filter(Boolean).join(' ') || undefined } };
+}
+
 export async function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
   if (routeOn() && routable(prompt)) {
     try {
@@ -202,7 +219,7 @@ export async function generateMachine(deps: MachinePipelineDeps, prompt: string,
   const loop = {
     firstStage: 'designing' as const,
     firstMessage: 'Designing a level for your idea.',
-    design: (calls: Completion[], onProgress: (textSoFar: string) => void) => designMachine(deps.llm, prompt, calls, onProgress, { twist, bin: opts.verify === false }),
+    design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => withChallenge(await designMachine(deps.llm, prompt, calls, onProgress, { twist, bin: opts.verify === false }), prompt),
     request: `Design a machine for this request:\n\n${prompt}`,
     validate: (json: unknown) => validateMachineDesign(json, { flat: wantsFlat(prompt), difficulty: difficultyOf(prompt) }),
   };

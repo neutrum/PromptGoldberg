@@ -5,3 +5,4 @@ dist
 cache/
 data/
 .claude/
+packages/machine/scratch/

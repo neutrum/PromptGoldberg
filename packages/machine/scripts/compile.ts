@@ -19,11 +19,20 @@ const GRAPHS: RouteGraphInput[] = [
   { title: 'Ramp to pit bucket', links: [{ via: 'ramp', turn: 'right' }], end: 'bucket' },
   { title: 'Hill cannon', start: 'hill', links: [{ via: 'cannon', turn: 'left' }], end: 'bucket' },
   { title: 'Cannon then trampoline', links: [{ via: 'cannon', turn: 'right' }, { via: 'trampoline' }], end: 'bell' },
+  { title: 'Seesaw then ramp bell', links: [{ via: 'seesaw' }, { via: 'ramp', turn: 'right' }], end: 'bell' },
+  { title: 'Seesaw straight', links: [{ via: 'seesaw', turn: 'straight' }, { via: 'fan', turn: 'left' }], end: 'dominoes' },
+  { title: 'Cannon onto seesaw', links: [{ via: 'cannon', turn: 'left' }, { via: 'seesaw' }], end: 'bell' },
+  { title: 'Ring it twice', links: [{ via: 'ramp', turn: 'right' }], end: 'bell', rings: 2 },
+  { title: 'Fan ring twice', links: [{ via: 'fan', turn: 'left' }], end: 'bell', rings: 2 },
+  { title: 'Long domino chain', links: [{ via: 'cannon', turn: 'right' }], end: 'dominoes', row: 14 },
+  { title: 'Ramp long chain', links: [{ via: 'ramp', turn: 'left' }], end: 'dominoes', row: 10 },
 ];
+const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : undefined;
 const out = process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : undefined;
 await initPhysics();
 let ok = 0;
 for (const [i, g] of GRAPHS.entries()) {
+  if (only && !g.title.toLowerCase().includes(only.toLowerCase())) continue;
   for (const seed of [1, 2, 3]) {
     const t0 = Date.now();
     const r = compileRoute(g, { seed });
@@ -33,4 +42,4 @@ for (const [i, g] of GRAPHS.entries()) {
     if (r && out) { mkdirSync(out, { recursive: true }); writeFileSync(join(out, `${i + 1}-${seed}.json`), JSON.stringify(r.spec, null, 2)); }
   }
 }
-console.log(`${ok}/${GRAPHS.length * 3} compiled`);
+console.log(`${ok}/${GRAPHS.filter((g) => !only || g.title.toLowerCase().includes(only.toLowerCase())).length * 3} compiled`);
