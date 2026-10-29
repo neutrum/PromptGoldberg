@@ -210,7 +210,8 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
       { links: [{ via: 'fan', turn: 'right' }], end: 'bell' },
       { links: [{ via: 'ramp', turn: 'right' }], end: 'bucket' },
     ];
-    for (const [i, s] of simpler.entries()) {
+    // A timed challenge needs a long chain: a simpler route can never meet it.
+    for (const [i, s] of (rules?.minSeconds ? [] : simpler).entries()) {
       if (deps.signal?.aborted) throw new SolverError('aborted');
       const easy = await compile({ ...graph, ...s, ground: 'auto', row: undefined, rings: 1 }, 4 + i, i < 2 ? tierOf(prompt) : 'easy');
       if (easy) yield { res: easy, k: 4 + i };

@@ -29,7 +29,8 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] The level builds up on screen while it is made: the mission's keyword world appears at once, the AI's own world replaces it as soon as the route call returns (new `world` stream event, before layout), the old machine leaves the board, and a step list ticks off (Reading your idea → Building the world · name → Laying out the level → Checking it can be solved). Then the ball, the goal, the landmark and the obstacles pop out of the board one after another with a flash each, and the ball drops once to show the gap. Parts the player places (click or words) pop in too.
 - [x] Development runs on the local Claude CLI (`LLM_BACKEND=cli`); production uses the API (user rule). Measured: Tatras prompt 25 s on the CLI vs 10–11 s on the API.
 - Verified live (API): Tatras prompt 10–11 s, lighthouse cliffs 10 s, Kyoto gong 8 s, cat in the kitchen 6 s, all solvable levels with fitting landmarks; browser screenshots checked for the build-up, the level and a word-placed ramp.
-- Tests: 239 passing across 32 files; typecheck clean.
+- [x] Nothing runs or judges by itself (user, 2026-10-29: "we cannot run the machine because AI couldn't solve it"): no automatic opening run on any puzzle; Run works any time, even with no parts placed; a missed run shows a quiet "Not there yet" note in the level's own names ("vampire tomb", not the id). A new level is never rejected for the AI's own check: unproven, it opens as a level nobody has solved yet. The AI solves it only when the player asks: "🤖 Solve it for me" (puts its parts down and runs them, no stars) or typing "solve it" / "help me" / "hint". Timed challenges skip the simpler-route fallback (a short route can never meet them).
+- Tests: 241 passing across 32 files; typecheck clean.
 
 ## To do
 

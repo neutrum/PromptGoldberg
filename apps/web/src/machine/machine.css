@@ -43,7 +43,7 @@
 .machine-screen .examples button { font-size: 11px; padding: 4px 8px; color: var(--muted); background: transparent; }
 .mlog { font-size: 12px; line-height: 1.6; color: var(--muted); }.mlog .current { color: #ffdc9d; }.mlog > div:not(:last-child):not(.error-inline) { opacity: .8; }
 .machine-bar { margin-top: 8px; height: 4px; border-radius: 4px; background: #36505d; overflow: hidden; }.machine-bar > div { height: 100%; background: var(--accent); }
-.error-inline { color: #ffc0ad; font-size: 13px; line-height: 1.5; }.mnote { color: #ffbba3; font-size: 12px; margin: 10px 0; line-height: 1.5; }
+.error-inline { color: #ffc0ad; font-size: 13px; line-height: 1.5; }.mnote { color: #ffbba3; font-size: 12px; margin: 10px 0; line-height: 1.5; }.mnote.soft { color: var(--muted); }
 .mbin { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; align-items: center; }.machine-screen .mbin button { font-size: 12px; padding: 8px 10px; }
 .mbin button.active { color: #ffdc9d; border-color: var(--accent); background: var(--accent)18; }.mbin button.down { opacity: .65; text-decoration: line-through; }
 .mbin .lift { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }

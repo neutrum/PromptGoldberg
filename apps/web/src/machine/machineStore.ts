@@ -56,6 +56,8 @@ export interface FixState {
   stars: number;
   /** The server's re-run of the solved build: 'agrees' when its trace hash matches the browser's. */
   server?: 'checking' | 'agrees' | 'differs' | 'offline';
+  /** The AI solved it on the player's request: no stars, no boards. */
+  assisted?: boolean;
   /** The last run met the goal but broke the level's challenge rules (too many parts, too quick). */
   broke?: string[];
 }
@@ -187,6 +189,8 @@ interface MachineState {
   clearPlaced: () => void;
   runFix: () => Promise<void>;
   showHint: () => void;
+  /** Only when the player asks: put the AI's own solution down and run it (no stars for that one). */
+  solveForMe: () => Promise<void>;
   leaveFix: () => void;
 }
 
@@ -313,7 +317,8 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!current()) return;
       // Assignment happens inside the stream callback.
       const result = candidate as Extract<MachineStreamEvent, { type: 'machine' }> | null;
-      if (!result?.solved || result.verified === false) {
+      const unproven = !result?.solved || result.verified === false;
+      if (unproven && !(creating && result)) {
         throw new Error('I couldn’t verify a working version of that request. Try a simpler route or a different mechanism. Your previous build is still here.');
       }
       const parsed = parseMachine(result.machine);
@@ -339,7 +344,7 @@ export const useMachine = create<MachineState>((set, get) => {
         log('That change reshapes the puzzle itself.');
         return;
       }
-      await adopt(path, body, parsed.spec, result.moved);
+      await adopt(path, body, parsed.spec, result.moved, !unproven);
     } catch (err) {
       if (current()) set((s) => ({ ai: { ...s.ai, error: err instanceof Error ? err.message : String(err) } }));
     } finally {
@@ -347,7 +352,7 @@ export const useMachine = create<MachineState>((set, get) => {
     }
   };
   /** A verified result becomes the current machine; any puzzle or daily run in progress ends. */
-  const adopt = async (path: '/machine' | '/machine/edit', body: unknown, spec: MachineSpec, moved: { id: string; cells: number }[]) => {
+  const adopt = async (path: '/machine' | '/machine/edit', body: unknown, spec: MachineSpec, moved: { id: string; cells: number }[], proven = true) => {
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     if (path === '/machine/edit' && get().machine && unchanged(get().machine!, spec)) {
       log('The layout stayed the same. The ball and targets are fixed; try changing a ramp, fan, or cannon.');
@@ -362,20 +367,17 @@ export const useMachine = create<MachineState>((set, get) => {
       promptMode: 'edit', draft: '',
       builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
     }));
-    await get().load(spec, { rank: 2, proven: true, moved });
+    await get().load(spec, { rank: 2, proven, moved });
     // A new level is the player's to solve: the ball, the goal and the world stay, the route goes in their hand.
     if (path === '/machine') {
-      if (await get().startFix('connect', { autoplay: false })) {
+      if (proven ? await get().startFix('connect') : await get().startLevel(spec)) {
         // The level builds up piece by piece: the start, the goal, the centrepiece, then the obstacles.
         const fix = get().fix!;
         const rank = (p: Part) => (p.kind === 'ball' ? 0 : targetParts(fix.puzzle.spec).has(p.id) ? 1 : p.prop === 'landmark' || (HEROES as readonly string[]).includes(p.prop ?? '') ? 2 : p.prop ? 4 : 3);
         const order = [...fix.puzzle.spec.parts].sort((a, b) => rank(a) - rank(b));
         const gap = Math.min(POP_GAP, 1800 / Math.max(1, order.length));
         const now = performance.now() + 150;
-        set({ appear: Object.fromEntries(order.map((p, i) => [p.id, now + i * gap])), notice: 'Your level is ready. Pick a part from the tray, place it on the board and press Run.' });
-        // Then the ball drops once and misses: the gap is the player's to close.
-        const run = get().run;
-        setTimeout(() => { if (get().run === run && get().phase === 'idle') set({ phase: 'playing', time: 0, celebrated: 0 }); }, 150 + order.length * gap + POP_MS);
+        set({ appear: Object.fromEntries(order.map((p, i) => [p.id, now + i * gap])), notice: 'Your level is ready. Place parts from the tray (click or say where), then press Run whenever you like.' });
       } else set({ error: null });
     }
   };
@@ -700,7 +702,7 @@ export const useMachine = create<MachineState>((set, get) => {
       set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: handOf(puzzle).map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       logPlay(playKey(), 'start', 0, 0);
       // Show the broken machine fail first, so the player sees what is wrong.
-      await simulate(withPlacements(puzzle, puzzle.start), opts.autoplay ?? true);
+      await simulate(withPlacements(puzzle, puzzle.start), opts.autoplay ?? false);
       return true;
     },
 
@@ -713,7 +715,7 @@ export const useMachine = create<MachineState>((set, get) => {
       set({ mode: 'fix', veiled: false, phase: 'simulating', error: null, fix: { puzzle, kind: 'connect', hand: handOf(puzzle).map((m) => ({ ...m })), placed: [], picking: 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       logPlay(playKey(), 'start', 0, 0);
       // The stage as it is: the ball drops and nothing happens yet.
-      await simulate(withPlacements(puzzle, []));
+      await simulate(withPlacements(puzzle, []), false);
       return true;
     },
 
@@ -757,7 +759,12 @@ export const useMachine = create<MachineState>((set, get) => {
       if (!fix || fix.solved) return false;
       const board = withPlacements(fix.puzzle, fix.placed);
       const move = readBuildMove(text, { parts: board.parts, hand: fix.hand, placed: new Set(fix.placed.map((p) => p.id)) });
-      if (!move) return false;
+      if (!move) {
+        // Help only on request: "solve it", "show me how", "hint".
+        if (/\b(solve|solution|show me how|help me|i give up|stuck)\b/i.test(text)) { set({ draft: '' }); void get().solveForMe(); return true; }
+        if (/\bhint\b/i.test(text)) { set({ draft: '', notice: 'The green outlines show where the AI’s parts go.' }); get().showHint(); return true; }
+        return false;
+      }
       set({ draft: '' });
       if (move.action === 'error') { set({ notice: move.message }); return true; }
       const part = fix.hand[move.index];
@@ -830,7 +837,7 @@ export const useMachine = create<MachineState>((set, get) => {
       const broke = result?.success ? ruleProblems(fix.puzzle.solution.rules, result, fix.placed.length) : [];
       if (broke.length) set((s) => (s.fix ? { fix: { ...s.fix, broke } } : {}));
       if (result?.success && !broke.length) {
-        set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: starsFor(s.fix), server: 'checking' } } : {}));
+        set((s) => (s.fix ? { fix: { ...s.fix, solved: true, stars: s.fix.assisted ? 0 : starsFor(s.fix), server: 'checking' } } : {}));
         // The server runs the same build: the same physics must give the same trace, bit for bit.
         const browserHash = get().hash;
         void verifyOnServer(withPlacements(fix.puzzle, fix.placed)).then((v) => {
@@ -864,6 +871,15 @@ export const useMachine = create<MachineState>((set, get) => {
       }
     },
 
+    async solveForMe() {
+      const { fix } = get();
+      if (!fix || fix.solved || ['simulating', 'playing'].includes(get().phase)) return;
+      logPlay(playKey(), 'hint', fix.tries, fix.placed.length);
+      set({ fix: { ...fix, placed: fix.puzzle.missing.map((p) => ({ ...p })), hint: true, assisted: true, picking: null },
+        appear: { ...get().appear, ...Object.fromEntries(fix.puzzle.missing.map((p, i) => [p.id, performance.now() + i * 120])) },
+        notice: fix.puzzle.verified === false ? 'This is the AI’s own idea; nobody has run it yet. Watch what happens.' : 'Here is one way the AI found. Watch it run, then try your own.' });
+      await get().runFix();
+    },
     showHint() {
       const { fix } = get();
       if (fix && !fix.hint) { logPlay(playKey(), 'hint', fix.tries, fix.placed.length); }

@@ -240,9 +240,10 @@ export function makeLevelPuzzle(level: MachineSpec): Puzzle | null {
   const loose = removable(level).filter((p) => !fixed.has(p.id));
   if (!loose.length) return null;
   const ids = new Set(loose.map((p) => p.id));
-  const spec: MachineSpec = { ...level, parts: level.parts.filter((p) => !ids.has(p.id)), spares: undefined };
+  const goal = level.goal.filter((g) => !(g.type === 'touch' && ids.has(g.part)));
+  const spec: MachineSpec = { ...level, goal, parts: level.parts.filter((p) => !ids.has(p.id)), spares: undefined };
   const spares = sparesOf(level);
-  return { kind: 'connect', spec, missing: chainOrder(level, loose), start: [], solution: { ...level, spares: undefined }, failedAt: -1, verified: false, spares };
+  return { kind: 'connect', spec, missing: chainOrder(level, loose), start: [], solution: { ...level, goal, spares: undefined }, failedAt: -1, verified: false, spares };
 }
 
 /** A puzzle of the given kind, or null when the machine cannot be broken that way. */

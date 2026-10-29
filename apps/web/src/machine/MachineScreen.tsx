@@ -433,6 +433,15 @@ function Closest({ text }: { text?: string }) {
 }
 
 /** The game: something is wrong with the machine; put it right. */
+/** A run's note in the level's own words: part ids ("vampiretomb") become their names ("vampire tomb"). */
+function named(note: string, parts: Part[]): string {
+  const names = partNames(parts);
+  let out = note;
+  const byId = new Map(parts.map((p) => [p.id, names.get(p.id) ?? p.label ?? p.kind]));
+  out = out.replace(/[A-Za-z0-9_-]+/g, (word) => byId.get(word) ?? word);
+  return out.replace(/^the ball\b/, `the ${parts.find((p) => p.kind === 'ball')?.label ?? 'ball'}`);
+}
+
 function FixPanel() {
   const fix = useMachine((s) => s.fix)!;
   const tutorial = useMachine((s) => s.tutorial);
@@ -509,18 +518,19 @@ function FixPanel() {
       )}
       {failed && !fix.solved && !tutorial && <button className="text-button" onClick={() => setTip((v) => !v)}>{tip ? 'Hide tip' : 'What should I try?'}</button>}
       {tip && failed && !fix.solved && <p className="part-guide">The route stopped before {partNames(fix.puzzle.solution.parts).get(fix.puzzle.solution.goal[failed.index]?.part) ?? 'the target'}. Follow the marble from the start. Check the last part it reached, then adjust the next part’s position or facing. You can test with only part of the route built.</p>}
-      {failed && !fix.solved && <div className="mnote">✗ {failed.note}</div>}
+      {failed && !fix.solved && fix.tries > 0 && <div className="mnote soft">Not there yet: {named(failed.note, fix.puzzle.solution.parts)}. Move or turn a part and run it again.</div>}
       {phase === 'done' && !fix.solved && fix.broke?.map((b) => <div key={b} className="mnote">✗ It works, but: {b}</div>)}
       <div className="mactions">
-        {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={!fix.placed.length || phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'You can test it before every part is down'}>▶ Run ({tries(fix.tries)})</button>}
+        {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'Run it any time, with as many parts as you like'}>▶ Run ({tries(fix.tries)})</button>}
         {!fix.solved && <button onClick={clearPlaced} disabled={!fix.placed.length}>Clear</button>}
-        {!fix.solved && !fix.hint && fix.tries >= 2 && <button onClick={showHint} title={fix.puzzle.verified === false ? `Shows the AI's own idea; nobody has tested it. Costs ${HINT_COST} tries.` : `Shows where the parts go. Costs ${HINT_COST} tries.`}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'} (+{HINT_COST} tries)</button>}
+        {!fix.solved && !tutorial && <button onClick={() => void useMachine.getState().solveForMe()} disabled={phase === 'simulating' || phase === 'playing'} title="Only when you want it: the AI puts its own parts down and runs them. No stars for that run.">🤖 Solve it for me</button>}
+        {!fix.solved && !fix.hint && <button onClick={showHint} title={fix.puzzle.verified === false ? `Shows the AI's own idea; nobody has tested it. Costs ${HINT_COST} tries.` : `Shows where the parts go. Costs ${HINT_COST} tries.`}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'} (+{HINT_COST} tries)</button>}
         {fix.solved && inDaily && !lastStage && <button className="primary" onClick={() => void nextDailyStage()} disabled={phase === 'simulating'}>Next: {KIND_LABEL[DAILY_LADDER[daily.stage]].name} →</button>}
         {fix.solved && inDaily && lastStage && <span className="badge ok">Daily done in {tries(daily.tries)}{daily.best[daily.date] ? ` · best ${daily.best[daily.date]}` : ''}</span>}
         {fix.solved && tutorial && phase === 'done' && <button className="primary" onClick={() => useMachine.getState().addPart('fan')}>Next: add a fan →</button>}
         {fix.solved && !tutorial && !inDaily && !breaking && <button onClick={() => setBreaking(true)}>Try another challenge</button>}
         {!tutorial && <ShareButton />}
-        {!tutorial && <button onClick={leaveFix}>{fix.solved ? 'Replay my build' : `Watch solution${fix.hint ? '' : ` (+${HINT_COST} tries)`}`}</button>}
+        {!tutorial && <button onClick={leaveFix}>{fix.solved ? 'Replay my build' : 'Leave the puzzle'}</button>}
       </div>
       {finished && <AfterSolve inDaily={inDaily} lastStage={lastStage} />}
       {breaking && (

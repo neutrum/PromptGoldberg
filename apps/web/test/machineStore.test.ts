@@ -8,7 +8,7 @@ vi.mock('../src/machine/machineClient', () => ({
   streamMachine: vi.fn(), simulateInWorker: vi.fn(), makePuzzle: vi.fn(), logPlay: vi.fn(), verifyOnServer: vi.fn(),
   getDailyMachine: vi.fn(), playedMachine: vi.fn(), publishMachine: vi.fn(), clearMachine: vi.fn(), submitDaily: vi.fn(),
 }));
-import { makePuzzle, simulateInWorker, streamMachine } from '../src/machine/machineClient';
+import { makePuzzle, simulateInWorker, streamMachine, verifyOnServer } from '../src/machine/machineClient';
 import { useMachine } from '../src/machine/machineStore';
 
 const parsed = parseMachine(firstShot);
@@ -146,14 +146,29 @@ describe('a dependable creation and editing flow', () => {
     expect(useMachine.getState().machine?.title).toBe(machine.title);
     expect(useMachine.getState()).toMatchObject({ phase: 'idle', lastEdit: machine });
   });
-  it('keeps the current build and prompt when a result is not verified', async () => {
-    useMachine.setState({ draft: 'my unfinished request' });
+  it('never blocks a new level on the AI’s own check: an unproven one opens as a level nobody has solved yet', async () => {
     vi.mocked(streamMachine).mockImplementation(async (_path, _body, emit) => { emit({ ...done, solved: false, verified: false }); });
     await useMachine.getState().create('ring the bell');
+    const s = useMachine.getState();
+    expect(s.ai.error).toBeNull();
+    expect(s).toMatchObject({ mode: 'fix', phase: 'idle' });
+    expect(s.fix!.puzzle.verified).toBe(false);
+  });
+
+  it('keeps the current build when an edit cannot be verified', async () => {
+    vi.mocked(streamMachine).mockImplementation(async (_path, _body, emit) => { emit({ ...done, solved: false, verified: false }); });
+    await useMachine.getState().edit('add a cannon');
     expect(useMachine.getState().machine).toBe(machine);
-    expect(useMachine.getState().draft).toBe('my unfinished request');
     expect(useMachine.getState().ai.error).toMatch(/verify/);
-    expect(simulateInWorker).not.toHaveBeenCalled();
+  });
+
+  it('solves it only when asked, with no stars for that run', async () => {
+    vi.mocked(verifyOnServer).mockResolvedValue(null);
+    await useMachine.getState().startFix('missing');
+    expect(useMachine.getState().phase).toBe('idle');
+    expect(useMachine.getState().buildByWords('solve it for me')).toBe(true);
+    await vi.waitFor(() => expect(useMachine.getState().fix!.placed.length).toBe(useMachine.getState().fix!.puzzle.missing.length));
+    expect(useMachine.getState().fix!.assisted).toBe(true);
   });
 
   it('always requests verification and opens a new level as the player’s puzzle, building it up part by part', async () => {
