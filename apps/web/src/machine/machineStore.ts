@@ -191,6 +191,8 @@ interface MachineState {
   showHint: () => void;
   /** Only when the player asks: put the AI's own solution down and run it (no stars for that one). */
   solveForMe: () => Promise<void>;
+  /** After the AI solved it: an empty board again, for the player's own build. */
+  tryMyself: () => void;
   leaveFix: () => void;
 }
 
@@ -879,6 +881,13 @@ export const useMachine = create<MachineState>((set, get) => {
         appear: { ...get().appear, ...Object.fromEntries(fix.puzzle.missing.map((p, i) => [p.id, performance.now() + i * 120])) },
         notice: fix.puzzle.verified === false ? 'This is the AI’s own idea; nobody has run it yet. Watch what happens.' : 'Here is one way the AI found. Watch it run, then try your own.' });
       await get().runFix();
+    },
+    tryMyself() {
+      const { fix } = get();
+      if (!fix?.assisted) return;
+      loadSeq++;
+      set({ fix: { ...fix, placed: [], solved: false, assisted: false, stars: 0, server: undefined, picking: 0, hand: handOf(fix.puzzle).map((m) => ({ ...m })) },
+        run: null, result: null, phase: 'idle', notice: 'Your turn. The AI’s parts are back in the tray; any build that works counts.' });
     },
     showHint() {
       const { fix } = get();

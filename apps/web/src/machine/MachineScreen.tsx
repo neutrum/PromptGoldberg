@@ -55,7 +55,7 @@ function ChainList({ goal, parts }: { goal: { type: string; part: string; times?
       {goal.map((g, i) => {
         const step = result?.steps[i];
         const state = i < celebrated || (done && step?.satisfied) ? 'done' : done && step && !step.satisfied && result?.failedAt === i ? 'failed' : 'todo';
-        return <li key={i} className={state}><span className="chain-number" aria-hidden="true">{state === 'done' ? '✓' : state === 'failed' ? '!' : String(i + 1).padStart(2, '0')}</span><span>{label(g)}{state === 'failed' && step ? <span className="muted">{step.note}</span> : null}</span></li>;
+        return <li key={i} className={state}><span className="chain-number" aria-hidden="true">{state === 'done' ? '✓' : state === 'failed' ? '!' : String(i + 1).padStart(2, '0')}</span><span>{label(g)}</span></li>;
       })}
     </ol>
   );
@@ -482,13 +482,15 @@ function FixPanel() {
         <Closest text={fix.puzzle.solution.closest} />
         {rulesLine(fix.puzzle.solution.rules) && <p className="challenge">🎯 {rulesLine(fix.puzzle.solution.rules)}</p>}
         <SharedBanner />
-        {!tutorial && <p>{finished
+        {!tutorial && <p>{finished && fix.assisted
+          ? 'The AI solved this one for you. Clear the board and find your own way for the stars.'
+          : finished
           ? `${fix.kind === 'connect' ? 'Solved' : 'Fixed'} in ${tries(fix.tries)} with ${fix.placed.length} part${fix.placed.length === 1 ? '' : 's'}!${inDaily ? ` ${tries(daily.tries)} so far today.` : ''}`
           : fix.solved ? 'Watch the chain reach its finish…'
           : fix.puzzle.verified === false
             ? `The AI set the stage and picked the parts, but nobody has solved this level yet. Physics decides. Its own idea used ${par} of the ${fix.hand.length} parts in the tray.`
             : KIND_LABEL[fix.kind].blurb}</p>}
-        {finished
+        {finished && fix.assisted ? null : finished
           ? <p className="starline"><span className="stars big">{starRow(fix.stars)}</span>{fix.server === 'agrees' && <span className="badge ok" title="The server ran your build too and got the same run, bit for bit">✓ server agrees</span>} <span className="muted small">{fix.placed.length <= par ? `★ par ${par} parts or fewer` : `☆ par is ${par} parts`} · {fix.tries <= 3 ? '★ 3 tries or fewer' : '☆ 3 tries or fewer'}</span></p>
           : !tutorial && <p className="muted small">Par: {par} part{par === 1 ? '' : 's'} · {fix.hand.length - par} spare parts · solve in 3 tries for a bonus star</p>}
       </div>
@@ -528,6 +530,7 @@ function FixPanel() {
         {fix.solved && inDaily && !lastStage && <button className="primary" onClick={() => void nextDailyStage()} disabled={phase === 'simulating'}>Next: {KIND_LABEL[DAILY_LADDER[daily.stage]].name} →</button>}
         {fix.solved && inDaily && lastStage && <span className="badge ok">Daily done in {tries(daily.tries)}{daily.best[daily.date] ? ` · best ${daily.best[daily.date]}` : ''}</span>}
         {fix.solved && tutorial && phase === 'done' && <button className="primary" onClick={() => useMachine.getState().addPart('fan')}>Next: add a fan →</button>}
+        {finished && fix.assisted && <button className="primary" onClick={() => useMachine.getState().tryMyself()}>Try it myself</button>}
         {fix.solved && !tutorial && !inDaily && !breaking && <button onClick={() => setBreaking(true)}>Try another challenge</button>}
         {!tutorial && <ShareButton />}
         {!tutorial && <button onClick={leaveFix}>{fix.solved ? 'Replay my build' : 'Leave the puzzle'}</button>}
@@ -602,7 +605,7 @@ function StageControls({ onResetView, example }: { onResetView: () => void; exam
     </div>
     <div className="stage-bottom">
       <div className="stage-transport">
-        <button className="transport-button" onClick={action} disabled={!machine || !!pending || busy || phase === 'simulating' || (!!fix && !fix.solved && !fix.placed.length && !playing && !paused)} aria-label={playing ? 'Pause playback' : paused ? 'Continue playback' : 'Run machine'}>{playing ? 'Ⅱ' : phase === 'done' ? '↻' : '▶'}<span>{playing ? 'Pause' : paused ? 'Continue' : 'Run'}</span></button>
+        <button className="transport-button" onClick={action} disabled={!machine || !!pending || busy || phase === 'simulating'} aria-label={playing ? 'Pause playback' : paused ? 'Continue playback' : 'Run machine'}>{playing ? 'Ⅱ' : phase === 'done' ? '↻' : '▶'}<span>{playing ? 'Pause' : paused ? 'Continue' : 'Run'}</span></button>
         <div className="transport-details"><span>{phase === 'simulating' ? 'Preparing the stage…' : playing ? 'Chain reaction in motion' : paused ? 'Paused · take a closer look' : phase === 'done' ? 'Ready for another run?' : 'Ready when you are'}</span><progress max={end || 1} value={Math.min(time, end || 1)} aria-label="Playback progress" /></div>
         <span className="transport-time">{time.toFixed(1)}<small>s</small></span>
       </div>
