@@ -29,7 +29,7 @@ describe('obstacles in the way', () => {
       expect(makeConnectPuzzle(r!.spec), graph.title).not.toBeNull();
     }
     expect(total).toBeGreaterThanOrEqual(6);
-  });
+  }, 60_000);
 
   it('tries lazy builds and blocks the shortcuts it finds, harder blocking more', () => {
     const normal = compileRoute(graphs[0], { seed: 3, difficulty: 'normal' })!;

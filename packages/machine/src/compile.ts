@@ -671,7 +671,16 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
       if (keepIf(() => parts.push(wall), () => parts.pop())) break;
     }
   }
-  const final = done as MachineSpec;
+  // At most four goal steps: the checkpoints on the way (touch steps) go first, then all but the last domino row.
+  const trimmed = [...(done as MachineSpec).goal];
+  for (const type of ['touch', 'topple'] as const) {
+    while (trimmed.length > 4) {
+      const k = trimmed.findIndex((g, i) => g.type === type && (type === 'touch' || trimmed.slice(i + 1).some((h) => h.type === 'topple')));
+      if (k < 0) break;
+      trimmed.splice(k, 1);
+    }
+  }
+  const final = { ...(done as MachineSpec), goal: trimmed };
   const withSpares: MachineSpec = { ...final, spares: graph.spares?.length ? graph.spares : defaultSpares(final, pick) };
   const issues = checkMachine(withSpares);
   if (issues.length) return why(issues[0].message);

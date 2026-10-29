@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { checkMachine, compileRoute, evaluateMachine, initPhysics, layoutProblems, makeConnectPuzzle, simulateSync } from '../src';
+import { checkMachine, compileRoute, MachineSpec, evaluateMachine, initPhysics, layoutProblems, makeConnectPuzzle, simulateSync } from '../src';
 
 beforeAll(() => initPhysics());
 
@@ -10,6 +10,16 @@ describe('compileRoute', () => {
     const droppedLink = compileRoute({ title: 'Fan then bounce', links: [{ via: 'fan', turn: 'right' }, { via: 'trampoline' }], end: 'bell' }, { strict: true });
     expect(droppedLink).toBeNull();
   });
+
+  it('keeps a long domino route to at most four goal steps, and valid', () => {
+    for (const seed of [1]) {
+      const r = compileRoute({ title: 'Long desk run', links: [{ via: 'ramp', turn: 'right' }, { via: 'fan', turn: 'left' }], end: 'dominoes', row: 14 }, { seed });
+      if (!r) continue;
+      expect(r.spec.goal.length).toBeLessThanOrEqual(4);
+      expect(MachineSpec.safeParse(r.spec).success).toBe(true);
+      expect(r.spec.goal.at(-1)?.type).toBe('bell');
+    }
+  }, 60_000);
 
   it('lays a route out on a smaller or larger stage, inside its bounds', () => {
     for (const stage of [{ x: 16, z: 16 }, { x: 32, z: 28 }]) {

@@ -19,7 +19,9 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] Machines use the whole grid: the goal goes as far along the ball's last run as it still works, rolling links can stand far down a long roll, and the compiler keeps the layout that spans the stage best (target: the golden section, 0.618, of each side; close placements stay as the fallback). Measured on 20 compiled routes: span 29% → 51% of the stage, start-to-goal floor distance 16 → 26 cells, all 20 still compile.
 - [x] Faster layout: three layouts at once on the worker pool, best span kept. Live: workshop prompt layout 4.4 s → 1.6 s; simple fan prompt 0.7 s. Claude's route call (1–6.5 s, varies) is now most of the wait.
 - [x] Fixes found on the way: a puzzle rebuilt from the player's placements keeps the solution's part order (the physics depends on it); the daily checks every ladder stage with the day's seed, tries three prompts offline, and is remembered per day in memory (before, a server could hand out different no-AI dailies on each request).
-- Tests: 232 passing across 31 files; typecheck clean.
+- [x] Goal steps capped at four in the compiler (touch checkpoints dropped first): a long domino chain split into two rows had produced five steps, an invalid machine the client rejected when making the puzzle. Found in the showcase run; regression test added.
+- Showcase (live, verified, 3.5–7.6 s each): clockwork pocket watch, dragon's crystal cave, kid's night desk, sunken Atlantis. Weakest: clockwork cogs read as flat grey discs.
+- Tests: 233 passing across 31 files; typecheck clean.
 
 ## To do
 
@@ -49,6 +51,7 @@ Speed (asked 2026-10-29):
 - [ ] Photo → themed contraption (Claude vision, no stored photos, EXIF stripped, size cap, rate limit), planned for Nov 3–5.
 
 Follow-ups from 2026-10-29:
+- [ ] Cogs: give them visible teeth and an upright stance so the clockwork world reads; check animated pieces in a recorded run.
 - [ ] Remaining interface panels still use fixed colours; move them onto the theme variables.
 - [ ] Landscape on the board itself (trees between parts) needs colliders or a no-go rule first, or the ball will pass through scenery.
 - [ ] README/DEMO: describe stage size, terrain edits, worlds and Settings.
