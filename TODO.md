@@ -37,7 +37,8 @@ Kept current with every commit so work can be handed between agents and compared
 
 ## To do
 
-- [ ] "Solve it for me" took over 200 s on local Claude (several AI designs, each a slow CLI call): cap it (one design, a short nudge, about 30 s) and show progress.
+- [x] "Solve it for me" capped: at most two designs, short nudging (80 runs, 6 s), 45 s deadline before a second design. Live on local Claude: solved the vampire tomb level in 68 s (two slow CLI calls); expect about 10 s on the API. A running AI call is not cut short yet.
+- [ ] Submission focus category: none is published (terms 6.2.5 only require one). Recommended: "Prompt-to-world creation", with AI-assisted 3D editing and AI-generated gameplay as supporting points; user to confirm the list on the hackathon Discord. Judges may test prompts outside the category (terms 9.4).
 - [ ] Modular refactor for the judging criteria (generalizability 25%, technical depth 20%): see the architecture plan.
 
 From 2026-10-29 (goal correction):

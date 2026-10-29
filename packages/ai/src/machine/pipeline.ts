@@ -284,7 +284,9 @@ export function solveLevel(deps: MachinePipelineDeps, level: MachineSpec, emit: 
   const ball = level.parts.find((p) => p.kind === 'ball');
   const target = level.parts.find((p) => p.id === level.goal.at(-1)?.part);
   const instruction = `Solve this level: add parts so the ${ball ? names.get(ball.id) : 'ball'} reaches the ${target ? names.get(target.id) : 'goal'} and the goal happens. Only ADD new parts (ramps, shelves, fans, trampolines, cannons, seesaws, walls) on free cells, each with a new id; never move, remove or change any part already there, and keep the goal as it is.`;
-  return machineLoop(deps, emit, {
+  // The player is waiting: at most two designs, short nudging, under a minute in all.
+  const quick: MachinePipelineDeps = { ...deps, maxAttempts: Math.min(deps.maxAttempts, 2), budget: Math.min(deps.budget, 80), timeLimitMs: Math.min(deps.timeLimitMs, 6000), deadline: Math.min(deps.deadline ?? Infinity, Date.now() + 45_000) };
+  return machineLoop(quick, emit, {
     firstStage: 'editing',
     firstMessage: 'The AI is looking for a way through.',
     design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => {
