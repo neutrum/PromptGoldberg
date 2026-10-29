@@ -1,6 +1,6 @@
 import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, dropAt, facing, footprint, FRAME_HZ, GRID, groundRuns, KIT, lockedParts, lowestGround, partCentre, partNames, partOrigin, restingHeight, TARGET_KINDS, WATER_WORDS, yawQuat, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, facing, footprint, FRAME_HZ, GRID, groundAt, groundRuns, KIT, lockedParts, lowestGround, partCentre, partNames, partOrigin, restingHeight, TARGET_KINDS, WATER_WORDS, yawQuat, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -492,15 +492,22 @@ function Ground({ terrain }: { terrain?: Terrain[] }) {
   const base = lowestGround(terrain);
   const runs = useMemo(() => groundRuns(terrain, base), [terrain, base]);
   const water = (terrain ?? []).filter((t) => t.h < 0 && t.name && WATER_WORDS.test(t.name));
-  const tone = (h: number) => (h > 0 ? '#78918a' : h === 0 ? '#587580' : '#354e63');
+  // A wooden workbench on a stone plinth: raised ground is stone, dug ground is darker earth.
+  const tone = (h: number) => (h > 0 ? '#a39684' : h === 0 ? '#b88b58' : '#6e5a45');
+  const plinthTop = base * CELL - 0.02;
   return (
     <>
+      <mesh position={[w / 2, plinthTop - 0.3, d / 2]} receiveShadow>
+        <boxGeometry args={[w + 3, 0.6, d + 3]} />
+        <meshStandardMaterial color="#6d7177" roughness={1} />
+      </mesh>
+      <Scenery y={plinthTop} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL - 0.001, d / 2]} receiveShadow>
         <planeGeometry args={[w, d]} />
-        <meshStandardMaterial color={tone(base)} roughness={0.95} />
+        <meshStandardMaterial color={tone(base)} roughness={0.9} />
       </mesh>
-      <Grid position={[w / 2, base * CELL + 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#2a3354" sectionSize={CELL * 4} sectionColor="#3b4a7a" fadeDistance={30} infiniteGrid={false} />
-      {base < 0 && <Grid position={[w / 2, 0.008, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#7c9aa2" sectionSize={CELL * 4} sectionColor="#aac1c5" fadeDistance={22} infiniteGrid={false} />}
+      <Grid position={[w / 2, base * CELL + 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#a57a4b" sectionSize={CELL * 4} sectionColor="#8e6639" fadeDistance={30} infiniteGrid={false} />
+      {base < 0 && <Grid position={[w / 2, 0.008, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#a57a4b" sectionSize={CELL * 4} sectionColor="#8e6639" fadeDistance={22} infiniteGrid={false} />}
       {runs.map((g) => {
         const top = g.h * CELL, bottom = base * CELL - 0.02;
         return (
@@ -513,7 +520,66 @@ function Ground({ terrain }: { terrain?: Terrain[] }) {
       {water.map((t, i) => (
         <mesh key={`water-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[(t.x + t.w / 2) * CELL, -0.05, (t.z + t.d / 2) * CELL]}>
           <planeGeometry args={[t.w * CELL, t.d * CELL]} />
-          <meshStandardMaterial color="#1d5fd1" transparent opacity={0.55} roughness={0.3} depthWrite={false} />
+          <meshStandardMaterial color="#2a78b8" transparent opacity={0.7} roughness={0.25} depthWrite={false} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Wooden posts under raised parts, down to the ground or shelf beneath. Visual only: no collider, and
+ * thin enough that a marble passing under a shelf rarely clips one.
+ */
+function Supports({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] }) {
+  const posts = useMemo(() => {
+    const out: { x: number; z: number; bottom: number; top: number }[] = [];
+    for (const p of parts) {
+      if (p.kind === 'ball') continue;
+      for (const c of footprint(p)) {
+        let below = groundAt(terrain, c.x, c.z);
+        for (const q of parts) if (q.kind === 'platform' && q.id !== p.id && q.y < p.y && q.y > below && footprint(q).some((f) => f.x === c.x && f.z === c.z)) below = q.y;
+        if (p.y - below < 1) continue;
+        // Shelves stand on a thin deck; everything else on its own base.
+        out.push({ x: (c.x + 0.5) * CELL, z: (c.z + 0.5) * CELL, bottom: below * CELL, top: p.y * CELL - (p.kind === 'platform' ? KIT.platformThickness : 0) });
+      }
+    }
+    return out;
+  }, [parts, terrain]);
+  return (
+    <>
+      {posts.map((s, i) => (
+        <group key={i} position={[s.x, 0, s.z]}>
+          <mesh position={[0, (s.bottom + s.top) / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.07, s.top - s.bottom, 0.07]} />
+            <meshStandardMaterial color="#6b4a2b" roughness={0.85} />
+          </mesh>
+          <mesh position={[0, s.bottom + 0.03, 0]} receiveShadow>
+            <boxGeometry args={[0.15, 0.06, 0.15]} />
+            <meshStandardMaterial color="#7c7f85" roughness={1} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
+// Fixed scenery around the board's back edges, outside every placeable cell and away from the camera side.
+const TREES: [number, number, number][] = [[-0.55, 1.2, 1], [-0.7, 4.6, 0.8], [-0.5, 8.4, 1.15], [-0.65, 11.2, 0.9], [2.4, -0.6, 0.95], [6.1, -0.7, 1.1], [9.8, -0.55, 0.85]];
+const ROCKS: [number, number, number][] = [[-0.45, 2.9, 0.22], [-0.5, 10, 0.16], [4.3, -0.45, 0.2], [12.45, 3.5, 0.14], [8, 12.45, 0.12], [11.6, -0.4, 0.18]];
+function Scenery({ y }: { y: number }) {
+  return (
+    <>
+      {TREES.map(([x, z, s], i) => (
+        <group key={`tree-${i}`} position={[x, y, z]} scale={s}>
+          <mesh position={[0, 0.2, 0]} castShadow><cylinderGeometry args={[0.05, 0.07, 0.4, 6]} /><meshStandardMaterial color="#5c3d24" roughness={0.9} /></mesh>
+          <mesh position={[0, 0.6, 0]} castShadow><coneGeometry args={[0.36, 0.6, 7]} /><meshStandardMaterial color="#2f5a3c" roughness={0.9} flatShading /></mesh>
+          <mesh position={[0, 0.95, 0]} castShadow><coneGeometry args={[0.26, 0.5, 7]} /><meshStandardMaterial color="#3a6c47" roughness={0.9} flatShading /></mesh>
+        </group>
+      ))}
+      {ROCKS.map(([x, z, r], i) => (
+        <mesh key={`rock-${i}`} position={[x, y + r * 0.5, z]} rotation={[i, i * 2, 0]} castShadow receiveShadow>
+          <dodecahedronGeometry args={[r, 0]} /><meshStandardMaterial color="#8a8d90" roughness={1} flatShading />
         </mesh>
       ))}
     </>
@@ -572,6 +638,7 @@ function Machine3D({ resetView }: { resetView: number }) {
     <>
       <MachineCamera parts={framed} resetView={resetView} />
       <Ground terrain={terrain} />
+      <Supports parts={parts} terrain={terrain} />
       {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (
         <BodyMesh
