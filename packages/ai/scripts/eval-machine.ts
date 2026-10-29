@@ -1,12 +1,11 @@
 /**
  * Prompt Goldberg eval: prompt -> machine on a fixed prompt set with the production defaults.
- *   npm run eval:machine -w @og/ai -- [--only 1,4] [--out results.json] [--puzzle]
- * Gate (Oct 17): a sentence yields a machine that works and is fun to watch for 5 of 10 prompts.
- * --puzzle asks for puzzle levels (verify: false), the way the game does; the route-graph fast
- * path builds most of them, and its levels are verified anyway.
+ *   npm run eval:machine -w @og/ai -- [--only 1,4] [--out results.json]
+ * Measures verified outcomes and checkable prompt requirements. Enjoyment needs human playtests.
  */
 import { writeFileSync } from 'node:fs';
 import { createMachine, type LlmUsage } from '../src';
+import { missionProblems } from '../src/machine/intent';
 
 const PROMPTS: { prompt: string; curveball?: boolean }[] = [
   { prompt: 'Get the ball into the bucket using dominoes and a fan' },
@@ -34,7 +33,7 @@ const flag = (name: string) => {
 };
 const only = flag('only')?.split(',').map(Number);
 const out = flag('out');
-const puzzle = args.includes('--puzzle');
+if (args.includes('--puzzle')) console.error('--puzzle is obsolete: the app now always verifies generated machines.');
 const results: Record<string, unknown>[] = [];
 const llmSecs = (u: LlmUsage[]) => Math.round(u.reduce((s, c) => s + c.ms, 0) / 100) / 10;
 
@@ -44,7 +43,7 @@ for (const [idx, { prompt, curveball }] of PROMPTS.entries()) {
   const started = Date.now();
   let firstDraftMs: number | undefined;
   try {
-    const res = await createMachine({ prompt, verify: !puzzle }, {
+    const res = await createMachine({ prompt, verify: true }, {
       onEvent: (e) => {
         if (e.type === 'stage') console.error(`  ${((Date.now() - started) / 1000).toFixed(0).padStart(4)}s ${e.stage} ${e.attempt}/${e.maxAttempts}: ${e.message}`);
         if (e.type === 'draft' && firstDraftMs === undefined) firstDraftMs = Date.now() - started;
@@ -53,7 +52,7 @@ for (const [idx, { prompt, curveball }] of PROMPTS.entries()) {
     const ms = Date.now() - started;
     const r = {
       n: idx + 1, prompt, curveball: !!curveball, ok: true,
-      solved: res.solved, designs: res.attempts, llmCalls: res.usage.length,
+      solved: res.solved, verified: res.verified, unmetRequirements: missionProblems(prompt, res.machine), designs: res.attempts, llmCalls: res.usage.length,
       seconds: Math.round(ms / 100) / 10, firstDraftSeconds: firstDraftMs === undefined ? null : Math.round(firstDraftMs / 100) / 10, llmSeconds: llmSecs(res.usage),
       inputTokens: res.usage.reduce((s, c) => s + (c.inputTokens ?? 0), 0),
       outputTokens: res.usage.reduce((s, c) => s + (c.outputTokens ?? 0), 0),
@@ -80,5 +79,5 @@ for (const r of results) {
   if (!r.ok) { console.log(`| ${r.n} | ${r.prompt} | error | | ${r.seconds}s | | | ${r.error} |`); continue; }
   console.log(`| ${r.n} | ${r.prompt} | ${r.solved ? 'yes' : 'no'} | ${r.designs} | ${r.seconds}s (${r.firstDraftSeconds}s) | ${r.parts} | ${(r.goal as string[]).join(' → ')} | ${r.title} |`);
 }
-console.log(`\nWorking machines: ${solved.length}/${results.length} (gate: 5/10 and fun to watch)`);
+console.log(`\nWorking machines: ${solved.length}/${results.length} (physics and explicit requirements; enjoyment not measured)`);
 

@@ -19,7 +19,8 @@ export const EditOp = z.discriminatedUnion('op', [
   z.object({ op: z.literal('move'), id: z.string(), x: Cell.optional(), y: Cell.optional(), z: Cell.optional() }),
   z.object({ op: z.literal('rotate'), id: z.string(), yaw: Yaw }),
   z.object({ op: z.literal('swap'), id: z.string(), kind: PartKind.exclude(['ball']) }),
-  z.object({ op: z.literal('set'), id: z.string(), length: z.number().int().min(1).max(8) }),
+  z.object({ op: z.literal('set'), id: z.string(), length: z.number().int().min(1).max(8).optional(), label: z.string().max(40).optional(), color: z.string().regex(/^#[0-9a-f]{6}$/i).optional() })
+    .refine((op) => op.length !== undefined || op.label !== undefined || op.color !== undefined, 'set needs a length, label, or color'),
 ]);
 export type EditOp = z.infer<typeof EditOp>;
 
@@ -33,7 +34,7 @@ export type EditReply = z.infer<typeof EditReply>;
 
 /** One line per part, the way the edit prompt shows the machine. */
 export function partLines(spec: MachineSpec): string {
-  return spec.parts.map((p) => `${p.id}: ${p.kind} x ${p.x} y ${p.y} z ${p.z} yaw ${p.yaw}${p.length ? ` length ${p.length}` : ''}${p.fixed ? ' (scenery)' : ''}`).join('\n');
+  return spec.parts.map((p) => `${p.id}: ${p.kind} x ${p.x} y ${p.y} z ${p.z} yaw ${p.yaw}${p.length ? ` length ${p.length}` : ''}${p.label ? ` label ${JSON.stringify(p.label)}` : ''}${p.color ? ` color ${p.color}` : ''}${p.fixed ? ' (scenery)' : ''}`).join('\n');
 }
 
 /** Apply the ops in order; unknown ids are reported, not ignored. */
@@ -56,7 +57,7 @@ export function applyOps(spec: MachineSpec, reply: EditReply): { spec: MachineSp
       case 'move': parts[i] = { ...p, x: op.x ?? p.x, y: op.y ?? p.y, z: op.z ?? p.z, dx: undefined, dz: undefined }; break;
       case 'rotate': parts[i] = { ...p, yaw: op.yaw }; break;
       case 'swap': parts[i] = { ...p, kind: op.kind, length: undefined }; break;
-      case 'set': parts[i] = { ...p, length: op.length }; break;
+      case 'set': parts[i] = { ...p, ...(op.length !== undefined ? { length: op.length } : {}), ...(op.label !== undefined ? { label: op.label } : {}), ...(op.color !== undefined ? { color: op.color } : {}) }; break;
     }
   }
   return {
@@ -75,7 +76,7 @@ Operations (JSON):
 - {"op":"move","id","x"?,"y"?,"z"?}
 - {"op":"rotate","id","yaw"}
 - {"op":"swap","id","kind"}: same place, another kind.
-- {"op":"set","id","length"}: a longer or shorter shelf or row of dominoes.
+- {"op":"set","id","length"?,"label"?,"color"?}: change length, a friendly name, or a six-digit hex color. Use label for "name/call it", color for "paint/color it". Appearance changes do not move parts or change physics.
 
 Reply with {"ops":[...], "caption"?: one new sentence for players when what happens changes, "addGoal"?: goal steps to add at the end, like {"type":"touch","part":"tramp1"} or {"type":"bell","part":"bell","times":2}}. Use as few ops as the request needs and leave every other part alone.
 
@@ -101,7 +102,7 @@ export function editByOps(llm: LlmBackend, spec: MachineSpec, instruction: strin
   const prompt = `Machine "${spec.title}"${spec.terrain?.length ? `, ground: ${spec.terrain.map((t) => `${t.name ?? 'block'} x ${t.x}..${t.x + t.w - 1} z ${t.z}..${t.z + t.d - 1} at height ${t.h}`).join('; ')}` : ''}.
 Parts:
 ${partLines(spec)}
-Goal: ${spec.goal.map((g) => `${g.type} ${g.part}`).join(' -> ')}
+Goal: ${spec.goal.map((g) => `${g.type} ${g.part}${g.type === 'bell' ? ` times ${g.times}` : ''}`).join(' -> ')}
 
 ${describeLocks(spec)}
 

@@ -129,23 +129,27 @@ export async function streamMachine(
   const flush = (chunk: string) => {
     const data = chunk.split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trimStart()).join('\n');
     if (!data) return;
-    try {
-      onEvent(JSON.parse(data) as MachineStreamEvent);
-    } catch {
-      // Ignore malformed chunks.
-    }
+    let event: MachineStreamEvent;
+    try { event = JSON.parse(data) as MachineStreamEvent; }
+    catch { return; }
+    onEvent(event);
   };
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += value;
-    let m: RegExpMatchArray | null;
-    while ((m = buffer.match(/\r?\n\r?\n/)) && m.index !== undefined) {
-      flush(buffer.slice(0, m.index));
-      buffer = buffer.slice(m.index + m[0].length);
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let m: RegExpMatchArray | null;
+      while ((m = buffer.match(/\r?\n\r?\n/)) && m.index !== undefined) {
+        flush(buffer.slice(0, m.index));
+        buffer = buffer.slice(m.index + m[0].length);
+      }
     }
+    if (buffer.trim()) flush(buffer);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
-  if (buffer.trim()) flush(buffer);
 }
 
 /** A best build on a level's or the daily's board. */

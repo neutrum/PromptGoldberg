@@ -1,3 +1,17 @@
+# Current workshop revision — 2026-10-27
+
+- Player feedback follow-up: one current-machine prompt by default, literal add commands become local part placement, explicit Run, Undo, and an in-app ramp → run → fan lesson. New-machine creation is separate. Optional Tripo custom looks were added October 29; see docs/TRIPO.md. The reference's broader scenic redesign remains to do.
+
+- Creation is the first action. Watch verified results, edit them with words, then optionally build the route yourself.
+- Guided one-part lesson; prompt available during puzzles; Watch/Build switches and resumes the current puzzle.
+- API creation and editing always verify. Failed or cancelled requests preserve the previous build and prompt.
+- Strict compilation keeps explicit mechanisms, target, duration and parts limits. Unmet requirements are failures; no silent easing.
+- Named parts, appearance edits, clearer stage/camera, responsive layout, synthesized audio. Removed the previously generated ElevenLabs audio files.
+- README and DEMO.md describe the current entry. Earlier milestone notes below are historical; the unverified puzzle and recorded voice flows are superseded.
+- Still needed for submission: publish the reviewed version, check the public demo and repository links, record the final under-three-minute video, and submit the category/description. This revision has not been deployed.
+
+---
+
 # TODO
 
 Hackathon deadline: **Nov 11, 16:30 CEST** (submit Nov 10). The hosted demo must stay up through judging (until Nov 25).

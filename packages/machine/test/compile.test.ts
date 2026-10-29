@@ -4,6 +4,13 @@ import { compileRoute, evaluateMachine, initPhysics, layoutProblems, makeConnect
 beforeAll(() => initPhysics());
 
 describe('compileRoute', () => {
+  it('does not weaken a strict challenge or drop an incompatible requested link', () => {
+    const impossibleTime = compileRoute({ title: 'Slow', links: [{ via: 'cannon', turn: 'right' }], end: 'bucket' }, { seed: 2, attempts: 2, strict: true, rules: { minSeconds: 14 } });
+    expect(impossibleTime).toBeNull();
+    const droppedLink = compileRoute({ title: 'Fan then bounce', links: [{ via: 'fan', turn: 'right' }, { via: 'trampoline' }], end: 'bell' }, { strict: true });
+    expect(droppedLink).toBeNull();
+  });
+
   it('lays a route graph out into a level that runs, passes the level rules and leaves a bin', () => {
     for (const graph of [
       { title: 'Over the river', links: [{ via: 'cannon' as const, turn: 'right' as const }], end: 'bucket' as const },

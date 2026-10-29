@@ -15,13 +15,15 @@ describe('editing a machine keeps the ball and the goal parts fixed', () => {
   const machine = fixture('ramp-dominoes-bell.json');
   // The cheat: the ball starts right over the bell.
   const cheat = { ...machine, parts: machine.parts.map((p) => (p.id === 'ball' ? { ...p, x: 11, y: 3 } : p)) };
-  // A fair change: the ramp moves one cell east along its shelf.
-  const fair = { ...machine, title: 'Longer run-up', parts: machine.parts.map((p) => (p.id === 'ramp' ? { ...p, x: 6 } : p)) };
+  // A fair change leaves the proven geometry intact.
+  const fair = { ...machine, title: 'Coral slide', parts: machine.parts.map((p) => (p.id === 'ramp' ? { ...p, color: '#ff7f50' } : p)) };
 
   it('tells the model what is fixed, and sends a reply that moves the ball back with the reason', async () => {
     const llm = new FakeLlm([reply(cheat), reply(machine)]);
-    const res = await createMachine({ machine, instruction: 'move the ball above the bell' }, { llm, physics: createPhysics('inline') });
-    expect(res.solved).toBe(true);
+    const res = await createMachine({ machine, instruction: 'move the ball above the bell' }, { llm, physics: createPhysics('inline'), maxAttempts: 1 });
+    // Returning the unchanged original respects the lock, but does not fulfill the edit.
+    expect(res.solved).toBe(false);
+    expect(res.verified).toBe(false);
     expect(llm.requests).toHaveLength(2);
     expect(llm.requests[0].prompt).toMatch(/FIXED PARTS/);
     expect(llm.requests[0].prompt).toMatch(/dominoes = "row"/);
@@ -38,8 +40,10 @@ describe('editing a machine keeps the ball and the goal parts fixed', () => {
 
   it('accepts a change to the mechanism when the ball keeps its fixed cell', async () => {
     const llm = new FakeLlm([reply(fair)]);
-    const res = await createMachine({ machine, instruction: 'move the ramp one cell west' }, { llm, physics: createPhysics('inline') });
+    const res = await createMachine({ machine, instruction: 'paint the ramp coral' }, { llm, physics: createPhysics('inline') });
     expect(llm.requests).toHaveLength(1);
-    expect(res.machine.title).toBe('Longer run-up');
+    expect(res.machine.title).toBe('Coral slide');
+    expect(res.machine.parts.find((p) => p.id === 'ramp')?.color).toBe('#ff7f50');
+    expect(res.solved).toBe(true);
   }, 30_000);
 });

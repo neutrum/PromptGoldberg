@@ -6,3 +6,4 @@ cache/
 data/
 .claude/
 packages/machine/scratch/
+docs/*.zip

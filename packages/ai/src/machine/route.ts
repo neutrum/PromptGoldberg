@@ -5,7 +5,7 @@
  * unavailable. Missions the graph cannot say ("use every part") take the full designer.
  */
 import { z } from 'zod';
-import { RouteGraph, type RouteGraphInput, type RouteLink } from '@og/machine';
+import { RouteGraph, rulesOf, type RouteGraphInput, type RouteLink } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
 
@@ -77,7 +77,7 @@ export function routeFromWords(mission: string, seed = 1): RouteGraphInput {
     links.splice(after >= 0 ? after : links.length, 0, { via: 'seesaw', turn: 'straight' });
   }
   const slow = has(m, /\b(slow|slowest|longest|long run|take (?:its|your) time|seconds)\b/);
-  if (!links.length) links.push({ via: (['fan', 'ramp', 'cannon'] as const)[seed % 3], turn });
+  if (!links.length) links.push({ via: /\b(pizza|oven|bucket|basket|delivery)\b/.test(m) || (rulesOf(m)?.maxParts ?? 8) <= 3 ? 'cannon' : (['fan', 'ramp', 'cannon'] as const)[seed % 3], turn });
   if (slow && links.length < 2) links.push({ via: 'fan', turn: turn === 'right' ? 'left' : 'right' });
   // A fan link needs a turn of its own; a straight fan after a cannon is fine.
   if (!links.some((l) => l.turn !== 'straight')) links[0] = { ...links[0], turn };
@@ -89,5 +89,11 @@ export function routeFromWords(mission: string, seed = 1): RouteGraphInput {
   const ground = has(m, /\b(river|water|moat|lake|sea|lava)\b/) ? 'river' : has(m, /\b(hill|mountain|roof|tower)\b/) ? 'hill' : has(m, /\b(pit|hole|ditch|crater)\b/) ? 'pit' : 'auto';
   const rings = has(m, /\b(three times|thrice)\b/) ? 3 : has(m, /\b(twice|two times|double)\b/) ? 2 : 1;
   const row = end === 'dominoes' && (slow || has(m, /\b(long|chain|lots of|hundreds?|many)\b/)) ? 14 : undefined;
-  return { title: title.slice(0, 40), caption: 'Build the route from the parts in your bin.', links: links.slice(0, 3), end, rings, ...(row ? { row } : {}), ground, start: ground === 'hill' ? 'hill' : 'shelf' };
+  const names = {
+    ball: /\bpizza\b/.test(m) ? 'pizza' : /\bcheese\b/.test(m) ? 'cheese' : 'marble',
+    target: /\boven\b/.test(m) ? 'oven' : /\bgong\b/.test(m) ? 'gong' : /\bcat\b/.test(m) ? 'cat bell' : undefined,
+    scenery: /\bcastle\b/.test(m) ? 'castle wall' : /\bguard\b/.test(m) ? 'guard wall' : undefined,
+    ground: /\blava\b/.test(m) ? 'lava' : /\bmoat\b/.test(m) ? 'moat' : undefined,
+  };
+  return { title: title.slice(0, 40), caption: `Follow the ${names.ball} through the route to the ${names.target ?? (end === 'dominoes' ? 'dominoes and bell' : end)}.`, names, links: links.slice(0, 3), end, rings, ...(row ? { row } : {}), ground, start: ground === 'hill' ? 'hill' : 'shelf' };
 }

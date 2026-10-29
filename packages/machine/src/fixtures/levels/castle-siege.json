@@ -61,7 +61,8 @@
       "y": 0,
       "z": 5,
       "yaw": 0,
-      "fixed": true
+      "fixed": true,
+      "label": "castle wall"
     },
     {
       "id": "alarmbell",

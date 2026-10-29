@@ -14,6 +14,11 @@ const load = (name: string): MachineSpec => {
 beforeAll(() => initPhysics());
 
 describe('simulation', () => {
+  it('keeps the exact physics trace when cosmetic models are attached', () => {
+    const spec = load('ramp-dominoes-bell.json');
+    const styled = { ...spec, parts: spec.parts.map(p => p.kind === 'bell' ? { ...p, look: { assetId: 'a4bb4165-c0ef-4da1-bbfa-85f66d319224' } } : p) };
+    expect(traceHash(simulateSync(styled))).toBe(traceHash(simulateSync(spec)));
+  });
   it('is deterministic across runs and threads', async () => {
     const spec = load('ramp-dominoes-bell.json');
     const a = traceHash(simulateSync(spec));

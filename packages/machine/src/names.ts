@@ -119,7 +119,7 @@ export function partNames(parts: Part[]): Map<string, string> {
   for (const p of parts) {
     const n = (seen.get(p.kind) ?? 0) + 1;
     seen.set(p.kind, n);
-    names.set(p.id, (total.get(p.kind) ?? 1) > 1 ? `${p.kind} #${n}` : p.kind);
+    names.set(p.id, p.label || ((total.get(p.kind) ?? 1) > 1 ? `${p.kind} #${n}` : p.kind));
   }
   return names;
 }

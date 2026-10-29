@@ -1,6 +1,6 @@
 # Credits
 
-All third-party code and assets used in Prompt Goldberg and Orbital Goldberg. Permissive licenses only (MIT, Apache-2.0, BSD, ISC).
+Credits for Prompt Goldberg and the earlier Orbital Goldberg prototype. The table below lists the principal libraries; their distributions retain their own license notices.
 
 ## Libraries
 
@@ -21,12 +21,14 @@ All third-party code and assets used in Prompt Goldberg and Orbital Goldberg. Pe
 
 ## AI-generated materials
 
-- Code in this repository was written with assistance from Claude (Anthropic) via Claude Code.
+- Code in this repository was written with assistance from Claude (Anthropic) via Claude Code and Codex (OpenAI).
 - Star systems (Orbital Goldberg) and levels (Prompt Goldberg) are designed at runtime by the Claude API.
 - The built-in Prompt Goldberg levels in `packages/machine/src/fixtures/levels/` were made by the same AI pipeline from their mission sentences.
+- Optional custom part appearances are generated at runtime through Tripo. The app stores the description, provider model version, task ID and reported credit use alongside each local asset; see [custom looks](docs/TRIPO.md). These generated files live in `DATA_DIR/looks` and are not bundled in this repository.
 
 ## Assets
 
-- Sound effects in `apps/web/public/sfx/` (cannon, boing, ding, plop, clack, whoosh): generated once with ElevenLabs sound effects (elevenlabs.io), October 2026, on the free plan, which requires attribution: **Sound effects by ElevenLabs.** If the project is used commercially, regenerate them on a paid plan. Without the files the game falls back to its built-in WebAudio synth.
-- Voice lines in `apps/web/public/voice/` (31 short "engineer" lines): generated once with ElevenLabs text to speech, premade voice "Will", October 2026, free plan, same attribution: **Voice by ElevenLabs.** The 🗣️ button turns them off; without the files the game is silent there.
-- No third-party art or fonts.
+- Sound effects are synthesized at runtime with Web Audio in `apps/web/src/game/audio.ts`.
+- The previously generated ElevenLabs free-plan recordings have been removed from the shipped assets. No recorded voice or external sound sample is loaded by the current app.
+- Default part models in `apps/web/public/models/kit-v1/` were generated once with Tripo (model `v3.1-20260211`) from the prompts in `docs/model-kit.prompts.json` and `docs/model-kit.refinements.json`; per-asset task IDs and credit use are in that folder's `provenance.json`. They are visual only and fitted to the procedural colliders, which fall back to code-built meshes if a model fails to load. Terrain and effects are built from code. Players can also apply a saved Tripo appearance over supported parts; their physics stays procedural.
+- The interface uses system fonts and platform-rendered Unicode emoji.

@@ -15,6 +15,7 @@ import {
 } from '@og/ai';
 import { DailyCap, RateLimiter } from './rateLimit';
 import { openSse } from './sse';
+import { registerLooks, TripoProvider, type ModelProvider } from './looks';
 
 export interface Limits {
   /** Per-IP requests to LLM endpoints (/api/level, /api/edit, /api/design). */
@@ -69,6 +70,8 @@ export interface AppOptions {
   limits?: Partial<Limits>;
   logger?: FastifyServerOptions['logger'];
   trustProxy?: boolean;
+  models?: ModelProvider | null;
+  modelDailyCap?: number;
 }
 
 const LLM_UNAVAILABLE = 'No AI backend is configured on this server. Set ANTHROPIC_API_KEY (or LLM_BACKEND=cli for local development).';
@@ -76,6 +79,8 @@ const LLM_UNAVAILABLE = 'No AI backend is configured on this server. Set ANTHROP
 export async function buildApp(opts: AppOptions) {
   const limits: Limits = { ...limitsFromEnv(), ...opts.limits };
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? false, bodyLimit: 512 * 1024 });
+  const models = opts.models !== undefined ? opts.models : process.env.TRIPO_API_KEY?.trim() ? new TripoProvider(process.env.TRIPO_API_KEY.trim(), process.env.TRIPO_MODEL_VERSION || undefined) : null;
+  await registerLooks(app, join(opts.dataDir, 'looks'), models, opts.modelDailyCap ?? Math.max(0, Math.floor(num(process.env.TRIPO_DAILY_MODEL_CAP, 5))));
   const solver = typeof opts.solver === 'object' ? opts.solver : createSolver(opts.solver ?? 'auto');
   const physics = opts.physics ?? createPhysics(typeof opts.solver === 'string' ? opts.solver : 'auto');
   const gallery = await GalleryStore.open(opts.dataDir, limits.galleryMaxEntries);
@@ -256,7 +261,7 @@ export async function buildApp(opts: AppOptions) {
 
   app.post<{ Body: { prompt?: unknown; verify?: unknown } }>('/api/machine', async (req, reply) => {
     const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
-    const verify = req.body?.verify !== false;
+    const verify = true;
     if (!prompt) return sseError(reply, 400, 'Describe the machine you want, e.g. "get the ball into the bucket using dominoes and a fan".');
     if (prompt.length > limits.maxPromptChars) return sseError(reply, 400, `That description is too long: keep it under ${limits.maxPromptChars} characters.`);
     const blocked = guardLlm(req);
@@ -328,7 +333,7 @@ export async function buildApp(opts: AppOptions) {
     if (blocked) return sseError(reply, blocked.status, blocked.error);
     const stream = openSse<MachineStreamEvent>(reply);
     try {
-      const event = await runMachineAi({ machine: parsed.spec, instruction, verify: req.body?.verify !== false }, stream.send, stream.signal);
+      const event = await runMachineAi({ machine: parsed.spec, instruction, verify: true }, stream.send, stream.signal);
       stream.send(event);
     } catch (err) {
       if (stream.signal.aborted) req.log.info('client disconnected during machine stream');

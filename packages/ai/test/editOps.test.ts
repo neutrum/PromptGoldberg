@@ -16,6 +16,12 @@ describe('edits as diff ops', () => {
     expect(spec.parts.find((p) => p.id === 'ramp')?.yaw).toBe(90);
     expect(problems).toEqual(['remove: no part "nope"']);
   });
+  it('changes appearance without losing placement or optimizer offsets', () => {
+    const { spec, problems } = applyOps(level, { ops: [{ op: 'set', id: 'ramp', color: '#ff7f50', label: 'Pizza slide' }] });
+    expect(problems).toEqual([]);
+    expect(spec.parts.find((p) => p.id === 'ramp')).toEqual({ ...level.parts.find((p: { id: string }) => p.id === 'ramp'), color: '#ff7f50', label: 'Pizza slide' });
+    expect(spec.goal).toEqual(level.goal);
+  });
 
   it('answers an edit with a short ops reply on the fast model, keeping untouched parts and their nudges', async () => {
     const wall = level.parts.find((p: { kind: string; fixed?: boolean }) => p.kind === 'wall');

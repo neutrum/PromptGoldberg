@@ -218,7 +218,7 @@ describe('POST /api/machine without an AI', () => {
     const events = parseSse(res.body) as { type: string; solved?: boolean; machine?: { closest?: string } }[];
     const done = events.find((e) => e.type === 'machine');
     expect(done?.solved).toBe(true);
-    expect(done?.machine?.closest).toMatch(/resting/);
+    expect(done?.machine?.closest).toMatch(/Offline builder: AI is unavailable/);
   }, 30_000);
 });
 

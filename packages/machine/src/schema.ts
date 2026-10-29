@@ -24,6 +24,12 @@ export const PartKind = z.enum([
 ]);
 export type PartKind = z.infer<typeof PartKind>;
 
+/** Cosmetic models only; the kit continues to define collision and behavior. */
+export const LOOK_KINDS = ['ball', 'fan', 'bell', 'wall', 'dominoes'] as const;
+export const LookKind = z.enum(LOOK_KINDS);
+export type LookKind = z.infer<typeof LookKind>;
+export const LookRef = z.object({ assetId: z.string().uuid() });
+
 /** Which way a part faces, degrees clockwise seen from above: 0 = +x, 90 = +z, 180 = -x, 270 = -z. */
 export const Yaw = z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]);
 export type Yaw = z.infer<typeof Yaw>;
@@ -31,12 +37,14 @@ export type Yaw = z.infer<typeof Yaw>;
 export const Part = z.object({
   id: z.string().regex(/^[a-z0-9_-]+$/i).describe('short unique id'),
   kind: PartKind,
+  label: z.string().max(40).optional().describe('player-facing name, e.g. pizza, oven, castle wall; the kind still defines its physics'),
   x: z.number().int().min(0).max(GRID.x - 1).describe('cell along x (0 = west edge)'),
   y: z.number().int().min(TERRAIN_MIN).max(GRID.y - 1).describe('height of the part\'s base in cells (0 = flat floor; on raised ground the ground\'s h, in a ditch its negative h)'),
   z: z.number().int().min(0).max(GRID.z - 1).describe('cell along z (0 = north edge)'),
   yaw: Yaw.default(0).describe('facing: 0 = +x, 90 = +z, 180 = -x, 270 = -z. A ramp slopes DOWN toward its facing; fans blow and cannons fire toward it; dominoes and platforms extend toward it'),
   length: z.number().int().min(1).max(8).optional().describe('platforms: cells long (default 3); dominoes: how many (default 5)'),
   color: z.string().optional().describe('hex colour'),
+  look: LookRef.optional().describe('Reserved for a player-applied appearance; never invent asset IDs'),
   /** Scenery: part of the level (an obstacle wall, a ledge), never handed to the player. Walls and platforms only. */
   fixed: z.boolean().optional().describe('scenery: a wall or shelf that is part of the level and stays on the stage; the player has to get past or use it'),
   /** Fine offsets within the cell, set by the optimizer (fractions of a cell). */
@@ -114,6 +122,7 @@ export function checkMachine(spec: MachineSpec, opts: CheckOptions = {}): SpecIs
     else cells.set(key, p.id);
   });
   spec.parts.forEach((p, i) => {
+    if (p.look && !(LOOK_KINDS as readonly string[]).includes(p.kind)) issues.push({ path: `parts.${i}.look`, message: `custom looks are not supported on ${p.kind}` });
     if (p.fixed && p.kind !== 'wall' && p.kind !== 'platform') issues.push({ path: `parts.${i}.fixed`, message: `"${p.id}" is a ${p.kind}; only walls and platforms can be fixed scenery` });
   });
   const byId = new Map(spec.parts.map((p) => [p.id, p]));

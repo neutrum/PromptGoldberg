@@ -1,3 +1,5 @@
+import type { Part } from '@og/machine';
+
 /**
  * Mission cards: a goal and a place, the way a player should write one. The AI makes the level
  * from it (targets, scenery, a hidden route) and the player builds the route. They skip the
@@ -10,24 +12,15 @@ export interface PromptCard {
 }
 
 export const CARDS: PromptCard[] = [
-  { emoji: '🐱', title: 'Wake the cat', prompt: 'Wake the cat asleep on the top shelf by ringing the bell next to it' },
-  { emoji: '🍕', title: 'Pizza delivery', prompt: 'Get the pizza into the oven, but there is a guard wall in the way' },
-  { emoji: '⛪', title: 'Church bell', prompt: 'Ring the church bell from across the river' },
-  { emoji: '🏰', title: 'Castle siege', prompt: 'Knock over the dominoes hiding behind the castle wall' },
-  { emoji: '🌬️', title: 'Windy alley', prompt: 'A windy alley: the ball has to be blown sideways into a bucket' },
-  { emoji: '🏀', title: 'Rooftop', prompt: 'Bounce the ball up onto a rooftop ledge behind a wall and ring the bell there' },
-  { emoji: '⚖️', title: 'The drawbridge', prompt: 'A seesaw drawbridge drops the ball down past a wall into the moat bucket round the corner' },
-  { emoji: '🚀', title: 'Launch day', prompt: 'A rocket launch: fire the ball over the hangar wall into the landing bucket far away' },
-  { emoji: '🔔', title: 'Double ring', prompt: 'Ring the bell twice in a temple with a wall around it' },
-  { emoji: '🎳', title: 'Strike!', prompt: 'Knock over two rows of dominoes in a bowling alley with a divider wall' },
-  { emoji: '🧀', title: 'Mouse trap', prompt: 'Get the cheese ball to the mouse in the far corner of the kitchen, past the counter wall' },
-  { emoji: '🛗', title: 'Going down', prompt: 'A parking garage: the ball goes down ramp by ramp, round the corners, into a bucket at the bottom' },
-  { emoji: '🏔️', title: 'Mountain pass', prompt: 'Carry the ball over the mountain wall and down into the village bell' },
-  { emoji: '🧪', title: 'The lab', prompt: 'A mad lab: the ball must cross the room, dodge the bench wall, and ring the alarm bell' },
-  { emoji: '🎪', title: 'Circus act', prompt: 'A circus act: the ball flies over the lion wall into the clown bucket on the other side of the ring' },
-  { emoji: '🧩', title: 'Three parts only', prompt: 'Use only three parts to ring the bell round the corner behind the wall' },
-  { emoji: '🐌', title: 'Slow motion', prompt: 'The slowest machine ever: a long domino chain that takes its time before the bell rings' },
-  { emoji: '🚂', title: 'Domino train', prompt: 'A long domino chain across the station platform rings the departure bell' },
+  { emoji: '🍕', title: 'Pizza express', prompt: 'Fire a pizza marble from a cannon over a river into an oven bucket' },
+  { emoji: '🌬️', title: 'A little wind', prompt: 'A fan blows the marble round a corner to ring a bell' },
+  { emoji: '🏰', title: 'Domino castle', prompt: 'A cannon launches the marble past a castle wall to topple dominoes and ring a bell' },
+  { emoji: '🐱', title: 'Wake the cat', prompt: 'Ring the bell beside a sleeping cat, using a ramp to turn the marble round a corner' },
+  { emoji: '🏀', title: 'Big bounce', prompt: 'A trampoline bounces a falling marble onward to a bell' },
+  { emoji: '🔔', title: 'Double chime', prompt: 'Use a fan to send the marble round a corner and ring the bell twice' },
+  { emoji: '⚖️', title: 'Tipping point', prompt: 'A seesaw tips a falling marble onward to a bell' },
+  { emoji: '🧩', title: 'Travel light', prompt: 'Use only three parts to ring the bell round a corner' },
+  { emoji: '🚂', title: 'Domino train', prompt: 'A cannon launches a marble into a long domino chain that rings the departure bell' },
 ];
 
 /** `n` cards starting at `offset`, wrapping around the deck. */
@@ -35,5 +28,14 @@ export function dealCards(offset: number, n = 3): PromptCard[] {
   return Array.from({ length: n }, (_, k) => CARDS[(offset + k) % CARDS.length]);
 }
 
-/** Changes to the mechanism; the ball and the goal parts are fixed, so none of these touch them. */
-export const EDIT_IDEAS = ['make it longer', 'swap the fan for a cannon', 'add a trampoline', 'make it ring the bell twice', 'add a seesaw before the dominoes'];
+/** Suggestions refer to parts that actually exist in the current machine. */
+export function editIdeas(parts: Part[]): string[] {
+  const ramp = parts.find((p) => p.kind === 'ramp');
+  const ball = parts.find((p) => p.kind === 'ball');
+  return [
+    ...(ramp ? [ramp.color?.toLowerCase() === '#ff7f50' ? 'paint the ramp sky blue' : 'paint the ramp coral'] : []),
+    `name the ball ${ball?.label === 'pizza' ? 'comet' : 'pizza'}`,
+    'add a trampoline',
+    ...(parts.some((p) => p.kind === 'bell') ? ['make the bell ring twice'] : []),
+  ];
+}

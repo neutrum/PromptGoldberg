@@ -1,132 +1,71 @@
-# Orbital Goldberg
+# Prompt Goldberg
 
-A gravity puzzle game. Aim a probe, bend it around planets, and trigger a cosmic chain reaction: skim the giant, then reach the ice world, then crash into its moon. Every level is a real N-body simulation, and every AI-made level is proven solvable by an optimizer before you play it. Victoria VR AI Builder Hackathon 2026 entry. See [`orbital-goldberg-mvp.md`](orbital-goldberg-mvp.md) for the product plan.
+Describe a marble machine, watch it work, then change it with words or rebuild the route yourself. A playful browser workshop for the Victoria VR AI Builder Hackathon 2026.
 
-## How it plays
+**The promise:** the prompt acts on the machine in front of you. Simple requests such as “add a fan” put that part in your hand: click to place it, then press Run. They never generate a different level. AI changes are checked before application; failed AI requests preserve your build and prompt. New and edited machines wait for you to press Run.
 
-- **Aim, launch, watch the chain.** Drag back from the glowing probe (or use the sliders / arrow keys) to set power, aim and launch time. A dotted line previews the first part of the path; the rest is the surprise. Numbered checkpoint rings light up with a chime as each goal step happens, time slows near every encounter, and a miss shows exactly where and by how much.
-- **Stars and par.** Solve within par shots for three stars. Previous shots stay as ghost trails.
-- **Build pieces.** Some levels let you drop a planet or gas giant onto an orbit to bend the path; pure build levels lock the shot so placing pieces is the whole puzzle.
-- **Tutorial.** Coach marks react to what you do (drag, launch, miss, win), with a separate lesson for placing pieces; `?` replays it.
-- **Race the machine.** Start the optimizer on the same level and compare its hundreds of simulations to your handful of shots.
-- **Hints and coach.** After two misses you get a direction ("a little more power"); an AI coach phrases it from the actual event log. A solution path costs a star.
+## Try it
 
-## Modes (replay value)
+1. Choose **Show me how**: place the highlighted ramp, then press **Run**.
+2. After it works, choose **Next: add a fan**, place the fan, and try your own variation.
+3. In the workshop, type `add a fan`, or pick a part in the side panel. R turns it; Escape cancels placement.
+4. Press **Run** to test your arrangement. **Undo** restores the previous edit. Try `paint the ramp coral` for an AI appearance change.
+5. Choose **New machine…** only when you want another scene. For example: `Fire a pizza marble from a cannon over a river into an oven bucket`.
 
-| Mode | Content source |
-| --- | --- |
-| Campaign | Hand-made levels with a difficulty curve (`packages/shared/src/levels`) |
-| Daily challenge | Procedurally generated from the UTC date, same for everyone; share your result |
-| Endless | Generated systems of rising difficulty with a shared shot budget; clearing a system refunds par shots |
-| Create with AI | Prompt -> Claude designs -> optimizer proves solvable (or asks Claude to redesign) -> play; remix by talking |
-| Community | Publish levels you beat; others play them, plays/clears/records are tracked |
-| Share links | A level travels whole inside the URL hash; no server needed |
-| Sandbox | The original simulator with JSON editing and the event log |
+Ten ready-made puzzles, a daily challenge, share links, and a community gallery extend the workshop. Progress is saved in this browser. The original orbital prototype remains at `/#orbital`; it is separate from the current entry.
 
-Progress (stars, best shots, daily results, endless best) is kept in the browser's localStorage.
+## Run locally
 
-## Layout
-
-```
-packages/shared   Pure TS used by browser worker and server
-  schema.ts       SystemSpec (bodies, placements, goal events, tunables) — zod, source of truth
-  init.ts         Kepler elements / launches / free states -> N-body state, timestep choice
-  sim.ts          Leapfrog KDK, fixed grid + automatic substeps in close encounters, merges
-  events.ts       Trace (approaches, bound spans, eclipses, escapes) + goal-independent event log
-  goal.ts         Ordered goal checker with continuous score and human-readable misses
-  optimizer.ts    Random scouting + Nelder–Mead over declared tunables
-  fixtures/       Hand-made systems: slingshot, eclipse, rogue moon theft
-  game/level.ts   Level schema (spec + player body + controls + par + pieces + solution), scoring
-  game/procgen.ts Seeded procedural levels for daily / endless, verified solvable
-  levels/         Campaign
-packages/ai       The AI level designer as one call, createLevel(); no server, UI or renderer code
-  index.ts        createLevel({prompt} | {level, instruction}, options) -> {level, solved, attempts, notes, usage}
-  pipeline.ts     Design -> optimizer proof -> redesign loop; starting sliders that miss
-  llm/            Claude API and Claude Code CLI backends, prompts, reply validation
-  solver.ts       Optimizer in worker_threads; coach.ts: miss tips
-  scripts/        eval.ts (prompt-set eval), solve.ts (one level from the command line)
-apps/web          Vite + React Three Fiber; simulation, optimizer and procgen run in Web Workers
-  game/           Game store, WebAudio synth sfx, hints, share links, API client
-  scene/          GameScene (flight playback + slow-mo), Aim (drag to aim, piece placement), Checkpoints, Effects
-  screens/        Menu, campaign, play HUD, create, community, sandbox
-apps/server       Fastify host around @og/ai: SSE streaming, rate limits, daily AI cap, prompt cache, gallery
-```
-
-Units: AU, years, solar masses (G = 4π²). Launch `speed` is departure speed once clear of the source body's gravity.
-
-## Develop
+Use Node.js 24 and npm. From the repository root:
 
 ```sh
-npm install
-npm run dev          # web app on http://localhost:5173
-npm run dev:server   # API on :8787 (proxied from the web app under /api)
-npm test             # physics, goal checker, optimizer, fixtures
+npm ci
+# Copy .env.example to .env and set ANTHROPIC_API_KEY for live AI.
+npm run dev:server   # Terminal 1: API on port 8787
+npm run dev          # Terminal 2: browser app on http://localhost:5173
+```
+
+The browser proxies `/api` to the server. The key stays on the server. With a key, the API backend is selected automatically; `LLM_BACKEND=api` makes that choice explicit. Without a key, development may use a local Claude Code login. In production without AI access, creation uses the disclosed offline keyword builder; natural-language editing requires AI. Ready-made puzzles and local physics still work.
+
+```sh
+npm test
 npm run typecheck
+npm run build
+npm start -w @og/server  # Serves the built app and API on port 8787
 ```
 
-Tune a fixture and write the solved numbers back:
+See [DESIGN.md](DESIGN.md) for UX decisions, [VALIDATION.md](VALIDATION.md) for verification results, [DEPLOY.md](DEPLOY.md) for hosting, [DEMO.md](DEMO.md) for a short demonstration and judge expectations, and [CREDITS.md](CREDITS.md) for assets and assistance.
+
+## What happens behind the prompt
+
+Claude interprets the request as a small route graph. A compiler places mechanisms using simulated trajectories, then runs the complete machine in Rapier. More complex requests use a full design, physics check, bounded placement search, and redesign loop. Edits first use compact operations against the current visible build, then fall back to a complete design if needed.
+
+AI creation checks explicit mechanism counts, their goal participation, bucket/bell finishes, repeat rings, and parts/time limits. Strict compilation does not remove requested mechanisms or ease those limits to manufacture a success. AI edit checks reject unchanged results and omitted explicit additions or repeated rings. These are targeted checks, not a complete natural-language correctness proof. Direct part additions are player construction: they remain untested until Run, and the player chooses whether the new part participates in the route.
+
+The browser receives progress over SSE. Intermediate drafts do not replace a working scene. A final verified machine is replayed from a physics trace produced in a Web Worker. The server independently reruns solved puzzles and compares trace hashes. Cancelled or failed AI requests preserve the previous scene.
+
+## The kit and its limits
+
+The kit has one marble, ramps, shelves, walls, dominoes, seesaws, fans, trampolines, cannons, buckets, and bells, plus raised ground and ditches. A pizza is a named marble; an oven is a named bucket. Optional [Tripo custom looks](docs/TRIPO.md) generate cosmetic models for marbles, fans, bells, walls and dominoes: preview, apply, Run, Undo. Physics remains defined by the tested kit. Arbitrary new mechanics and fluid simulation are unsupported.
+
+Complex combinations can fail. Multiple marbles are unsupported. The timed challenge parser supports up to 14 seconds. Editing keeps the start, existing goal parts, and terrain fixed; use New machine for a different setting. A physically valid result does not establish every subjective aspect of a prompt, such as “the funniest” or “the slowest possible”. The interface discloses substitutions supplied by the designer and all offline builds.
+
+## Repository
+
+| Directory | Responsibility |
+| --- | --- |
+| `packages/machine` | Shared schemas, kit geometry, Rapier simulation, ordered goals, route compiler, puzzle construction, built-in levels |
+| `packages/ai/src/machine` | Route/design prompts, edit operations, requirement checks, physics worker orchestration |
+| `apps/web/src/machine` | Workshop UI, placement controls, 3D playback, state, streaming client |
+| `apps/server` | Fastify API, live AI, daily puzzles, verified gallery, rate limits and storage |
+| `packages/shared`, other web screens | Earlier orbital prototype |
+
+Key endpoints are `POST /api/machine`, `POST /api/machine/edit`, `POST /api/machine/verify`, `POST /api/machine/puzzle`, `GET /api/machine/daily`, and `/api/machines`. Public create/edit endpoints always verify even if a client sends `verify:false`. The package API retains an explicit design-only option for experiments; the workshop does not use it.
+
+The prompt evaluation script reports verification, measurable unmet requirements, timing, and model usage:
 
 ```sh
-npx tsx packages/shared/scripts/tune-fixture.ts packages/shared/src/fixtures/slingshot.json --budget 2000 --write
+npm run eval:machine -w @og/ai -- --only 3,9,11 --out results.json
 ```
 
-### AI backend
-
-All AI logic lives in `packages/ai` behind a single call, so the server, the scripts and any other client use it the same way:
-
-```ts
-import { createLevel } from '@og/ai';
-const { level, solved } = await createLevel({ prompt: 'A comet crashes into the moon' }, { onEvent: console.log });
-const harder = await createLevel({ level, instruction: 'make it harder' });
-```
-
-The result is plain level data (spec, controls, par, proven solution); rendering it is up to the caller.
-
-Two LLM backends, chosen in `packages/ai/src/llm/client.ts` (or per call with `llm: 'api' | 'cli'`):
-
-- **`cli` (dev only, default without a key):** runs the local Claude Code CLI headless (`claude -p`), so development uses your own Claude Code login. Refused when `NODE_ENV=production`.
-- **`api`:** the Claude API via `@anthropic-ai/sdk`; used automatically once `ANTHROPIC_API_KEY` is set. Required for the hosted demo.
-
-Copy `.env.example` to `.env` to override (`LLM_BACKEND`, `CLAUDE_MODEL`, `CLAUDE_COACH_MODEL`, rate limits, ...).
-
-**Repair loop** (`packages/ai/src/pipeline.ts`): the LLM designs a level (system + briefing + tip + player body) -> the optimizer searches all tunables (600 evals / 12 s, in a `worker_threads` worker so the stream keeps flowing) -> on a miss the LLM redesigns from the goal checker's miss notes, up to 3 designs. A solved level must then be forgiving: at least half of ±0.5% nudges to each control must still win (`forgiving.ts`). If not, the goal is loosened (wider flyby windows, bigger collision targets, as long as random shots still mostly miss), and if that is not enough the LLM redesigns it with the near-miss notes. The level's `solution` holds the proven control values; the starting sliders are the LLM's original guess if it misses, otherwise a nudge away from the solution that is checked to miss.
-
-**Progressive levels:** nobody waits for the whole loop. `createLevel`'s `onEvent` (and the SSE stream) sends a playable `draft` as soon as each design is valid (about 15 s) and again once it is proven, then the final `level`. The game opens the first draft right away with a status line ("Draft: the AI is still proving this level…" → "✓ Proven winnable"). Later versions of the same design update it in place, keeping the player's shots. A redesign is swapped in only if the player has not touched it yet; otherwise it is offered with a Switch button. A proven version is never replaced by an unproven one.
-
-Try it without HTTP: `npm run solve -w @og/ai -- "A comet swings past the gas giant and crashes into its moon"`.
-
-Eval on a fixed set of 10 prompts (solve rate, time, how often random shots win, how often small nudges off the solution still win): `npm run eval -w @og/ai -- [--edits] [--out results.json]`.
-
-### API
-
-Wire types live in `packages/shared/src/game/api.ts`.
-
-| Endpoint | |
-| --- | --- |
-| `POST /api/level {prompt}` | SSE stream of `LevelStreamEvent`: `stage` (designing / verifying / redesigning), `progress`, `draft` (playable version: `designed`, then `solved`, per design `attempt`), then the final `level` (`solved`, `cached`) or `error`. Solved levels are cached by normalized prompt hash under `DATA_DIR/cache`. |
-| `POST /api/edit {level, instruction}` | Same stream, first stage `editing`. Keeps the player body and its controls. |
-| `POST /api/coach CoachRequest` | `{tip}`: rule-based tip (failed step, closeness, direction toward the known solution, never numbers), rephrased by `CLAUDE_COACH_MODEL` when it answers within 8 s. |
-| `GET /api/gallery?sort=new\|top&limit=N` | `{items: GalleryItem[]}` |
-| `GET /api/gallery/:id` | `GalleryItem & {level}` |
-| `POST /api/gallery {level, author?}` | Publishes a level; its `solution` is replayed server-side and must clear it. |
-| `POST /api/gallery/:id/result {cleared, shots}` | Counts plays, clears and best shots. |
-| `POST /api/design`, `POST /api/check` | Sandbox: prompt -> system, headless simulate + goal check. |
-| `GET /api/health` | LLM backend, solver mode, gallery size, LLM calls today. |
-
-SSE errors (bad input 400, rate limit 429, no backend or daily cap 503) are sent as an `error` event with the matching status. Gallery data is one JSON file (`DATA_DIR/gallery.json`, default `<repo>/data`), written atomically.
-
-Hosted-demo protection: per-IP limits on LLM endpoints (`RATE_LIMIT_PER_MIN`=6, `RATE_LIMIT_PER_DAY`=40), a global `DAILY_LLM_CALL_CAP`, prompt length caps, publish/result limits. Set `TRUST_PROXY=1` behind a reverse proxy.
-
-## Milestones
-
-- [x] Scaffold, simulation, renderer, hand-written systems, goal checker (all five event types), event log + timeline, optimizer
-- [x] Prompt -> schema with Claude, validation + auto-fix (API or dev-only CLI backend)
-- [ ] 10 test prompts eval script
-- [x] Repair loop over SSE (optimizer first, LLM redesign second), solver worker threads
-- [x] Coach tips and talk-to-edit
-- [ ] Curveball prompts
-- [x] Rate limits, caching, budget cap, community gallery
-- [x] Game loop: aim/launch/checkpoints/stars, sound, ghosts, hints, race the machine, build pieces
-- [x] Replayability: campaign, daily, endless, AI levels, remix, share links, community gallery
-- [x] Interactive tutorial; 10-level campaign with pure build levels
-- [ ] Two-piece build levels, mobile touch polish, deploy
+This makes live model calls when configured. It does not measure player enjoyment. Server limits, storage, and model overrides are documented in `.env.example`. Persist `DATA_DIR` when hosting to retain community levels and daily results.

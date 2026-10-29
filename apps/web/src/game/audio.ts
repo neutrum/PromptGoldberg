@@ -1,7 +1,8 @@
 /** Tiny WebAudio synth: every sound is generated, so there are no audio assets to license. */
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let muted = false;
+let muted = (() => { try { return localStorage.getItem('pg.sound') === 'off'; } catch { return false; } })();
+export const isMuted = () => muted;
 
 function ac(): AudioContext | null {
   if (muted) return null;
@@ -21,6 +22,7 @@ function ac(): AudioContext | null {
 
 export function setMuted(m: boolean) {
   muted = m;
+  try { localStorage.setItem('pg.sound', m ? 'off' : 'on'); } catch { /* private mode */ }
   if (m && ctx) void ctx.suspend();
 }
 
@@ -87,104 +89,11 @@ export const sfx = {
   star: (i: number) => tone(880 * Math.pow(1.26, i), 0, 0.35, 'sine', 0.2),
   place: () => tone(220, 0, 0.25, 'sine', 0.3, 440),
   click: () => tone(660, 0, 0.06, 'triangle', 0.08),
-  // Prompt Goldberg's parts: a baked sample when one is loaded (see loadSamples), else a synth stand-in.
-  cannon: () => sample('cannon') || (noise(0, 0.35, 0.8, 1800, 80), tone(90, 0, 0.3, 'sine', 0.4, 40)),
-  boing: () => sample('boing') || tone(180, 0, 0.35, 'sine', 0.3, 520),
-  ding: () => sample('ding') || (tone(1318.5, 0, 1.2, 'sine', 0.25), tone(2637, 0, 0.6, 'sine', 0.06)),
-  plop: () => sample('plop') || tone(300, 0, 0.18, 'sine', 0.3, 120),
-  clack: () => sample('clack') || noise(0, 0.05, 0.4, 3000, 1500),
-  whoosh: () => sample('whoosh') || noise(0, 0.6, 0.35, 400, 1600),
-};
-
-/** Sound effects baked once (ElevenLabs, see CREDITS.md) and served from /sfx; missing files fall back to the synth. */
-const SAMPLE_NAMES = ['cannon', 'boing', 'ding', 'plop', 'clack', 'whoosh'] as const;
-const samples = new Map<string, AudioBuffer>();
-const lastPlayed = new Map<string, number>();
-let loading: Promise<void> | null = null;
-
-export function loadSamples(): Promise<void> {
-  return (loading ??= (async () => {
-    const c = ac();
-    if (!c) return;
-    await Promise.all(SAMPLE_NAMES.map(async (name) => {
-      try {
-        const res = await fetch(`/sfx/${name}.mp3`);
-        if (!res.ok) return;
-        samples.set(name, await c.decodeAudioData(await res.arrayBuffer()));
-      } catch {
-        // No sample: the synth plays instead.
-      }
-    }));
-  })());
-}
-
-/** Play a baked sample; false when there is none (or it just played: a domino row is one clatter, not twenty). */
-function sample(name: string): boolean {
-  const c = ac();
-  const buf = samples.get(name);
-  if (!c || !master || !buf) {
-    if (c && !loading) void loadSamples();
-    return false;
-  }
-  const now = performance.now();
-  if (now - (lastPlayed.get(name) ?? 0) < 90) return true;
-  lastPlayed.set(name, now);
-  const src = c.createBufferSource();
-  src.buffer = buf;
-  const g = c.createGain();
-  g.gain.value = 0.8;
-  src.connect(g).connect(master);
-  src.start();
-  return true;
-}
-
-/**
- * The engineer: short spoken lines at the moments that matter (a level starts, a run fails or
- * works, a hint). Baked once with ElevenLabs (see CREDITS.md) into /voice/<moment>-<n>.mp3,
- * fetched on first use, one line at a time, and off with the speech toggle.
- */
-export const VOICE_LINES = {
-  start: 4, build: 2, miss: 6, solve: 6, stars: 3, hint: 3, broke: 2, giveup: 2, daily: 1, board: 1, publish: 1,
-} as const;
-export type VoiceMoment = keyof typeof VOICE_LINES;
-
-const VOICE_KEY = 'pg.voice';
-let voiceOn = (() => { try { return localStorage.getItem(VOICE_KEY) !== '0'; } catch { return true; } })();
-const voiceCache = new Map<string, Promise<AudioBuffer | null>>();
-const lastLine = new Map<VoiceMoment, number>();
-let speakingUntil = 0;
-
-export const voice = {
-  get on() { return voiceOn; },
-  set(on: boolean) {
-    voiceOn = on;
-    try { localStorage.setItem(VOICE_KEY, on ? '1' : '0'); } catch { /* private mode */ }
-  },
-  /** Say a line for this moment (never the same one twice running, never over another line). */
-  say(moment: VoiceMoment, delayS = 0) {
-    const c = ac();
-    if (!voiceOn || !c || !master) return;
-    if (c.currentTime < speakingUntil) return;
-    const n = VOICE_LINES[moment];
-    let k = 1 + Math.floor(Math.random() * n);
-    if (n > 1 && k === lastLine.get(moment)) k = (k % n) + 1;
-    lastLine.set(moment, k);
-    const name = `${moment}-${k}`;
-    if (!voiceCache.has(name)) {
-      voiceCache.set(name, fetch(`/voice/${name}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? c.decodeAudioData(b) : null)).catch(() => null));
-    }
-    // Hold the slot while the line loads, so two moments in a row do not talk over each other.
-    speakingUntil = c.currentTime + 1;
-    void voiceCache.get(name)!.then((buf) => {
-      if (!buf || !master || !voiceOn) return;
-      const at = Math.max(c.currentTime, c.currentTime + delayS);
-      speakingUntil = at + buf.duration;
-      const src = c.createBufferSource();
-      src.buffer = buf;
-      const g = c.createGain();
-      g.gain.value = 1.4;
-      src.connect(g).connect(master);
-      src.start(at);
-    });
-  },
+  // Original procedural sounds: no recordings, external assets, or network requests.
+  cannon: () => (noise(0, 0.35, 0.8, 1800, 80), tone(90, 0, 0.3, 'sine', 0.4, 40)),
+  boing: () => tone(180, 0, 0.35, 'sine', 0.3, 520),
+  ding: () => (tone(1318.5, 0, 1.2, 'sine', 0.25), tone(2637, 0, 0.6, 'sine', 0.06)),
+  plop: () => tone(300, 0, 0.18, 'sine', 0.3, 120),
+  clack: () => noise(0, 0.05, 0.4, 3000, 1500),
+  whoosh: () => noise(0, 0.6, 0.35, 400, 1600),
 };

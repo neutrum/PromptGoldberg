@@ -1,4 +1,4 @@
-import { routeParts, rulesOf, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { routeParts, ruleProblems, rulesOf, type Rules, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -6,6 +6,7 @@ import { designMachine, difficultyOf, editMachineDesign, editMachineRequest, pic
 import type { Physics } from './physics';
 import { designRoute, routable, routeFromWords } from './route';
 import { editByOps } from './editOps';
+import { editProblems, missionProblems, unsupportedRequest } from './intent';
 import type { RouteGraph, RouteGraphInput } from '@og/machine';
 
 export type MachineEvent = Extract<MachineStreamEvent, { type: 'machine' }>;
@@ -42,6 +43,9 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
   request: string;
   /** What every reply must satisfy, redesigns included (edits keep the ball and goal parts fixed). */
   validate?: (json: unknown) => Validation<MachineDesign>;
+  rules?: Rules;
+  mission?: string;
+  requirements?: (spec: MachineSpec) => string[];
 }): Promise<MachineEvent> {
   const { maxAttempts, signal } = deps;
   const calls: Completion[] = [];
@@ -49,6 +53,10 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
   let best: (Attempt & { attempt: number }) | null = null;
   let last: Attempt | null = null;
   let attempts = 0;
+  const complete = (a: Pick<Attempt, 'spec' | 'result'>) => a.result.success
+    && !ruleProblems(a.spec.rules, a.result, routeParts(a.spec).length).length
+    && (!loop.mission || !missionProblems(loop.mission, a.spec).length)
+    && !loop.requirements?.(a.spec).length;
   const outOfTime = () => deps.deadline !== undefined && Date.now() > deps.deadline;
   const sketcher = (attempt: number) => {
     let sent = -1;
@@ -77,7 +85,7 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
       emit({ type: 'stage', stage: 'redesigning', attempt, maxAttempts, message: `Not working yet (${failed?.note ?? 'goal missed'}). Asking for a fix.` });
       try {
         design = await redesignMachine(deps.llm, {
-          request: loop.request, previous: prev.spec, result: prev.result, events: prev.events, evals: prev.evals,
+          request: `${loop.request}\nRequirements still unmet: ${[...ruleProblems(prev.spec.rules, prev.result, routeParts(prev.spec).length), ...(loop.mission ? missionProblems(loop.mission, prev.spec) : []), ...(loop.requirements?.(prev.spec) ?? [])].join(' ')}`, previous: prev.spec, result: prev.result, events: prev.events, evals: prev.evals,
         }, calls, sketcher(attempt), loop.validate);
       } catch (err) {
         if (signal?.aborted) throw err;
@@ -86,15 +94,15 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
       }
     }
     attempts = attempt;
-    const spec = design.spec;
+    const spec = loop.rules ? { ...design.spec, rules: loop.rules } : design.spec;
     emit({ type: 'draft', machine: spec, status: 'designed', attempt });
 
     emit({ type: 'stage', stage: 'verifying', attempt, maxAttempts, message: 'Running the machine.' });
     const first = await deps.physics.check(spec, { signal });
     let current: Attempt = { design, spec, result: first.result, moved: [], evals: 1, events: first.events };
-    if (first.result.success) {
+    if (complete(current)) {
       notes.push(`Design ${attempt}: worked on the first run.`);
-    } else {
+    } else if (!first.result.success) {
       const goalLength = spec.goal.length;
       emit({ type: 'stage', stage: 'nudging', attempt, maxAttempts, message: `Almost: ${first.result.steps.find((s) => !s.satisfied)?.note ?? 'goal missed'}. Nudging parts.` });
       emit({ type: 'progress', attempt, evals: 1, bestScore: first.result.score, goalLength });
@@ -109,15 +117,15 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
         : `Design ${attempt}: still fails after ${nudged.evals} runs; ${nudged.result.steps.find((s) => !s.satisfied)?.note ?? 'goal missed'}.`);
     }
     last = current;
-    if (!best || current.result.score > best.result.score) best = { ...current, attempt };
-    if (current.result.success) {
+    if (!best || complete(current) || current.result.score > best.result.score) best = { ...current, attempt };
+    if (complete(current)) {
       emit({ type: 'draft', machine: current.spec, status: 'solved', attempt, result: current.result });
       break;
     }
   }
   if (!best) throw new SolverError('no design to build a machine from');
   return {
-    type: 'machine', machine: best.spec, solved: best.result.success, attempts, notes, cached: false,
+    type: 'machine', machine: best.spec, solved: complete(best), verified: complete(best), attempts, notes, cached: false,
     result: best.result, moved: best.moved, attempt: best.attempt,
   };
 }
@@ -167,16 +175,17 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   // A challenge in the mission ("only three parts", "make it last"): the compiled route keeps it,
   // so a parts limit leaves room for the start ramp and one part per link.
   const rules = rulesOf(prompt);
-  const fit = (gr: RouteGraphInput): RouteGraphInput => (rules?.maxParts && gr.links.length > rules.maxParts - 1 ? { ...gr, links: gr.links.slice(0, Math.max(1, rules.maxParts - 1)) } : gr);
-  // The graph as written, then shorter (a third link rarely fits the stage), then from the
-  // mission's words with the AI's names and title: each is laid out in a second or two.
+  // Try another layout, then the mission's mechanisms with the AI's names and title.
+  // Strict compilation and the requirement check reject dropped links or changed finishes.
   const words = routeFromWords(prompt, seed);
-  const tries: RouteGraphInput[] = [graph, graph, ...(g.links.length > 1 ? [{ ...graph, links: g.links.slice(0, g.links.length - 1) }] : []), { ...graph, links: words.links, end: g.end }].map(fit);
+  const tries: RouteGraphInput[] = [graph, graph, { ...graph, links: words.links, end: g.end }];
   for (const [k, attempt] of tries.entries()) {
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, signal: deps.signal });
+    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, signal: deps.signal });
     if (!res) continue;
-    const spec: MachineSpec = opts.note ? { ...res.spec, closest: res.spec.closest ?? opts.note } : res.spec;
+    const notes = [opts.note, res.spec.closest, k === 2 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
+    const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined };
+    if (missionProblems(prompt, spec).length) continue;
     const check = await deps.physics.check(spec, { signal: deps.signal });
     if (!check.result.success) continue;
     emit({ type: 'draft', machine: spec, status: 'solved', attempt: 1, result: check.result });
@@ -185,12 +194,14 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
       notes: [`Route graph (${g.links.map((l) => `${l.via} ${l.turn ?? 'straight'}`).join(', ')} -> ${g.end}${res.adapted ? `, adapted to ${res.adapted}` : ''}) laid out in ${res.tries} layout(s), ${res.sims} runs.`],
     };
   }
-  throw new SolverError('the route could not be laid out');
+  throw new SolverError('I couldn’t verify a route that keeps all of those requirements. Try one or two mechanisms and a bucket or bell finish.');
 }
 
 /** A level with no AI at all: the compiler builds one from the mission's words (the AI is down or out of budget). */
 export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'>, prompt: string, emit: Emit): Promise<MachineEvent> {
-  return routeLevel(deps, prompt, emit, { graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'The AI designer is resting, so this level was built straight from your words.' });
+  const unsupported = unsupportedRequest(prompt);
+  if (unsupported) return Promise.reject(new SolverError(unsupported));
+  return routeLevel(deps, prompt, emit, { graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'Offline builder: AI is unavailable. This verified route uses the mechanisms and keywords in your request.' });
 }
 
 /**
@@ -199,14 +210,12 @@ export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal
  */
 function withChallenge(design: MachineDesign, prompt: string): MachineDesign {
   const rules = rulesOf(prompt);
-  if (!rules?.maxParts) return design;
-  const need = routeParts(design.spec).length;
-  const maxParts = Math.max(rules.maxParts, need);
-  const note = maxParts > rules.maxParts ? `Challenge eased: this level's route needs ${need} parts, so the limit is ${need}.` : undefined;
-  return { ...design, spec: { ...design.spec, rules: { maxParts }, closest: [design.spec.closest, note].filter(Boolean).join(' ') || undefined } };
+  return rules ? { ...design, spec: { ...design.spec, rules } } : design;
 }
 
 export async function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
+  const unsupported = unsupportedRequest(prompt);
+  if (unsupported) throw new SolverError(unsupported);
   if (routeOn() && routable(prompt)) {
     try {
       return await routeLevel(deps, prompt, emit);
@@ -221,6 +230,8 @@ export async function generateMachine(deps: MachinePipelineDeps, prompt: string,
     firstMessage: 'Designing a level for your idea.',
     design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => withChallenge(await designMachine(deps.llm, prompt, calls, onProgress, { twist, bin: opts.verify === false }), prompt),
     request: `Design a machine for this request:\n\n${prompt}`,
+    mission: prompt,
+    rules: rulesOf(prompt),
     validate: (json: unknown) => validateMachineDesign(json, { flat: wantsFlat(prompt), difficulty: difficultyOf(prompt) }),
   };
   return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);
@@ -243,6 +254,8 @@ export function editMachine(deps: MachinePipelineDeps, machine: MachineSpec, ins
       return editMachineDesign(deps.llm, machine, instruction, calls, onProgress);
     },
     request: editMachineRequest(machine, instruction),
+    rules: machine.rules || rulesOf(instruction) ? { ...machine.rules, ...rulesOf(instruction) } : undefined,
+    requirements: (spec: MachineSpec) => editProblems(instruction, machine, spec),
     validate: validateMachineEdit(machine),
   };
   return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);

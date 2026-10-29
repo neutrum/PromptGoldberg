@@ -45,13 +45,10 @@ describe('the route-graph fast path', () => {
     expect(routeFromWords('a long domino chain across the hall', 1)).toMatchObject({ end: 'dominoes', row: 14 });
   });
 
-  it('keeps a challenge: a parts limit the route fits, an honest bar for a slow run', async () => {
+  it('keeps a parts limit and refuses a timed challenge it cannot verify', async () => {
     const few = await createMachineOffline('use only three parts to ring the bell round the corner', { physics: createPhysics('inline') });
     expect(few.machine.rules?.maxParts).toBe(3);
-    const slow = await createMachineOffline('make it take longer than 10 seconds to knock the dominoes over', { physics: createPhysics('inline') });
-    expect(slow.machine.rules?.minSeconds).toBeGreaterThan(0);
-    expect(slow.machine.rules!.minSeconds!).toBeLessThanOrEqual(10);
-    if (slow.machine.rules!.minSeconds! < 10) expect(slow.machine.closest).toMatch(/Challenge eased/);
+    await expect(createMachineOffline('make it take longer than 14 seconds to knock the dominoes over', { physics: createPhysics('inline') })).rejects.toThrow(/requirements/);
   }, 60_000);
 
   it('builds a level from the mission\'s words with no AI at all, and says so', async () => {
@@ -59,7 +56,7 @@ describe('the route-graph fast path', () => {
     expect(routeFromWords('ring the church bell across the river', 2).end).toBe('bell');
     const res = await createMachineOffline('knock over the dominoes behind the castle wall', { physics: createPhysics('inline') });
     expect(res.solved).toBe(true);
-    expect(res.machine.closest).toMatch(/resting/);
+    expect(res.machine.closest).toMatch(/Offline builder: AI is unavailable/);
     expect(res.usage).toEqual([]);
   }, 30_000);
 });

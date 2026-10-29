@@ -44,6 +44,8 @@ export type RouteGraph = z.infer<typeof RouteGraph>;
 export type RouteGraphInput = z.input<typeof RouteGraph>;
 
 export interface CompileOptions {
+  /** Preserve the requested links, ending, ring count and challenge limits. */
+  strict?: boolean;
   seed?: number;
   /** Layouts to try before giving up (default 24). */
   attempts?: number;
@@ -149,6 +151,11 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
   let sims = 0;
   const run = (spec: MachineSpec) => { sims++; return simulateSync(spec, { record: true }); };
   const links = withTurn(graph.links, rand() < 0.5 ? 'left' : 'right');
+  if (opts.strict) {
+    let next = 0;
+    for (const link of links) if (link.via === graph.links[next]?.via) next++;
+    if (next !== graph.links.length) return null;
+  }
   // A link that needs a falling ball after one that leaves it rolling is left out: say so.
   const dropped = graph.links.filter((l) => (l.via === 'seesaw' || l.via === 'trampoline') && !links.some((k) => k.via === l.via));
   if (dropped.length && !graph.closest) {
@@ -162,10 +169,19 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
     const spec = layOut(graph, links, rand, run, opts);
     if (!spec) continue;
     if (!opts.rules) return { spec, tries: tryNo, sims };
+    if (opts.strict) {
+      const t = finishTime(evaluateMachine(spec.goal, run(spec))) ?? 0;
+      if ((opts.rules.maxParts === undefined || routeParts(spec).length <= opts.rules.maxParts)
+        && (opts.rules.minSeconds === undefined || t >= opts.rules.minSeconds)) {
+        return { spec: { ...spec, rules: opts.rules }, tries: tryNo, sims };
+      }
+      continue;
+    }
     const kept = withRules(spec, opts.rules, run);
     if (kept.ok) return { spec: kept.spec, tries: tryNo, sims };
     eased ??= kept.spec;
   }
+  if (opts.strict) return null;
   if (eased) return { spec: eased, tries: attempts, sims };
   const ruled = (spec: MachineSpec) => (opts.rules ? withRules(spec, opts.rules, run).spec : spec);
   let tries = attempts;
@@ -235,9 +251,9 @@ function withTurn(links: RouteLink[], turn: 'left' | 'right'): RouteLink[] {
 
 const ADAPT: Record<RouteGraph['end'], RouteGraph['end'][]> = { bucket: ['dominoes', 'bell'], bell: ['dominoes'], dominoes: ['bell'] };
 const ADAPT_NOTE: Record<RouteGraph['end'], string> = {
-  bucket: 'A bucket would not catch the ball on this route, so the finish is a bell to ring instead.',
-  bell: 'The bell sits at the end of a row of dominoes: knock them over to ring it.',
-  dominoes: 'The dominoes would not fall on this route, so the finish is a bell the ball rings itself.',
+  bucket: 'This version finishes with the ball landing in a bucket instead.',
+  bell: 'This version finishes with the ball ringing a bell directly instead.',
+  dominoes: 'This version finishes with a row of dominoes that rings a bell instead.',
 };
 
 const why = (r: string) => { if (process.env.COMPILE_DEBUG) console.log('  layout:', r); return null; };
@@ -274,7 +290,9 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   const goal: MachineGoal[] = [];
   /** An id no part has yet: "wall", then "wall2", "wall3"... */
   const fresh = (base: string) => { let out = base; for (let k = 2; parts.some((p) => p.id === out); k++) out = `${base}${k}`; return out; };
-  const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, terrain: terrain.length ? [...terrain] : undefined, parts: [...parts], goal: [...goal], duration: 15 });
+  const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, terrain: terrain.length ? [...terrain] : undefined,
+    parts: parts.map((p) => ({ ...p, label: p.kind === 'ball' ? names.ball : p.kind === 'bucket' || p.kind === 'bell' ? names.target : p.kind === 'wall' && p.fixed ? names.scenery : p.label })),
+    goal: [...goal], duration: 15 });
 
   let samples = track(run(spec()));
   let after = 0;

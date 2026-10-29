@@ -79,7 +79,8 @@
       "x": 8,
       "y": 1,
       "z": 14,
-      "yaw": 0
+      "yaw": 0,
+      "label": "cat bell"
     },
     {
       "id": "catshelf",
@@ -108,7 +109,14 @@
     }
   ],
   "duration": 14,
-  "spares": [{ "kind": "fan" }, { "kind": "trampoline" }],
+  "spares": [
+    {
+      "kind": "fan"
+    },
+    {
+      "kind": "trampoline"
+    }
+  ],
   "level": {
     "emoji": "🐱",
     "name": "Wake the cat",
