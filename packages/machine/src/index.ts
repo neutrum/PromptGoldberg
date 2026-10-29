@@ -14,3 +14,4 @@ export * from './names';
 export * from './terrain';
 export * from './compile';
 export * from './rules';
+export * from './landscape';

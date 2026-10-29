@@ -1,13 +1,32 @@
-# Next — 2026-10-29
+# Handoff — Done / To do (updated 2026-10-29)
 
-Done today: Tripo part kit thumbnails in the Parts panel; wooden workbench scene (stone plinth, posts under raised parts, edge scenery); terrain and stage size by prompt (`ground`, `flatten`, `stage` edit ops; the ground may change except under the ball and goal parts); per-machine stage 12–32 cells; Settings (stage size for new machines, five theme presets plus custom interface and scene colours, saved in the browser).
+Kept current with every commit so work can be handed between agents and compared. Older milestone notes further down are history.
 
-Player brief (given earlier to ChatGPT), still to do:
+## Done
+
+2026-10-29 (Claude Code)
+- [x] Committed the ChatGPT/Codex workshop revision (local part placement, verified create/edit, Tripo looks, Tripo-generated part kit `apps/web/public/models/kit-v1`). Superseded GLBs moved to ignored `data/model-kit/superseded/`; duplicate reference ZIP ignored; CREDITS corrected for the bundled kit.
+- [x] Parts panel thumbnails generated (`models/kit-v1/thumbs/*.webp`); they were missing, every tile showed a broken image.
+- [x] Wooden workbench scene: stone plinth, posts under raised parts, trees and rocks off the board. Visual only.
+- [x] Stage size per machine (`MachineSpec.stage`, 12–32 cells, default 24): schema checks, compiler, sim floor, nudge, placement, scene. Verified: compile tests on 16×16 and 32×28; live AI creation on 16×16.
+- [x] Terrain by prompt: edit ops `ground`, `flatten`, `stage`. The ground may change except under the ball and goal parts; parts on reshaped ground follow it; an edit no longer has to keep an obstacle the player removed. Verified live: "fill in the river", "raise a small hill near the start", "make the stage 20 by 20 and dig a small pond in the far corner".
+- [x] Worlds by prompt (`MachineSpec.landscape`, looks only): name, palette, 3–6 features (conifers, broadleaf, birches, palms, cacti, bushes, flowers, mushrooms, reeds, rocks, boulders, hills, mountains, lake, snowdrifts), snow. Written by the AI on creation (route graph and full designer) and edits (`landscape` / `clearLandscape` ops); keyword fallback (`landscapeFromWords`) for offline creation or when the AI leaves it out. Seeded scatter on the apron, tall things behind the board only; instanced rendering. Verified live: "Create a terrain that looks like forests and hills in british columbia" → verified edit in 6.7 s, screenshot checked.
+- [x] Settings (••• → Settings): stage size for new machines, five theme presets, custom interface and scene colours, grid / scenery / machine-world toggles; saved in the browser, sanitised on load.
+- Tests: 227 passing across 30 files; typecheck clean.
+
+## To do
+
+Player brief (given earlier to ChatGPT, recovered 2026-10-29):
 - [ ] Interface after the reference image in docs/ (as a reference, not a copy). The available parts are already in the right vertical panel.
 - [ ] First run self-explanatory for players and judges: tooltip tutorial and visible cues that each step went as it should. A 4-step quick start exists; audit it against a fresh visit.
 - [ ] A structured prompt handbook so writing prompts is fun, with generated example images.
-- [ ] Denser scenes: random decoy objects so the route is not obvious, probably in later levels or a harder difficulty.
+- [ ] Denser scenes: random decoy objects so the route is not obvious, probably in later levels or a harder difficulty. Landscape props currently stay off the board on purpose.
+
+Follow-ups from 2026-10-29:
 - [ ] Remaining interface panels still use fixed colours; move them onto the theme variables.
+- [ ] Landscape on the board itself (trees between parts) needs colliders or a no-go rule first, or the ball will pass through scenery.
+- [ ] README/DEMO: describe stage size, terrain edits, worlds and Settings.
+- [ ] Not yet checked: real touch devices, Safari, the public deployment.
 
 # Current workshop revision — 2026-10-27
 

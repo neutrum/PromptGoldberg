@@ -29,6 +29,7 @@ THE GRAPH
 - names: the mission's words for the target ("oven", "gong"), the wall ("guard", "fence"), the ground block ("lava", "moat") and the ball ("pizza", "cheese"); 1 or 2 words each.
 - spares: 2 or 3 extra kinds for the bin that the route does not use (ramp, platform, fan, trampoline, wall, cannon), so the player has to think.
 - title: 2 to 5 playful words from the mission. caption: one sentence for players, what should happen, no numbers.
+- landscape: when the mission names a place or a look ("forests and hills in British Columbia", "a desert canyon", "a snowy village"), the world around the board: a name, a palette of six-digit hex colours true to that place, and 3 to 6 features (conifers, broadleaf, birches, palms, cacti, bushes, flowers, mushrooms, reeds, rocks, boulders, hills, mountains, lake, snowdrifts) with an amount (few, some, many). Looks only. Leave it out when the mission names no place.
 - closest: only when the mission asks for something the kit cannot do (an elephant, water flowing, two balls, a moving target): one honest, friendly sentence saying what you built instead. Leave it out otherwise.
 
 VARIETY: pick links from the mission's words; when it names no mechanism, prefer a fan or a ramp turn over a cannon, and mix the ending. Any mission works: reinterpret playfully (a pizza delivery is a ball called "pizza" landing in a bucket called "oven").

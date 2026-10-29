@@ -1,4 +1,4 @@
-import { routeParts, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { landscapeFromWords, routeParts, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -184,7 +184,8 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
     const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, signal: deps.signal });
     if (!res) continue;
     const notes = [opts.note, res.spec.closest, k === 2 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
-    const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined };
+    const world = res.spec.landscape ?? landscapeFromWords(prompt) ?? undefined;
+    const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined, ...(world ? { landscape: world } : {}) };
     if (missionProblems(prompt, spec).length) continue;
     const check = await deps.physics.check(spec, { signal: deps.signal });
     if (!check.result.success) continue;

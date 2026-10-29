@@ -32,6 +32,14 @@ describe('edits as diff ops', () => {
     expect(flat.spec.stage).toBeUndefined();
     expect(applyOps(level, { ops: [{ op: 'flatten', name: 'volcano' }] }).problems[0]).toMatch(/no ground named "volcano"/);
   });
+  it('dresses the world around the board without moving a part, and clears it again', () => {
+    const world = { name: 'British Columbia', sky: '#9ec8e0', ground: '#4e6b3a', land: '#3f7a3a', rock: '#7a7f86', water: '#2f6f9f', foliage: '#1f5a2a', accent: '#c9b27a', features: [{ kind: 'conifers' as const, amount: 'many' as const }], snow: true };
+    const { spec, problems } = applyOps(level, { ops: [{ op: 'landscape', ...world }] });
+    expect(problems).toEqual([]);
+    expect(spec.landscape).toEqual(world);
+    expect(spec.parts).toEqual(level.parts);
+    expect(applyOps(spec, { ops: [{ op: 'clearLandscape' }] }).spec.landscape).toBeUndefined();
+  });
   it('changes appearance without losing placement or optimizer offsets', () => {
     const { spec, problems } = applyOps(level, { ops: [{ op: 'set', id: 'ramp', color: '#ff7f50', label: 'Pizza slide' }] });
     expect(problems).toEqual([]);

@@ -65,6 +65,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <div className="chip-row">
             <label className="toggle"><input type="checkbox" checked={theme.showGrid} onChange={(e) => setColor('showGrid', e.target.checked)} /> Grid lines</label>
             <label className="toggle"><input type="checkbox" checked={theme.scenery} onChange={(e) => setColor('scenery', e.target.checked)} /> Trees and rocks</label>
+            <label className="toggle" title="A machine made for a place (“forests in British Columbia”) shows that world and its colours"><input type="checkbox" checked={theme.landscapes} onChange={(e) => setColor('landscapes', e.target.checked)} /> Machine worlds</label>
           </div>
         </section>
 

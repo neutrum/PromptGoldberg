@@ -9,6 +9,7 @@ import { useMachine } from './machineStore';
 import { shapeSize, useModel } from './ModelVisual';
 import { kitUrl, kitVisual } from './kitVisuals';
 import { useSettings } from './settings';
+import { Landscape3D, useWorld } from './Landscape3D';
 
 /** Right-angled wedge: tall at -x, flat at +x, base on y = 0 (matches the physics collider). */
 function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
@@ -489,7 +490,7 @@ function NameTag({ part, name, locked }: { part: Part; name: string; locked: boo
  * name get a water surface.
  */
 function Ground({ terrain, stage }: { terrain?: Terrain[]; stage: Stage }) {
-  const theme = useSettings((s) => s.theme);
+  const { theme, landscape } = useWorld();
   const w = stage.x * CELL, d = stage.z * CELL;
   const base = lowestGround(terrain);
   const runs = useMemo(() => groundRuns(terrain, base, stage), [terrain, base, stage]);
@@ -503,7 +504,7 @@ function Ground({ terrain, stage }: { terrain?: Terrain[]; stage: Stage }) {
         <boxGeometry args={[w + 3, 0.6, d + 3]} />
         <meshStandardMaterial color={theme.plinth} roughness={1} />
       </mesh>
-      {theme.scenery && <Scenery y={plinthTop} w={w} d={d} foliage={theme.foliage} />}
+      {landscape ? <Landscape3D landscape={landscape} w={w} d={d} y={plinthTop} /> : theme.scenery && <Scenery y={plinthTop} w={w} d={d} foliage={theme.foliage} />}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL - 0.001, d / 2]} receiveShadow>
         <planeGeometry args={[w, d]} />
         <meshStandardMaterial color={tone(base)} roughness={0.9} />
@@ -711,7 +712,7 @@ function AnimationFrames() {
 }
 
 export function MachineScene({ resetView = 0 }: { resetView?: number }) {
-  const sky = useSettings((s) => s.theme.sky);
+  const { sky } = useWorld().theme;
   return (
     <Canvas className="scene" frameloop="demand" dpr={[1, 1.25]} shadows camera={{ fov: 45, position: [8, 6, 12], near: 0.05, far: 200 }} gl={{ antialias: true, powerPreference: 'low-power' }}>
       <color attach="background" args={[sky]} />

@@ -12,6 +12,7 @@ import { layoutProblems, obstacles, terrainInWay } from './names';
 import { mulberry32 } from './nudge';
 import { makeConnectPuzzle, routeParts } from './puzzle';
 import { finishTime } from './rules';
+import { Landscape } from './landscape';
 import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
@@ -39,6 +40,7 @@ export const RouteGraph = z.object({
   ground: z.enum(['river', 'pit', 'hill', 'auto']).default('auto').describe('the shaped ground in the way: a river under a cannon flight, a pit, a hill start'),
   names: z.object({ target: Name, scenery: Name, ground: Name, ball: Name }).partial().optional().describe('the mission\'s words for the target, the wall, the ground block and the ball'),
   spares: z.array(Spare).max(4).optional(),
+  landscape: Landscape.optional().describe('looks only: the world around the board when the mission names a place or a look (forest, desert, mountains)'),
 });
 export type RouteGraph = z.infer<typeof RouteGraph>;
 export type RouteGraphInput = z.input<typeof RouteGraph>;
@@ -295,7 +297,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   const goal: MachineGoal[] = [];
   /** An id no part has yet: "wall", then "wall2", "wall3"... */
   const fresh = (base: string) => { let out = base; for (let k = 2; parts.some((p) => p.id === out); k++) out = `${base}${k}`; return out; };
-  const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, ...(opts.stage ? { stage: opts.stage } : {}), terrain: terrain.length ? [...terrain] : undefined,
+  const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, ...(opts.stage ? { stage: opts.stage } : {}), ...(graph.landscape ? { landscape: graph.landscape } : {}), terrain: terrain.length ? [...terrain] : undefined,
     parts: parts.map((p) => ({ ...p, label: p.kind === 'ball' ? names.ball : p.kind === 'bucket' || p.kind === 'bell' ? names.target : p.kind === 'wall' && p.fixed ? names.scenery : p.label })),
     goal: [...goal], duration: 15 });
 

@@ -63,8 +63,8 @@ export function editProblems(instruction: string, original: MachineSpec, edited:
   }
   const signature = (s: MachineSpec) => JSON.stringify({
     parts: [...s.parts].sort((a, b) => a.id.localeCompare(b.id)).map((p) => [p.id, p.kind, p.x, p.y, p.z, p.yaw ?? 0, p.length ?? (p.kind === 'platform' ? 3 : p.kind === 'dominoes' ? 5 : null), p.color, p.label]),
-    goal: s.goal.map((g) => [g.type, g.part, g.type === 'bell' ? g.times ?? 1 : null]), terrain: s.terrain ?? [], stage: s.stage ?? null, rules: s.rules ?? {},
+    goal: s.goal.map((g) => [g.type, g.part, g.type === 'bell' ? g.times ?? 1 : null]), terrain: s.terrain ?? [], stage: s.stage ?? null, landscape: s.landscape ?? null, rules: s.rules ?? {},
   });
-  if (signature(original) === signature(edited)) problems.push('The requested edit did not change any parts, goals or ground. Try changing a mechanism, its color, its name, or the ground.');
+  if (signature(original) === signature(edited)) problems.push('The requested edit did not change any parts, goals, ground or world. Try changing a mechanism, its color, its name, the ground, or the world around it.');
   return problems;
 }

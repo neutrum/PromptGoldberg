@@ -11,6 +11,8 @@ export interface Theme {
   /** Scene */
   sky: string; board: string; raised: string; dug: string; grid: string; plinth: string; water: string; post: string; foliage: string;
   showGrid: boolean; scenery: boolean;
+  /** A machine's own world ("forests in British Columbia") replaces the scene colours while it is shown. */
+  landscapes: boolean;
 }
 
 export const THEME_FIELDS: { key: keyof Theme & string; label: string; group: 'Interface' | 'Scene' }[] = [
@@ -33,23 +35,23 @@ export const THEMES: Record<string, { name: string; theme: Theme }> = {
   workshop: { name: 'Workshop', theme: {
     ui: '#101c28', panel: '#192b39', accent: '#ffcd73', text: '#eef4f1',
     sky: '#30495d', board: '#b88b58', raised: '#a39684', dug: '#6e5a45', grid: '#a57a4b', plinth: '#6d7177', water: '#2a78b8', post: '#6b4a2b', foliage: '#2f5a3c',
-    showGrid: true, scenery: true } },
+    showGrid: true, scenery: true, landscapes: true } },
   blueprint: { name: 'Blueprint', theme: {
     ui: '#0d1b2e', panel: '#13284a', accent: '#8fd3ff', text: '#e8f2ff',
     sky: '#16335c', board: '#1f4f8a', raised: '#3a6aa6', dug: '#14345e', grid: '#9cc7f0', plinth: '#0f2546', water: '#64b5f6', post: '#cfe3f7', foliage: '#5d8fc4',
-    showGrid: true, scenery: false } },
+    showGrid: true, scenery: false, landscapes: true } },
   meadow: { name: 'Meadow', theme: {
     ui: '#13231a', panel: '#1d3424', accent: '#ffd166', text: '#f1f7ee',
     sky: '#8ec5e8', board: '#7fb069', raised: '#a3b18a', dug: '#6b4f3a', grid: '#6c9a58', plinth: '#8d8478', water: '#3d8fd1', post: '#7a5230', foliage: '#2d6a4f',
-    showGrid: false, scenery: true } },
+    showGrid: false, scenery: true, landscapes: true } },
   candy: { name: 'Candy', theme: {
     ui: '#2a1530', panel: '#3b1e44', accent: '#ff8fd1', text: '#fff0fa',
     sky: '#ffd6ec', board: '#ffc8dd', raised: '#cdb4db', dug: '#a26fb0', grid: '#f7a1c4', plinth: '#bde0fe', water: '#8ecae6', post: '#ffffff', foliage: '#90e0a8',
-    showGrid: true, scenery: true } },
+    showGrid: true, scenery: true, landscapes: true } },
   night: { name: 'Night', theme: {
     ui: '#07090f', panel: '#121725', accent: '#ffb347', text: '#e6e9f5',
     sky: '#0b1020', board: '#2b3145', raised: '#3d4560', dug: '#191d2b', grid: '#4a5578', plinth: '#20232d', water: '#2f5d9e', post: '#8b6b4a', foliage: '#1d3b2d',
-    showGrid: true, scenery: true } },
+    showGrid: true, scenery: true, landscapes: true } },
 };
 
 export const STAGE_PRESETS: { label: string; stage: Stage }[] = [
