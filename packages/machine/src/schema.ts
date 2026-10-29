@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Landscape } from './landscape';
+import { Landscape, ObstacleProp } from './landscape';
 
 /** Side of one grid cell in metres. Parts snap to cells; the optimizer nudges within them. */
 export const CELL = 0.5;
@@ -44,11 +44,6 @@ export const LookKind = z.enum(LOOK_KINDS);
 export type LookKind = z.infer<typeof LookKind>;
 export const LookRef = z.object({ assetId: z.string().uuid() });
 
-/** Fixed obstacles that are not walls: each has its own collider, drawn exactly as it collides. */
-export const OBSTACLE_PROPS = ['rock', 'crate', 'tree', 'cactus', 'stump'] as const;
-export const ObstacleProp = z.enum(OBSTACLE_PROPS);
-export type ObstacleProp = z.infer<typeof ObstacleProp>;
-
 /** Which way a part faces, degrees clockwise seen from above: 0 = +x, 90 = +z, 180 = -x, 270 = -z. */
 export const Yaw = z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]);
 export type Yaw = z.infer<typeof Yaw>;
@@ -66,7 +61,7 @@ export const Part = z.object({
   look: LookRef.optional().describe('Reserved for a player-applied appearance; never invent asset IDs'),
   /** Scenery: part of the level (an obstacle wall, a ledge), never handed to the player. Walls and platforms only. */
   fixed: z.boolean().optional().describe('scenery: a wall or shelf that is part of the level and stays on the stage; the player has to get past or use it'),
-  prop: ObstacleProp.optional().describe('fixed walls only: stand a rock, crate, tree, cactus or stump in the way instead of a wall'),
+  prop: ObstacleProp.optional().describe('fixed walls only: stand an obstacle in the way instead of a wall: rock, crate, tree, cactus, stump, crystal, column, nut, bolt, tape, spool, or a hammer, wrench, screwdriver or pencil lying along its facing (2, 2, 2 and 3 cells)'),
   /** Fine offsets within the cell, set by the optimizer (fractions of a cell). */
   dx: z.number().min(-0.5).max(0.5).optional(),
   dz: z.number().min(-0.5).max(0.5).optional(),
@@ -152,7 +147,7 @@ export function checkMachine(spec: MachineSpec, opts: CheckOptions = {}): SpecIs
   });
   spec.parts.forEach((p, i) => {
     if (p.look && !(LOOK_KINDS as readonly string[]).includes(p.kind)) issues.push({ path: `parts.${i}.look`, message: `custom looks are not supported on ${p.kind}` });
-    if (p.prop && !(p.kind === 'wall' && p.fixed)) issues.push({ path: `parts.${i}.prop`, message: `"${p.id}" has prop ${p.prop}; only a fixed wall can be a rock, crate, tree, cactus or stump` });
+    if (p.prop && !(p.kind === 'wall' && p.fixed)) issues.push({ path: `parts.${i}.prop`, message: `"${p.id}" has prop ${p.prop}; only a fixed wall can be an obstacle prop` });
     if (p.fixed && p.kind !== 'wall' && p.kind !== 'platform') issues.push({ path: `parts.${i}.fixed`, message: `"${p.id}" is a ${p.kind}; only walls and platforms can be fixed scenery` });
   });
   const byId = new Map(spec.parts.map((p) => [p.id, p]));

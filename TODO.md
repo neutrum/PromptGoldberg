@@ -15,6 +15,7 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] Obstacles that matter on the board: fixed `prop` obstacles (rock, crate, tree, cactus, stump), each drawn exactly as its collider. The compiler stands them on the straight lines from ball to target and beside the route, never on a cell the ball passes, and keeps each only if the level still solves. Count from the mission: 1 for easy, 3 by default, 6 for hard, crowded, maze or forest; kinds suit the world (trees in a forest, cacti in a desert). Edits can add them ("put rocks in the way"). Verified: obstacle tests on three route types; live "A hard puzzle in a British Columbia forest..." → 6 obstacles, verified in 3.5 s, screenshot checked.
 - [x] Shortcut probe and difficulty tiers: the compiler tries lazy builds (each route part left out or shifted 1–2 cells). Those that still solve by another path are shortcuts; obstacles go on their cells first, and a shortcut counts as blocked only when re-run with the obstacle and failing. Tiers from the mission: easy (1 obstacle, no probe), normal (3), hard (6). Notes report "Shortcuts by another path: N, M blocked". Measured: fan routes find about 5 and block 2 (normal) or 3–4 (hard); cannon routes find none; probe adds about 0.5 s. Live hard fan level: 6 found, 4 blocked.
 - [x] Reprompting during a puzzle: a looks-only edit (colours, names, world) applies to the puzzle in place and keeps tries and score; an edit that reshapes the puzzle is held behind "Make it my copy" / "Keep playing". Accepting ends the scored run and titles it "(remix)". Previously any AI edit silently ended the puzzle as a give-up. Store tests cover both paths.
+- [x] Settings and vocabulary for free-form prompts: `landscape.setting` outdoor or tabletop (a huge table with legs to a workshop floor, so the machine reads as a miniature); 19 new world features (crystals, columns, statues, houses, lanterns, candy, coral, cogs, ice spikes, craters; giant tools, wrenches, pencils, screws, nuts, mugs, books, desk lamp, pegboard); animated ones (cogs and candy spin, crystals float, lanterns bob; off with reduced motion). New board obstacles with honest colliders: crystal, column, nut, bolt, tape, spool, and tools lying over 2–3 cells (hammer, wrench, screwdriver, pencil); a world can name its own `obstacles`. One shared world brief for the route, designer and edit prompts; keyword worlds added for workshop/desk, crystal cave, candy, clockwork, ruins, reef, alien moon, village. Verified live with the judge-style prompt "create me a contraption that is on a wooden table in workshop with tools lying around as obstacles the contraption is a miniature in a real size world": tabletop world with pegboard, giant tools, mugs, screws and lamp; hammers, wrenches, screwdriver and pencil on the board; 3 shortcuts found, 3 blocked; 6.2 s; screenshot checked.
 - Tests: 232 passing across 31 files; typecheck clean.
 
 ## To do
@@ -30,6 +31,14 @@ Player brief (given earlier to ChatGPT, recovered 2026-10-29):
 - [ ] Daily ladder: use the difficulty tiers per stage (easy first, hard last).
 - [ ] Clustered, evenly spaced (Poisson-disk) scatter for the world around the board.
 - [ ] Full-designer levels (non-route missions) get no obstacle pass yet.
+
+Plan to submission (agreed 2026-10-29; submit Nov 10, deadline Nov 11 16:30 CEST):
+- [ ] Oct 29–31: requirement checks that a named world, setting and obstacles were honoured; an "I understood" card (world · obstacles · chain) with honest "closest" notes.
+- [ ] Nov 1–3: judge prompt set (about 50 varied prompts) through the real pipeline: success rate, median time, request honoured; fix the top failures.
+- [ ] Nov 3–5: first minute: camera follows the ball, slow motion at events, step cues; prompt handbook with example images from the set.
+- [ ] Nov 5–7: interface after the reference image; decoy mechanisms; daily tiers. Feature freeze Nov 7.
+- [ ] Nov 7–9: public deployment, monitoring, fresh-browser and mobile checks, video. Nov 10: submit.
+- [ ] "Simple or detailed look" choice next to the prompt (user request 2026-10-29). Proposal: Quick (now, about 3–6 s) vs Detailed (a denser world from the larger model, plus optional AI-made 3D models for the hero parts through Tripo, about 1–2 min and paid credits, capped per day). Needs a decision on cost before building.
 
 Follow-ups from 2026-10-29:
 - [ ] Remaining interface panels still use fixed colours; move them onto the theme variables.

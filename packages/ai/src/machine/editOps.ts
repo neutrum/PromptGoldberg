@@ -5,6 +5,8 @@
  * The result is checked like any edit (the lock, nothing floating); a reply that breaks it is sent
  * back with the reason, and the full rewrite is the fallback.
  */
+import { OBSTACLE_PROPS } from '@og/machine';
+import { WORLD_BRIEF } from './world';
 import { z } from 'zod';
 import { groundAt, Landscape, MachineGoal, Part, PartKind, Stage, stageOf, Terrain, Yaw, type MachineSpec } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
@@ -111,7 +113,7 @@ Parts: ramp (2 cells long), platform (a shelf, "length" cells long toward its ya
 
 Operations (JSON):
 - {"op":"add","part":{"id","kind","x","y","z","yaw","length"?}}: a new part with a new short id. It must stand on the ground or on a shelf at its y, in a cell no other part uses.
-  For an obstacle ("add rocks", "put trees in the way", "make it harder"), add a wall with "fixed": true and "prop" rock, crate, tree, cactus or stump, in a cell near the route but not on the ball's way.
+  For an obstacle ("add rocks", "put tools in the way", "make it harder"), add a wall with "fixed": true and a "prop" (${OBSTACLE_PROPS.join(', ')}) in a cell near the route but not on the ball's way; tools lie along their yaw over 2 or 3 cells (hammer, wrench, screwdriver 2; pencil 3).
 - {"op":"remove","id"}
 - {"op":"move","id","x"?,"y"?,"z"?}
 - {"op":"rotate","id","yaw"}
@@ -119,7 +121,7 @@ Operations (JSON):
 - {"op":"set","id","length"?,"label"?,"color"?}: change length, a friendly name, or a six-digit hex color. Use label for "name/call it", color for "paint/color it". Appearance changes do not move parts or change physics.
 - {"op":"ground","name"?,"x","z","w","d","h"}: shape the ground: a block w cells along x and d along z from its north-west cell (x, z), at height h (-2 to 3). Negative digs a ditch, pit, river or moat (name it, e.g. "river", so it is drawn as water); positive raises a hill or bank; 0 levels that area back to the floor. Later blocks cover earlier ones; at most 6 blocks in all. Parts standing on the ground there move to its new height; never reshape the ground under the ball or a goal part.
 - {"op":"flatten","name"?}: remove the ground block with that name, or all of the ground without a name.
-- {"op":"landscape","name","sky","ground","land","rock","water","foliage","accent","features":[{"kind","amount"}],"snow"?}: the world around the board, for "make it look like...", "a terrain of forests and hills in British Columbia", "turn it into a desert". Colours are six-digit hex true to the place ("ground" is the floor under the machine, "land" the land around the board). Features, 3 to 6: conifers, broadleaf, birches, palms, cacti, bushes, flowers, mushrooms, reeds, rocks, boulders, hills, mountains, lake, snowdrifts; amount few, some or many. Looks only: it replaces the whole world and never moves a part. Add "ground" ops too only when the player wants the ball's own ground reshaped.
+- {"op":"landscape","name","setting","sky","ground","land","rock","water","foliage","accent","features":[{"kind","amount"}],"obstacles"?,"snow"?}: for "make it look like...", "a terrain of forests and hills", "put it on a workshop table": ${WORLD_BRIEF} It replaces the whole world and never moves a part. Add "ground" ops too only when the player wants the ball's own ground reshaped.
 - {"op":"clearLandscape"}: back to the plain workshop.
 - {"op":"stage","x","z"}: resize the stage (12 to 32 cells each way, default 24). Every part and ground block must still fit; when shrinking, move what would fall off first.
 

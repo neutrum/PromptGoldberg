@@ -13,8 +13,8 @@ import { mulberry32 } from './nudge';
 import { makeConnectPuzzle, routeParts } from './puzzle';
 import { finishTime } from './rules';
 import { restingHeight } from './placement';
-import { Landscape } from './landscape';
-import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type ObstacleProp, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
+import { Landscape, type ObstacleProp } from './landscape';
+import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
 
@@ -609,9 +609,18 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
       // Once the shortcuts are gone, a cell that only some blocked shortcut crossed adds nothing.
       if (!open.length && shortcuts.some((c) => c.cells.has(key)) && !line.has(key) && !beside(at.x, at.z)) continue;
       const prop = props[placed % props.length];
-      const rock: Part = { id: fresh(prop), kind: 'wall', x: at.x, y: groundAt(spec().terrain, at.x, at.z), z: at.z, yaw: 0, fixed: true, prop,
-        ...(prop === 'tree' && graph.landscape ? { color: graph.landscape.foliage } : prop === 'rock' && graph.landscape ? { color: graph.landscape.rock } : {}) };
+      const y = groundAt(spec().terrain, at.x, at.z);
+      // A tool lies over several cells: every one must be free, off the ball's way and on the same ground.
+      const fits = (yaw: Yaw) => footprint({ id: 'probe', kind: 'wall', x: at.x, y, z: at.z, yaw, fixed: true, prop }).every((c) => {
+        const k = `${c.x},${c.z}`;
+        return inStage(c.x, c.z) && !visited.has(k) && !taken.has(k) && groundAt(spec().terrain, c.x, c.z) === y;
+      });
+      const yaw = ([0, 90, 180, 270] as Yaw[]).sort(() => rand() - 0.5).find(fits);
+      if (yaw === undefined) continue;
+      const rock: Part = { id: fresh(prop), kind: 'wall', x: at.x, y, z: at.z, yaw, fixed: true, prop,
+        ...(prop === 'tree' && graph.landscape ? { color: graph.landscape.foliage } : prop === 'rock' && graph.landscape ? { color: graph.landscape.rock } : prop === 'crystal' && graph.landscape ? { color: graph.landscape.accent } : {}) };
       if (!keepIf(() => parts.push(rock), () => parts.pop())) continue;
+      for (const c of footprint(rock)) taken.add(`${c.x},${c.z}`);
       placed++;
       // A shortcut counts as blocked only when it is run again with the obstacle and fails.
       for (const c of open) {
@@ -649,8 +658,13 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
 
 /** Obstacles that suit the world: trees in a forest, cacti in a desert, crates and rocks in the workshop. */
 function worldProps(world: Landscape | undefined): ObstacleProp[] {
+  if (world?.obstacles?.length) return world.obstacles;
   const kinds = new Set(world?.features.map((f) => f.kind));
   const out: ObstacleProp[] = [];
+  if (['tools', 'wrenches', 'screws', 'nuts', 'pencils', 'pegboard'].some((k) => kinds.has(k as never))) out.push('hammer', 'nut', 'wrench', 'tape', 'pencil', 'bolt');
+  if (kinds.has('cogs')) out.push('nut', 'bolt', 'spool');
+  if (kinds.has('crystals')) out.push('crystal');
+  if (kinds.has('columns') || kinds.has('statues')) out.push('column');
   if (['conifers', 'broadleaf', 'birches', 'palms'].some((k) => kinds.has(k as never))) out.push('tree', 'stump');
   if (kinds.has('cacti')) out.push('cactus');
   if (kinds.has('rocks') || kinds.has('boulders') || kinds.has('mountains')) out.push('rock');

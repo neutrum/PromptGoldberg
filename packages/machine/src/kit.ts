@@ -2,6 +2,7 @@
  * The parts kit: what each part is made of, as plain geometry. The simulation builds colliders
  * from these and the renderer draws them, so the two never disagree about where a part is.
  */
+import { PROP_LENGTH } from './landscape';
 import { CELL, type Part, type PartKind, type Yaw } from './schema';
 
 export type Vec3 = [number, number, number];
@@ -97,6 +98,14 @@ export function yawQuat(yaw: Yaw): Quat {
   return [0, Math.sin(angle / 2), 0, Math.cos(angle / 2)];
 }
 
+/** a then b, as one rotation. */
+function mulQuat(a: Quat, b: Quat): Quat {
+  const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
+  return [aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx, aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz];
+}
+/** A cylinder turned onto its side, its axis along the part's facing. */
+const ON_SIDE: Quat = [0, 0, Math.SQRT1_2, Math.SQRT1_2];
+
 /** World position of a part's cell centre at its base height, including fine offsets. */
 export function partOrigin(p: Part): Vec3 {
   return [(p.x + 0.5 + (p.dx ?? 0)) * CELL, p.y * CELL, (p.z + 0.5 + (p.dz ?? 0)) * CELL];
@@ -149,6 +158,40 @@ export function assemblePart(p: Part): Assembly {
             fixed(p.id, { kind: 'cylinder', radius: 0.07, height: 0.7 }, add(o, [0, 0.35, 0]), q, { ...prop, color: '#5c3d24' });
             fixed(`${p.id}.crown`, { kind: 'cylinder', radius: 0.3, height: 0.75 }, add(o, [0, 1.07, 0]), q, { ...prop, color: tone('#2f5a3c') });
             break;
+          case 'crystal': fixed(p.id, { kind: 'cylinder', radius: 0.14, height: 0.7 }, add(o, [0, 0.35, 0]), q, { ...prop, color: tone('#b57bff') }); break;
+          case 'column': fixed(p.id, { kind: 'cylinder', radius: 0.17, height: 0.95 }, add(o, [0, 0.475, 0]), q, { ...prop, color: tone('#d8ccb0') }); break;
+          case 'nut': fixed(p.id, { kind: 'cylinder', radius: 0.21, height: 0.17 }, add(o, [0, 0.085, 0]), q, { ...prop, color: tone('#9aa3ad') }); break;
+          case 'tape': fixed(p.id, { kind: 'cylinder', radius: 0.22, height: 0.24 }, add(o, [0, 0.12, 0]), q, { ...prop, color: tone('#f2c230') }); break;
+          case 'spool': fixed(p.id, { kind: 'cylinder', radius: 0.19, height: 0.32 }, add(o, [0, 0.16, 0]), q, { ...prop, color: tone('#c0503f') }); break;
+          case 'bolt':
+            fixed(p.id, { kind: 'cylinder', radius: 0.15, height: 0.12 }, add(o, [0, 0.06, 0]), q, { ...prop, color: tone('#8d959e') });
+            fixed(`${p.id}.shank`, { kind: 'cylinder', radius: 0.06, height: 0.45 }, add(o, [0, 0.345, 0]), q, { ...prop, color: tone('#8d959e') });
+            break;
+          default: {
+            // Tools lying along the facing, over two or three cells; `c` is their middle.
+            const c = add(o, f, ((PROP_LENGTH[p.prop] ?? 1) - 1) * CELL / 2);
+            const side = mulQuat(q, ON_SIDE);
+            const at = (along: number, up: number) => add(add(c, f, along), [0, up, 0]);
+            switch (p.prop) {
+              case 'hammer':
+                fixed(p.id, { kind: 'cylinder', radius: 0.06, height: 0.85 }, at(-0.08, 0.06), side, { ...prop, color: '#b5834a' });
+                fixed(`${p.id}.head`, { kind: 'box', size: [0.18, 0.2, 0.46] }, at(0.4, 0.1), q, { ...prop, color: tone('#5b6168') });
+                break;
+              case 'wrench':
+                fixed(p.id, { kind: 'box', size: [0.72, 0.1, 0.14] }, at(0, 0.05), q, { ...prop, color: tone('#9aa3ad') });
+                fixed(`${p.id}.jaw`, { kind: 'cylinder', radius: 0.15, height: 0.1 }, at(0.4, 0.05), q, { ...prop, color: tone('#9aa3ad') });
+                fixed(`${p.id}.ring`, { kind: 'cylinder', radius: 0.13, height: 0.1 }, at(-0.4, 0.05), q, { ...prop, color: tone('#9aa3ad') });
+                break;
+              case 'screwdriver':
+                fixed(p.id, { kind: 'cylinder', radius: 0.09, height: 0.4 }, at(-0.27, 0.09), side, { ...prop, color: tone('#d9452b') });
+                fixed(`${p.id}.shaft`, { kind: 'cylinder', radius: 0.03, height: 0.55 }, at(0.2, 0.09), side, { ...prop, color: '#b8bec4' });
+                break;
+              case 'pencil':
+                fixed(p.id, { kind: 'cylinder', radius: 0.08, height: 1.3 }, at(0.06, 0.08), side, { ...prop, color: tone('#f2c230') });
+                fixed(`${p.id}.eraser`, { kind: 'cylinder', radius: 0.08, height: 0.14 }, at(-0.66, 0.08), side, { ...prop, color: '#f08fa0' });
+                break;
+            }
+          }
         }
         break;
       }
@@ -237,6 +280,7 @@ export function footprint(p: Part): { x: number; z: number }[] {
     case 'ramp': return along(2);
     case 'dominoes': return along(Math.ceil(((p.length ?? DOMINO_DEFAULT) - 1) * KIT.domino.spacing / CELL + 0.5));
     case 'seesaw': return [{ x: p.x - f[0], z: p.z - f[2] }, { x: p.x, z: p.z }, { x: p.x + f[0], z: p.z + f[2] }];
+    case 'wall': return p.prop ? along(PROP_LENGTH[p.prop] ?? 1) : [{ x: p.x, z: p.z }];
     default: return [{ x: p.x, z: p.z }];
   }
 }

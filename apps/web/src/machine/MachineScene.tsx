@@ -9,7 +9,7 @@ import { useMachine } from './machineStore';
 import { shapeSize, useModel } from './ModelVisual';
 import { kitUrl, kitVisual } from './kitVisuals';
 import { useSettings } from './settings';
-import { Landscape3D, useWorld } from './Landscape3D';
+import { Landscape3D, useWorld, worldMotion } from './Landscape3D';
 
 /** Right-angled wedge: tall at -x, flat at +x, base on y = 0 (matches the physics collider). */
 function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
@@ -46,10 +46,10 @@ function BodyMesh({ body, meshRef, ghost, onClick, onGrab, onHover, glow, cursor
     switch (s.kind) {
       case 'box': return new THREE.BoxGeometry(...s.size);
       case 'sphere': return new THREE.SphereGeometry(s.radius, 24, 16);
-      case 'cylinder': return new THREE.CylinderGeometry(s.radius, s.radius * 1.15, s.height, 24);
+      case 'cylinder': return body.prop ? new THREE.CylinderGeometry(s.radius, s.radius, s.height, body.prop === 'nut' || body.prop === 'crystal' ? 6 : 20) : new THREE.CylinderGeometry(s.radius, s.radius * 1.15, s.height, 24);
       case 'wedge': return wedgeGeometry(s.length, s.height, s.width);
     }
-  }, [body.shape]);
+  }, [body.shape, body.prop]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   const sensor = !!body.sensor;
   const air = body.kind === 'fan' && sensor;
@@ -699,7 +699,7 @@ function AnimationFrames() {
   const invalidate = useThree(s => s.invalidate);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useFrame(() => {
-    if (!timer.current && !document.hidden && (useMachine.getState().phase === 'playing' || particles.length || flashes.length)) {
+    if (!timer.current && !document.hidden && (useMachine.getState().phase === 'playing' || worldMotion.active || particles.length || flashes.length)) {
       timer.current = setTimeout(() => { timer.current = null; invalidate(); }, 1000 / 30);
     }
   });
