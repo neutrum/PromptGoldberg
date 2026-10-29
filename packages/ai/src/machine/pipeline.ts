@@ -157,6 +157,13 @@ async function designOnly(deps: MachinePipelineDeps, emit: Emit, loop: {
   return { type: 'machine', machine: design.spec, solved: false, verified: false, attempts: 1, notes: ['Level set up; nobody has run it.'], cached: false, result: UNRUN, moved: [], attempt: 1 };
 }
 
+/** How many obstacles stand in the way: more for a hard, crowded or maze-like mission, fewer for an easy one. */
+export function clutterOf(prompt: string): number {
+  if (/\b(easy|simple|beginner|first|tutorial)\b/i.test(prompt)) return 1;
+  if (/\b(hard|harder|maze|crowded|clutter\w*|obstacles?|tricky|dense|chaos|chaotic|forest|jungle)\b/i.test(prompt)) return 6;
+  return 3;
+}
+
 /** Route graphs are on unless MACHINE_ROUTE=off. */
 const routeOn = () => process.env.MACHINE_ROUTE !== 'off';
 
@@ -181,7 +188,7 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   const tries: RouteGraphInput[] = [graph, graph, { ...graph, links: words.links, end: g.end }];
   for (const [k, attempt] of tries.entries()) {
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, signal: deps.signal });
+    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, clutter: clutterOf(prompt), signal: deps.signal });
     if (!res) continue;
     const notes = [opts.note, res.spec.closest, k === 2 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
     const world = res.spec.landscape ?? landscapeFromWords(prompt) ?? undefined;

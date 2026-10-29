@@ -7,13 +7,13 @@
  */
 import { z } from 'zod';
 import { evaluateMachine } from './goal';
-import { facing, KIT, sideways } from './kit';
+import { facing, footprint, KIT, sideways } from './kit';
 import { layoutProblems, obstacles, terrainInWay } from './names';
 import { mulberry32 } from './nudge';
 import { makeConnectPuzzle, routeParts } from './puzzle';
 import { finishTime } from './rules';
 import { Landscape } from './landscape';
-import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
+import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type ObstacleProp, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
 
@@ -57,6 +57,8 @@ export interface CompileOptions {
   rules?: Rules;
   /** Stage size in cells (default 24 by 24). */
   stage?: Stage;
+  /** Obstacles to stand where a player would go first (default 3; 0 for none). */
+  clutter?: number;
 }
 
 export interface CompileResult {
@@ -532,6 +534,37 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
       keepIf(() => terrain.push({ name: names.ground ?? 'pond', x: s.x, z: s.z, w: 2, d: 2, h: -1 }), () => terrain.pop());
     }
   }
+  // Obstacles that matter: on the straight lines from the ball to the target (where a player goes
+  // first) and right beside the route, never on a cell the ball passes. Each stays only if the
+  // level still works with it, so the solution has to thread past them.
+  const clutter = opts.clutter ?? 3;
+  if (clutter > 0) {
+    const target0 = parts.find((p) => p.id === target)!;
+    const visited = new Set(track(run(spec())).map((s) => `${cellOf(s.x)},${cellOf(s.z)}`));
+    const taken = new Set(parts.flatMap((p) => footprint(p).map((c) => `${c.x},${c.z}`)));
+    const line = new Set<string>();
+    const [ax, bx] = [Math.min(ball.x, target0.x), Math.max(ball.x, target0.x)], [az, bz] = [Math.min(ball.z, target0.z), Math.max(ball.z, target0.z)];
+    for (let x = ax; x <= bx; x++) { line.add(`${x},${ball.z}`); line.add(`${x},${target0.z}`); }
+    for (let z = az; z <= bz; z++) { line.add(`${ball.x},${z}`); line.add(`${target0.x},${z}`); }
+    const beside = (x: number, z: number) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => visited.has(`${x + dx},${z + dz}`));
+    const spots: { x: number; z: number; score: number }[] = [];
+    for (let x = ax - 2; x <= bx + 2; x++) for (let z = az - 2; z <= bz + 2; z++) {
+      const key = `${x},${z}`;
+      if (!inStage(x, z) || visited.has(key) || taken.has(key) || groundAt(spec().terrain, x, z) < 0) continue;
+      const score = (line.has(key) ? 3 : 0) + (beside(x, z) ? 2 : 0) + rand();
+      if (score >= 1.5) spots.push({ x, z, score });
+    }
+    spots.sort((a, b) => b.score - a.score);
+    const props = worldProps(graph.landscape);
+    let placed = 0;
+    for (const at of spots.slice(0, clutter * 3)) {
+      if (placed >= clutter) break;
+      const prop = props[placed % props.length];
+      const rock: Part = { id: fresh(prop), kind: 'wall', x: at.x, y: groundAt(spec().terrain, at.x, at.z), z: at.z, yaw: 0, fixed: true, prop,
+        ...(prop === 'tree' && graph.landscape ? { color: graph.landscape.foliage } : prop === 'rock' && graph.landscape ? { color: graph.landscape.rock } : {}) };
+      if (keepIf(() => parts.push(rock), () => parts.pop())) placed++;
+    }
+  }
   // Nothing in the way yet (flat ground, a wall outside the box): a wall inside the box, off the route.
   if (!obstacles(spec()).length && !terrainInWay(spec()).length) {
     const target0 = parts.find((p) => p.id === target)!;
@@ -555,6 +588,16 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   // A level needs something to build: without the route it must fail.
   if (!makeConnectPuzzle(withSpares)) return why('no connect puzzle');
   return withSpares;
+}
+
+/** Obstacles that suit the world: trees in a forest, cacti in a desert, crates and rocks in the workshop. */
+function worldProps(world: Landscape | undefined): ObstacleProp[] {
+  const kinds = new Set(world?.features.map((f) => f.kind));
+  const out: ObstacleProp[] = [];
+  if (['conifers', 'broadleaf', 'birches', 'palms'].some((k) => kinds.has(k as never))) out.push('tree', 'stump');
+  if (kinds.has('cacti')) out.push('cactus');
+  if (kinds.has('rocks') || kinds.has('boulders') || kinds.has('mountains')) out.push('rock');
+  return out.length ? [...out, 'rock'] : ['crate', 'rock'];
 }
 
 /** Two spares the route does not use, so the bin has a decoy and another way. */

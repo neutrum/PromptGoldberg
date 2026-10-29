@@ -15,7 +15,7 @@ export interface KitVisual { asset: string; size: Vec3; rotation?: Vec3; offset?
 
 /** Authored alignment of the inspected models. This never changes a collider or playback transform. */
 export function kitVisual(body: Body): KitVisual | null {
-  if (body.sensor) return null;
+  if (body.sensor || body.prop) return null;
   const size = shapeSize(body.shape);
   switch (body.kind) {
     case 'ball': return { asset: 'ball-round', size };

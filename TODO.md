@@ -12,7 +12,8 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] Terrain by prompt: edit ops `ground`, `flatten`, `stage`. The ground may change except under the ball and goal parts; parts on reshaped ground follow it; an edit no longer has to keep an obstacle the player removed. Verified live: "fill in the river", "raise a small hill near the start", "make the stage 20 by 20 and dig a small pond in the far corner".
 - [x] Worlds by prompt (`MachineSpec.landscape`, looks only): name, palette, 3–6 features (conifers, broadleaf, birches, palms, cacti, bushes, flowers, mushrooms, reeds, rocks, boulders, hills, mountains, lake, snowdrifts), snow. Written by the AI on creation (route graph and full designer) and edits (`landscape` / `clearLandscape` ops); keyword fallback (`landscapeFromWords`) for offline creation or when the AI leaves it out. Seeded scatter on the apron, tall things behind the board only; instanced rendering. Verified live: "Create a terrain that looks like forests and hills in british columbia" → verified edit in 6.7 s, screenshot checked.
 - [x] Settings (••• → Settings): stage size for new machines, five theme presets, custom interface and scene colours, grid / scenery / machine-world toggles; saved in the browser, sanitised on load.
-- Tests: 227 passing across 30 files; typecheck clean.
+- [x] Obstacles that matter on the board: fixed `prop` obstacles (rock, crate, tree, cactus, stump), each drawn exactly as its collider. The compiler stands them on the straight lines from ball to target and beside the route, never on a cell the ball passes, and keeps each only if the level still solves. Count from the mission: 1 for easy, 3 by default, 6 for hard, crowded, maze or forest; kinds suit the world (trees in a forest, cacti in a desert). Edits can add them ("put rocks in the way"). Verified: obstacle tests on three route types; live "A hard puzzle in a British Columbia forest..." → 6 obstacles, verified in 3.5 s, screenshot checked.
+- Tests: 229 passing across 31 files; typecheck clean.
 
 ## To do
 
@@ -20,7 +21,9 @@ Player brief (given earlier to ChatGPT, recovered 2026-10-29):
 - [ ] Interface after the reference image in docs/ (as a reference, not a copy). The available parts are already in the right vertical panel.
 - [ ] First run self-explanatory for players and judges: tooltip tutorial and visible cues that each step went as it should. A 4-step quick start exists; audit it against a fresh visit.
 - [ ] A structured prompt handbook so writing prompts is fun, with generated example images.
-- [ ] Denser scenes: random decoy objects so the route is not obvious, probably in later levels or a harder difficulty. Landscape props currently stay off the board on purpose.
+- [ ] Decoy mechanisms on the board (a fan aimed the wrong way, a ramp to nowhere): obstacles now block the obvious line, but every mechanism on the board is still part of the solution.
+- [ ] Turn wall from the compiler: check it actually blocks the ball (route without it fails), else replace it with an obstacle that does.
+- [ ] Full-designer levels (non-route missions) get no obstacle pass yet.
 
 Follow-ups from 2026-10-29:
 - [ ] Remaining interface panels still use fixed colours; move them onto the theme variables.

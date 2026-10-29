@@ -33,6 +33,8 @@ export interface Body {
   density?: number;
   /** Use this body's restitution for contacts regardless of the other body's (bucket walls). */
   deadens?: boolean;
+  /** A fixed obstacle drawn as its collider (a rock, a tree), not as the wall model. */
+  prop?: string;
 }
 
 /** Hinge between two bodies: `anchor` in world space, `axis` in world space. */
@@ -134,6 +136,22 @@ export function assemblePart(p: Part): Assembly {
       break;
     }
     case 'wall':
+      if (p.prop) {
+        // Obstacles in a cell: what the ball bounces off is exactly what is drawn.
+        const prop = { prop: p.prop, restitution: 0.35 };
+        const tone = (fallback: string) => p.color ?? fallback;
+        switch (p.prop) {
+          case 'rock': fixed(p.id, { kind: 'sphere', radius: 0.21 }, add(o, [0, 0.14, 0]), q, { ...prop, color: tone('#8a8d90') }); break;
+          case 'crate': fixed(p.id, { kind: 'box', size: [0.42, 0.42, 0.42] }, add(o, [0, 0.21, 0]), q, { ...prop, color: tone('#a8794a') }); break;
+          case 'cactus': fixed(p.id, { kind: 'cylinder', radius: 0.1, height: 0.75 }, add(o, [0, 0.375, 0]), q, { ...prop, color: tone('#5f8f4a') }); break;
+          case 'stump': fixed(p.id, { kind: 'cylinder', radius: 0.17, height: 0.3 }, add(o, [0, 0.15, 0]), q, { ...prop, color: tone('#7a5230') }); break;
+          case 'tree':
+            fixed(p.id, { kind: 'cylinder', radius: 0.07, height: 0.7 }, add(o, [0, 0.35, 0]), q, { ...prop, color: '#5c3d24' });
+            fixed(`${p.id}.crown`, { kind: 'cylinder', radius: 0.3, height: 0.75 }, add(o, [0, 1.07, 0]), q, { ...prop, color: tone('#2f5a3c') });
+            break;
+        }
+        break;
+      }
       // A wall stands across its facing, so a ball rolling toward it stops.
       fixed(p.id, { kind: 'box', size: [KIT.wallThickness, KIT.wallHeight, CELL] }, add(o, [0, KIT.wallHeight / 2, 0]), q, { restitution: 0.4 });
       break;

@@ -39,7 +39,7 @@ export type EditReply = z.infer<typeof EditReply>;
 
 /** One line per part, the way the edit prompt shows the machine. */
 export function partLines(spec: MachineSpec): string {
-  return spec.parts.map((p) => `${p.id}: ${p.kind} x ${p.x} y ${p.y} z ${p.z} yaw ${p.yaw}${p.length ? ` length ${p.length}` : ''}${p.label ? ` label ${JSON.stringify(p.label)}` : ''}${p.color ? ` color ${p.color}` : ''}${p.fixed ? ' (scenery)' : ''}`).join('\n');
+  return spec.parts.map((p) => `${p.id}: ${p.kind} x ${p.x} y ${p.y} z ${p.z} yaw ${p.yaw}${p.length ? ` length ${p.length}` : ''}${p.label ? ` label ${JSON.stringify(p.label)}` : ''}${p.color ? ` color ${p.color}` : ''}${p.prop ? ` prop ${p.prop}` : ''}${p.fixed ? ' (scenery)' : ''}`).join('\n');
 }
 
 /** Apply the ops in order; unknown ids are reported, not ignored. */
@@ -111,6 +111,7 @@ Parts: ramp (2 cells long), platform (a shelf, "length" cells long toward its ya
 
 Operations (JSON):
 - {"op":"add","part":{"id","kind","x","y","z","yaw","length"?}}: a new part with a new short id. It must stand on the ground or on a shelf at its y, in a cell no other part uses.
+  For an obstacle ("add rocks", "put trees in the way", "make it harder"), add a wall with "fixed": true and "prop" rock, crate, tree, cactus or stump, in a cell near the route but not on the ball's way.
 - {"op":"remove","id"}
 - {"op":"move","id","x"?,"y"?,"z"?}
 - {"op":"rotate","id","yaw"}
