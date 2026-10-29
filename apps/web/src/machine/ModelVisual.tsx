@@ -21,14 +21,7 @@ function loadModel(url: string) {
   return promise;
 }
 
-export function shapeSize(shape: Shape): Vec3 {
-  switch (shape.kind) {
-    case 'box': return shape.size;
-    case 'sphere': return [shape.radius * 2, shape.radius * 2, shape.radius * 2];
-    case 'cylinder': return [shape.radius * 2, shape.height, shape.radius * 2];
-    case 'wedge': return [shape.length, shape.height, shape.width];
-  }
-}
+export { shapeSize } from './kitVisuals';
 
 /** Returns null while loading or on failure, so the original kit stays visible. */
 export function useLook(id: string | undefined, size: Vec3) {

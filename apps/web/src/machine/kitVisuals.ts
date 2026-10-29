@@ -1,5 +1,14 @@
-import { CELL, KIT, type Body, type Vec3 } from '@og/machine';
-import { shapeSize } from './ModelVisual';
+import { CELL, KIT, type Body, type Shape, type Vec3 } from '@og/machine';
+
+// Plain TypeScript (no React) so scripts/kit-thumbnails.ts can import it outside the app.
+export function shapeSize(shape: Shape): Vec3 {
+  switch (shape.kind) {
+    case 'box': return shape.size;
+    case 'sphere': return [shape.radius * 2, shape.radius * 2, shape.radius * 2];
+    case 'cylinder': return [shape.radius * 2, shape.height, shape.radius * 2];
+    case 'wedge': return [shape.length, shape.height, shape.width];
+  }
+}
 
 export const kitUrl = (asset: string) => `/models/kit-v1/${asset}.glb`;
 export interface KitVisual { asset: string; size: Vec3; rotation?: Vec3; offset?: Vec3; hidden?: boolean }
