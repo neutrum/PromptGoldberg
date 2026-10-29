@@ -304,6 +304,7 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
   const notice = useMachine((s) => s.notice);
   const pending = useMachine((s) => s.pendingPart);
   const undo = useMachine((s) => !!s.lastEdit);
+  const remix = useMachine((s) => s.remix);
   const { submitPrompt, setDraft, setPromptMode } = useMachine.getState();
   const [deck, setDeck] = useState(false);
   const editing = !!machine && (promptMode === 'edit' || isEditInstruction(text));
@@ -345,6 +346,7 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
         <button className="primary" disabled={ai.busy || !text.trim()}>{ai.busy ? 'Working…' : adding ? 'Add part →' : editing ? 'Change it →' : 'Create →'}</button>
       </form>
       {ai.error && <div className="error-inline" role="alert">{ai.error}</div>}
+      {remix && <div className="edit-notice remix-offer" role="alertdialog" aria-label="Make it your own copy?"><span>That change reshapes the puzzle itself (it passed the physics check). Make it your own copy? The scored run ends and the full machine shows.</span><button className="primary" onClick={() => void useMachine.getState().acceptRemix()}>Make it my copy</button><button onClick={() => useMachine.getState().declineRemix()}>Keep playing</button></div>}
       {notice && <div className="edit-notice" role="status"><span>{notice}</span>{pending && <><button onClick={() => useMachine.getState().rotatePicked()}>↻ Turn</button><button onClick={() => useMachine.getState().cancelPlacement()}>Cancel</button></>}{!pending && undo && <button disabled={ai.busy} onClick={() => useMachine.getState().undoEdit()}>Undo</button>}</div>}
       {!ai.busy && !editing && !deck && <div className="examples create-examples"><span>Try a little…</span>{CARDS.slice(0, 3).map((c) => <button key={c.title} onClick={() => { setDraft(c.prompt); inputRef.current?.focus(); }}>{c.emoji} {c.title}</button>)}<span className="prompt-key">Enter to create ↵</span></div>}
       {!ai.busy && editing && !deck && (

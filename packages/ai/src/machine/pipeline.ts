@@ -1,4 +1,4 @@
-import { landscapeFromWords, routeParts, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { landscapeFromWords, routeParts, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -157,11 +157,11 @@ async function designOnly(deps: MachinePipelineDeps, emit: Emit, loop: {
   return { type: 'machine', machine: design.spec, solved: false, verified: false, attempts: 1, notes: ['Level set up; nobody has run it.'], cached: false, result: UNRUN, moved: [], attempt: 1 };
 }
 
-/** How many obstacles stand in the way: more for a hard, crowded or maze-like mission, fewer for an easy one. */
-export function clutterOf(prompt: string): number {
-  if (/\b(easy|simple|beginner|first|tutorial)\b/i.test(prompt)) return 1;
-  if (/\b(hard|harder|maze|crowded|clutter\w*|obstacles?|tricky|dense|chaos|chaotic|forest|jungle)\b/i.test(prompt)) return 6;
-  return 3;
+/** How hard the level is: hard, crowded or maze-like missions get more obstacles, easy ones one. */
+export function tierOf(prompt: string): Difficulty {
+  if (/\b(easy|simple|beginner|first|tutorial)\b/i.test(prompt)) return 'easy';
+  if (/\b(hard|harder|maze|crowded|clutter\w*|obstacles?|tricky|dense|chaos|chaotic|forest|jungle)\b/i.test(prompt)) return 'hard';
+  return 'normal';
 }
 
 /** Route graphs are on unless MACHINE_ROUTE=off. */
@@ -188,7 +188,7 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   const tries: RouteGraphInput[] = [graph, graph, { ...graph, links: words.links, end: g.end }];
   for (const [k, attempt] of tries.entries()) {
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, clutter: clutterOf(prompt), signal: deps.signal });
+    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, difficulty: tierOf(prompt), signal: deps.signal });
     if (!res) continue;
     const notes = [opts.note, res.spec.closest, k === 2 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
     const world = res.spec.landscape ?? landscapeFromWords(prompt) ?? undefined;
@@ -199,7 +199,8 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
     emit({ type: 'draft', machine: spec, status: 'solved', attempt: 1, result: check.result });
     return {
       type: 'machine', machine: spec, solved: true, verified: true, attempts: 1, cached: false, result: check.result, moved: [], attempt: 1,
-      notes: [`Route graph (${g.links.map((l) => `${l.via} ${l.turn ?? 'straight'}`).join(', ')} -> ${g.end}${res.adapted ? `, adapted to ${res.adapted}` : ''}) laid out in ${res.tries} layout(s), ${res.sims} runs.`],
+      notes: [`Route graph (${g.links.map((l) => `${l.via} ${l.turn ?? 'straight'}`).join(', ')} -> ${g.end}${res.adapted ? `, adapted to ${res.adapted}` : ''}) laid out in ${res.tries} layout(s), ${res.sims} runs.`,
+        ...(res.shortcuts ? [`Shortcuts by another path: ${res.shortcuts.found}, ${res.shortcuts.blocked} blocked by obstacles; forgiving placements: ${res.shortcuts.slack}.`] : [])],
     };
   }
   throw new SolverError('I couldn’t verify a route that keeps all of those requirements. Try one or two mechanisms and a bucket or bell finish.');

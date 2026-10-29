@@ -92,6 +92,12 @@ interface MachineState {
 
   mode: Mode;
   fix: FixState | null;
+  /** A verified edit that would reshape the puzzle being played, held until the player decides. */
+  remix: { spec: MachineSpec; original: MachineSpec; moved: { id: string; cells: number }[] } | null;
+  /** Make the held edit the player's own copy; the scored run ends. */
+  acceptRemix(): Promise<void>;
+  /** Drop the held edit and keep playing. */
+  declineRemix(): void;
   /** Machines the AI has delivered this session, for the first-time coach. */
   builds: number;
   edits: number;
@@ -198,6 +204,27 @@ function unchanged(a: MachineSpec, b: MachineSpec): boolean {
     && a.parts.every((p) => { const q = b.parts.find((x) => x.id === p.id); return !!q && samePlace(p, q) && p.color === q.color && p.label === q.label; });
 }
 
+/** The same puzzle: every part, the ground, the stage, the goal and the rules alike; only looks may differ. */
+export function sameShape(a: MachineSpec, b: MachineSpec): boolean {
+  const key = (s: MachineSpec) => JSON.stringify({
+    parts: [...s.parts].sort((p, q) => p.id.localeCompare(q.id)).map((p) => [p.id, p.kind, p.x, p.y, p.z, p.yaw ?? 0, p.length ?? null, !!p.fixed, p.prop ?? null]),
+    terrain: s.terrain ?? [], stage: s.stage ?? null, goal: s.goal.map((g) => [g.type, g.part, g.type === 'bell' ? g.times ?? 1 : null]), rules: s.rules ?? null,
+  });
+  return key(a) === key(b);
+}
+
+/** A looks-only edit carried onto the puzzle in play: colours, names and the world, nothing else. */
+export function withLooks(s: Pick<MachineState, 'fix' | 'machine'>, edited: MachineSpec): Pick<MachineState, 'fix' | 'machine'> {
+  const dress = (ps: Part[]) => ps.map((p) => {
+    const q = edited.parts.find((r) => r.id === p.id && r.kind === p.kind);
+    return q ? { ...p, color: q.color, label: q.label } : p;
+  });
+  const world = (spec: MachineSpec): MachineSpec => ({ ...spec, parts: dress(spec.parts), landscape: edited.landscape });
+  const fix = s.fix && { ...s.fix, hand: dress(s.fix.hand), placed: dress(s.fix.placed),
+    puzzle: { ...s.fix.puzzle, spec: world(s.fix.puzzle.spec), solution: world(s.fix.puzzle.solution), missing: dress(s.fix.puzzle.missing), start: dress(s.fix.puzzle.start) } };
+  return { fix, machine: s.machine && world(s.machine) };
+}
+
 /** Where to stop: a beat after the last goal step or the ball leaving, else the whole run. */
 function playbackEnd(run: MachineRun, result: MachineResult): number {
   const times = result.steps.flatMap((s) => (s.t !== undefined ? [s.t] : []));
@@ -276,28 +303,57 @@ export const useMachine = create<MachineState>((set, get) => {
         return original?.look && original.color === p.color ? { ...part, look: original.look } : part;
       });
       if (path === '/machine/edit') parsed.spec.title = (body as { machine: MachineSpec }).machine.title;
-      if (path === '/machine/edit' && get().machine && unchanged(get().machine!, parsed.spec)) {
-        log('The layout stayed the same. The ball and targets are fixed; try changing a ramp, fan, or cannon.');
-      } else log('Ready. The full route passed its physics check.');
-      abandon();
-      set((s) => ({
-        lastEdit: path === '/machine/edit' ? (body as { machine: MachineSpec }).machine : null,
-        notice: path === '/machine/edit' ? 'Change applied. Press Run to try it, or Undo to go back.' : 'Your machine is ready. Press Run to see what happens.',
-        tutorial: false, suspendedFix: null, puzzle: false, level: null, board: null,
-        daily: { ...s.daily, date: '', stage: 0, tries: 0, builds: [] },
-        prompt: path === '/machine' ? (body as { prompt: string }).prompt : s.prompt,
-        promptMode: 'edit', draft: '',
-        builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
-      }));
-      await get().load(parsed.spec, { rank: 2, proven: true, moved: result.moved });
+      // During a puzzle the level is not the player's to change: looks apply in place, and anything
+      // else waits until the player chooses to make it their own copy (which ends the scored run).
+      const playing = get().fix;
+      if (path === '/machine/edit' && playing && !playing.solved) {
+        const original = (body as { machine: MachineSpec }).machine;
+        if (sameShape(original, parsed.spec)) {
+          set({ ...withLooks(get(), parsed.spec), notice: 'Looks changed. Your puzzle, tries and score are untouched.', draft: '' });
+          log('Looks only: the puzzle is unchanged.');
+          return;
+        }
+        set({ remix: { spec: parsed.spec, original, moved: result.moved }, notice: null });
+        log('That change reshapes the puzzle itself.');
+        return;
+      }
+      await adopt(path, body, parsed.spec, result.moved);
     } catch (err) {
       if (current()) set((s) => ({ ai: { ...s.ai, error: err instanceof Error ? err.message : String(err) } }));
     } finally {
       if (current()) set((s) => ({ ai: { ...s.ai, busy: false }, working: false }));
     }
   };
+  /** A verified result becomes the current machine; any puzzle or daily run in progress ends. */
+  const adopt = async (path: '/machine' | '/machine/edit', body: unknown, spec: MachineSpec, moved: { id: string; cells: number }[]) => {
+    const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
+    if (path === '/machine/edit' && get().machine && unchanged(get().machine!, spec)) {
+      log('The layout stayed the same. The ball and targets are fixed; try changing a ramp, fan, or cannon.');
+    } else log('Ready. The full route passed its physics check.');
+    abandon();
+    set((s) => ({
+      lastEdit: path === '/machine/edit' ? (body as { machine: MachineSpec }).machine : null,
+      notice: path === '/machine/edit' ? 'Change applied. Press Run to try it, or Undo to go back.' : 'Your machine is ready. Press Run to see what happens.',
+      tutorial: false, suspendedFix: null, puzzle: false, level: null, board: null, remix: null,
+      daily: { ...s.daily, date: '', stage: 0, tries: 0, builds: [] },
+      prompt: path === '/machine' ? (body as { prompt: string }).prompt : s.prompt,
+      promptMode: 'edit', draft: '',
+      builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
+    }));
+    await get().load(spec, { rank: 2, proven: true, moved });
+  };
 
   return {
+    remix: null,
+    async acceptRemix() {
+      const r = get().remix;
+      if (!r) return;
+      await adopt('/machine/edit', { machine: r.original }, { ...r.spec, title: `${r.original.title} (remix)` }, r.moved);
+      set({ notice: 'This is your own copy now; the scored run has ended. Press Run to try it, or Undo to go back.' });
+    },
+    declineRemix() {
+      set({ remix: null, notice: 'Kept the puzzle as it was. Changes to looks (colours, names, the world) work while you play.' });
+    },
     prompt: '',
     promptMode: 'edit',
     setPromptMode: (promptMode) => set((s) => ({ promptMode, draft: '', draftFocus: s.draftFocus + 1 })),
@@ -509,7 +565,9 @@ export const useMachine = create<MachineState>((set, get) => {
     edit(instruction) {
       const { machine, fix } = get();
       if (!machine) return Promise.resolve();
-      const visible = fix ? withPlacements(fix.puzzle, fix.placed) : machine;
+      // Mid-puzzle with parts still in hand, the edit reads the puzzle's whole machine; only its looks come back unless the player makes a copy.
+      const placedBuild = fix ? withPlacements(fix.puzzle, fix.placed) : machine;
+      const visible = fix && !parseMachine(placedBuild).ok ? fix.puzzle.solution : placedBuild;
       if (!parseMachine(visible).ok) {
         set((s) => ({ ai: { ...s.ai, error: 'Place the route’s checkpoint parts before editing this build, or choose Watch to edit the complete machine.' } }));
         return Promise.resolve();

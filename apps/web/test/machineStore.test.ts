@@ -174,6 +174,43 @@ describe('a dependable creation and editing flow', () => {
     expect(body.verify).toBe(true);
   });
 
+  it('applies a looks-only edit to the puzzle in play, keeping tries and the scored run', async () => {
+    await useMachine.getState().startFix('missing');
+    useMachine.setState({ fix: { ...useMachine.getState().fix!, tries: 2 } });
+    const world = { name: 'Pine forest', sky: '#a9cbe0', ground: '#8b9a5b', land: '#5f7f45', rock: '#7d8086', water: '#3f7fa8', foliage: '#2f5b3a', accent: '#d9c27a', features: [{ kind: 'conifers' as const, amount: 'many' as const }] };
+    const ball = machine.parts.find((p) => p.kind === 'ball')!;
+    // The edit reads the visible build (the ramp is still in hand) and paints what is on the stage.
+    vi.mocked(streamMachine).mockImplementation(async (_path, body, emit) => {
+      const seen = (body as { machine: typeof machine }).machine;
+      emit({ ...done, machine: { ...seen, landscape: world, parts: seen.parts.map((p) => (p.id === ball.id ? { ...p, color: '#ff7f50', label: 'pizza' } : p)) } });
+    });
+    await useMachine.getState().edit('paint the ball coral, call it pizza and make it a pine forest');
+    const s = useMachine.getState();
+    expect(s.fix).toMatchObject({ tries: 2, solved: false, kind: 'missing' });
+    expect(s.fix!.puzzle.spec.parts.find((p) => p.id === ball.id)).toMatchObject({ color: '#ff7f50', label: 'pizza', x: ball.x });
+    expect(s.fix!.puzzle.solution.parts.find((p) => p.id === ball.id)?.label).toBe('pizza');
+    expect(s.fix!.puzzle.spec.landscape?.name).toBe('Pine forest');
+    expect(s.remix).toBeNull();
+  });
+
+  it('holds an edit that reshapes the puzzle until the player makes it their own copy', async () => {
+    await useMachine.getState().startFix('missing');
+    const reshaped = { ...machine, terrain: [{ name: 'pond', x: 0, z: 0, w: 2, d: 2, h: -1 }] };
+    vi.mocked(streamMachine).mockImplementation(async (_path, _body, emit) => { emit({ ...done, machine: reshaped }); });
+    await useMachine.getState().edit('dig a pond');
+    expect(useMachine.getState().fix).not.toBeNull();
+    expect(useMachine.getState().remix?.spec.terrain).toEqual(reshaped.terrain);
+    useMachine.getState().declineRemix();
+    expect(useMachine.getState()).toMatchObject({ remix: null, mode: 'fix' });
+    await useMachine.getState().edit('dig a pond');
+    await useMachine.getState().acceptRemix();
+    const s = useMachine.getState();
+    expect(s.fix).toBeNull();
+    expect(s.remix).toBeNull();
+    expect(s.machine?.terrain).toEqual(reshaped.terrain);
+    expect(s.machine?.title).toMatch(/\(remix\)$/);
+  });
+
   it('switches to replay and resumes puzzle placements, charging a solution reveal once', async () => {
     await useMachine.getState().startFix('missing');
     useMachine.setState({ fix: { ...useMachine.getState().fix!, placed: [ramp], tries: 1 }, phase: 'done' });

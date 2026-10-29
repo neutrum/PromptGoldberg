@@ -179,3 +179,4 @@
 .theme-colours { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }.theme-colours label { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px; }.theme-colours input { width: 26px; height: 22px; padding: 0; border: 0; background: none; cursor: pointer; }
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-right: 12px; }.toggle input { accent-color: var(--accent); }
 .settings-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 24px; }
+.remix-offer { border-color: var(--accent); }.remix-offer button { white-space: nowrap; }

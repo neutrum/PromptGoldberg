@@ -13,7 +13,9 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] Worlds by prompt (`MachineSpec.landscape`, looks only): name, palette, 3–6 features (conifers, broadleaf, birches, palms, cacti, bushes, flowers, mushrooms, reeds, rocks, boulders, hills, mountains, lake, snowdrifts), snow. Written by the AI on creation (route graph and full designer) and edits (`landscape` / `clearLandscape` ops); keyword fallback (`landscapeFromWords`) for offline creation or when the AI leaves it out. Seeded scatter on the apron, tall things behind the board only; instanced rendering. Verified live: "Create a terrain that looks like forests and hills in british columbia" → verified edit in 6.7 s, screenshot checked.
 - [x] Settings (••• → Settings): stage size for new machines, five theme presets, custom interface and scene colours, grid / scenery / machine-world toggles; saved in the browser, sanitised on load.
 - [x] Obstacles that matter on the board: fixed `prop` obstacles (rock, crate, tree, cactus, stump), each drawn exactly as its collider. The compiler stands them on the straight lines from ball to target and beside the route, never on a cell the ball passes, and keeps each only if the level still solves. Count from the mission: 1 for easy, 3 by default, 6 for hard, crowded, maze or forest; kinds suit the world (trees in a forest, cacti in a desert). Edits can add them ("put rocks in the way"). Verified: obstacle tests on three route types; live "A hard puzzle in a British Columbia forest..." → 6 obstacles, verified in 3.5 s, screenshot checked.
-- Tests: 229 passing across 31 files; typecheck clean.
+- [x] Shortcut probe and difficulty tiers: the compiler tries lazy builds (each route part left out or shifted 1–2 cells). Those that still solve by another path are shortcuts; obstacles go on their cells first, and a shortcut counts as blocked only when re-run with the obstacle and failing. Tiers from the mission: easy (1 obstacle, no probe), normal (3), hard (6). Notes report "Shortcuts by another path: N, M blocked". Measured: fan routes find about 5 and block 2 (normal) or 3–4 (hard); cannon routes find none; probe adds about 0.5 s. Live hard fan level: 6 found, 4 blocked.
+- [x] Reprompting during a puzzle: a looks-only edit (colours, names, world) applies to the puzzle in place and keeps tries and score; an edit that reshapes the puzzle is held behind "Make it my copy" / "Keep playing". Accepting ends the scored run and titles it "(remix)". Previously any AI edit silently ended the puzzle as a give-up. Store tests cover both paths.
+- Tests: 232 passing across 31 files; typecheck clean.
 
 ## To do
 
@@ -23,6 +25,10 @@ Player brief (given earlier to ChatGPT, recovered 2026-10-29):
 - [ ] A structured prompt handbook so writing prompts is fun, with generated example images.
 - [ ] Decoy mechanisms on the board (a fan aimed the wrong way, a ramp to nowhere): obstacles now block the obvious line, but every mechanism on the board is still part of the solution.
 - [ ] Turn wall from the compiler: check it actually blocks the ball (route without it fails), else replace it with an obstacle that does.
+- [ ] Shortcuts the probe finds but cannot block (their cells also carry the intended ball): try a different layout seed for hard levels when fewer than half are blocked.
+- [ ] Local "add a fan" placement during a puzzle still leaves the puzzle silently; apply the same copy rule.
+- [ ] Daily ladder: use the difficulty tiers per stage (easy first, hard last).
+- [ ] Clustered, evenly spaced (Poisson-disk) scatter for the world around the board.
 - [ ] Full-designer levels (non-route missions) get no obstacle pass yet.
 
 Follow-ups from 2026-10-29:

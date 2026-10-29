@@ -12,6 +12,7 @@ import { layoutProblems, obstacles, terrainInWay } from './names';
 import { mulberry32 } from './nudge';
 import { makeConnectPuzzle, routeParts } from './puzzle';
 import { finishTime } from './rules';
+import { restingHeight } from './placement';
 import { Landscape } from './landscape';
 import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type ObstacleProp, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
@@ -57,15 +58,30 @@ export interface CompileOptions {
   rules?: Rules;
   /** Stage size in cells (default 24 by 24). */
   stage?: Stage;
-  /** Obstacles to stand where a player would go first (default 3; 0 for none). */
+  /** How hard the level is: how many obstacles, and whether lazy builds are probed for shortcuts to block. */
+  difficulty?: Difficulty;
+  /** Obstacles to stand in the way (overrides the difficulty's count; 0 for none). */
   clutter?: number;
 }
+
+export type Difficulty = 'easy' | 'normal' | 'hard';
+/** Easy: one obstacle, no probe. Normal and hard: lazy builds are tried and their shortcuts blocked first. */
+export const TIERS: Record<Difficulty, { clutter: number; probe: boolean }> = {
+  easy: { clutter: 1, probe: false },
+  normal: { clutter: 3, probe: true },
+  hard: { clutter: 6, probe: true },
+};
+
+/** The last layout's lazy builds that also worked, and how many obstacles took away; compileRoute is synchronous. */
+let probe = { found: 0, blocked: 0, slack: 0 };
 
 export interface CompileResult {
   spec: MachineSpec;
   /** Layouts tried, and simulations run. */
   tries: number;
   sims: number;
+  /** Lazy builds (a route part left out or shifted) that solved the level by another path, how many the obstacles block, and how many solved it on the same path (slack: forgiving placement). */
+  shortcuts?: { found: number; blocked: number; slack: number };
   /** Set when the graph's ending could not be built and another one stands in ("once": the bell rings once, not as often as asked). */
   adapted?: RouteGraph['end'] | 'once';
 }
@@ -177,21 +193,21 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
   for (let tryNo = 1; tryNo <= attempts; tryNo++) {
     const spec = layOut(graph, links, rand, run, opts);
     if (!spec) continue;
-    if (!opts.rules) return { spec, tries: tryNo, sims };
+    if (!opts.rules) return { spec, tries: tryNo, sims, shortcuts: { ...probe } };
     if (opts.strict) {
       const t = finishTime(evaluateMachine(spec.goal, run(spec))) ?? 0;
       if ((opts.rules.maxParts === undefined || routeParts(spec).length <= opts.rules.maxParts)
         && (opts.rules.minSeconds === undefined || t >= opts.rules.minSeconds)) {
-        return { spec: { ...spec, rules: opts.rules }, tries: tryNo, sims };
+        return { spec: { ...spec, rules: opts.rules }, tries: tryNo, sims, shortcuts: { ...probe } };
       }
       continue;
     }
     const kept = withRules(spec, opts.rules, run);
-    if (kept.ok) return { spec: kept.spec, tries: tryNo, sims };
+    if (kept.ok) return { spec: kept.spec, tries: tryNo, sims, shortcuts: { ...probe } };
     eased ??= kept.spec;
   }
   if (opts.strict) return null;
-  if (eased) return { spec: eased, tries: attempts, sims };
+  if (eased) return { spec: eased, tries: attempts, sims, shortcuts: { ...probe } };
   const ruled = (spec: MachineSpec) => (opts.rules ? withRules(spec, opts.rules, run).spec : spec);
   let tries = attempts;
   // A bell that must ring more than once and never does on this route: once, and say so.
@@ -199,7 +215,7 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
     const once: RouteGraph = { ...graph, rings: 1, closest: graph.closest ?? 'The bell rings once on this route: ringing it again would not fit.' };
     for (let tryNo = 1; tryNo <= Math.ceil(attempts / 2); tryNo++) {
       const spec = layOut(once, links, rand, run, opts);
-      if (spec) return { spec: ruled(spec), tries: tries + tryNo, sims, adapted: 'once' };
+      if (spec) return { spec: ruled(spec), tries: tries + tryNo, sims, shortcuts: { ...probe }, adapted: 'once' };
     }
     tries += Math.ceil(attempts / 2);
   }
@@ -208,7 +224,7 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
     const adapted: RouteGraph = { ...graph, end, rings: 1, closest: graph.closest ?? ADAPT_NOTE[end] };
     for (let tryNo = 1; tryNo <= Math.ceil(attempts / 2); tryNo++) {
       const spec = layOut(adapted, links, rand, run, opts);
-      if (spec) return { spec: ruled(spec), tries: tries + tryNo, sims, adapted: end };
+      if (spec) return { spec: ruled(spec), tries: tries + tryNo, sims, shortcuts: { ...probe }, adapted: end };
     }
     tries += Math.ceil(attempts / 2);
   }
@@ -534,36 +550,77 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
       keepIf(() => terrain.push({ name: names.ground ?? 'pond', x: s.x, z: s.z, w: 2, d: 2, h: -1 }), () => terrain.pop());
     }
   }
-  // Obstacles that matter: on the straight lines from the ball to the target (where a player goes
-  // first) and right beside the route, never on a cell the ball passes. Each stays only if the
-  // level still works with it, so the solution has to thread past them.
-  const clutter = opts.clutter ?? 3;
+  // Obstacles that matter. First the lazy builds: each route part left out, or shifted a cell or
+  // two. The ones that still work are shortcuts, and the cells only their ball passes are where an
+  // obstacle takes them away. Then the straight lines from the ball to the target (where a player
+  // goes first) and the cells beside the route. Never a cell the intended ball passes; each
+  // obstacle stays only if the intended route still works.
+  const tier = TIERS[opts.difficulty ?? 'normal'];
+  const clutter = opts.clutter ?? tier.clutter;
+  probe = { found: 0, blocked: 0, slack: 0 };
   if (clutter > 0) {
     const target0 = parts.find((p) => p.id === target)!;
-    const visited = new Set(track(run(spec())).map((s) => `${cellOf(s.x)},${cellOf(s.z)}`));
+    const cellsOf = (r: MachineRun) => new Set(track(r).map((s) => `${cellOf(s.x)},${cellOf(s.z)}`));
+    const visited = cellsOf(run(spec()));
     const taken = new Set(parts.flatMap((p) => footprint(p).map((c) => `${c.x},${c.z}`)));
+    const shortcuts: { spec: MachineSpec; cells: Set<string>; blocked: boolean }[] = [];
+    if (tier.probe) {
+      const base = spec();
+      for (const r of routeParts(base)) {
+        const lazy: Part[][] = [base.parts.filter((p) => p.id !== r.id)];
+        if (r.kind !== 'platform') for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
+          const x = r.x + dx, z = r.z + dz;
+          const others = base.parts.filter((p) => p.id !== r.id);
+          if (!inStage(x, z) || others.some((p) => p.kind !== 'platform' && footprint(p).some((c) => c.x === x && c.z === z))) continue;
+          lazy.push([...others, { ...r, x, z, y: restingHeight(others, x, z, r.id, base.terrain), dx: undefined, dz: undefined }]);
+        }
+        for (const ps of lazy) {
+          const variant = { ...base, parts: ps };
+          const res = run(variant);
+          if (!evaluateMachine(variant.goal, res).success) continue;
+          const own = [...cellsOf(res)].filter((c) => !visited.has(c) && !taken.has(c));
+          // Same path, part a cell off: forgiving placement, not a shortcut.
+          if (own.length < 2) probe.slack++;
+          else shortcuts.push({ spec: variant, cells: new Set(own), blocked: false });
+        }
+      }
+      probe.found = shortcuts.length;
+    }
     const line = new Set<string>();
     const [ax, bx] = [Math.min(ball.x, target0.x), Math.max(ball.x, target0.x)], [az, bz] = [Math.min(ball.z, target0.z), Math.max(ball.z, target0.z)];
     for (let x = ax; x <= bx; x++) { line.add(`${x},${ball.z}`); line.add(`${x},${target0.z}`); }
     for (let z = az; z <= bz; z++) { line.add(`${ball.x},${z}`); line.add(`${target0.x},${z}`); }
     const beside = (x: number, z: number) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => visited.has(`${x + dx},${z + dz}`));
     const spots: { x: number; z: number; score: number }[] = [];
-    for (let x = ax - 2; x <= bx + 2; x++) for (let z = az - 2; z <= bz + 2; z++) {
+    for (let x = ax - 3; x <= bx + 3; x++) for (let z = az - 3; z <= bz + 3; z++) {
       const key = `${x},${z}`;
       if (!inStage(x, z) || visited.has(key) || taken.has(key) || groundAt(spec().terrain, x, z) < 0) continue;
-      const score = (line.has(key) ? 3 : 0) + (beside(x, z) ? 2 : 0) + rand();
+      const cuts = shortcuts.filter((c) => c.cells.has(key)).length;
+      const score = cuts * 4 + (line.has(key) ? 3 : 0) + (beside(x, z) ? 2 : 0) + rand();
       if (score >= 1.5) spots.push({ x, z, score });
     }
     spots.sort((a, b) => b.score - a.score);
     const props = worldProps(graph.landscape);
     let placed = 0;
-    for (const at of spots.slice(0, clutter * 3)) {
+    for (const at of spots.slice(0, clutter * 4)) {
       if (placed >= clutter) break;
+      const key = `${at.x},${at.z}`;
+      const open = shortcuts.filter((c) => !c.blocked && c.cells.has(key));
+      // Once the shortcuts are gone, a cell that only some blocked shortcut crossed adds nothing.
+      if (!open.length && shortcuts.some((c) => c.cells.has(key)) && !line.has(key) && !beside(at.x, at.z)) continue;
       const prop = props[placed % props.length];
       const rock: Part = { id: fresh(prop), kind: 'wall', x: at.x, y: groundAt(spec().terrain, at.x, at.z), z: at.z, yaw: 0, fixed: true, prop,
         ...(prop === 'tree' && graph.landscape ? { color: graph.landscape.foliage } : prop === 'rock' && graph.landscape ? { color: graph.landscape.rock } : {}) };
-      if (keepIf(() => parts.push(rock), () => parts.pop())) placed++;
+      if (!keepIf(() => parts.push(rock), () => parts.pop())) continue;
+      placed++;
+      // A shortcut counts as blocked only when it is run again with the obstacle and fails.
+      for (const c of open) {
+        const again = { ...c.spec, parts: [...c.spec.parts, rock] };
+        if (!evaluateMachine(again.goal, run(again)).success) c.blocked = true;
+        else c.spec = again;
+      }
     }
+    probe.blocked = shortcuts.filter((c) => c.blocked).length;
   }
   // Nothing in the way yet (flat ground, a wall outside the box): a wall inside the box, off the route.
   if (!obstacles(spec()).length && !terrainInWay(spec()).length) {

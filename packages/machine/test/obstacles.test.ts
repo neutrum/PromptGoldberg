@@ -31,6 +31,15 @@ describe('obstacles in the way', () => {
     expect(total).toBeGreaterThanOrEqual(6);
   });
 
+  it('tries lazy builds and blocks the shortcuts it finds, harder blocking more', () => {
+    const normal = compileRoute(graphs[0], { seed: 3, difficulty: 'normal' })!;
+    const hard = compileRoute(graphs[0], { seed: 3, difficulty: 'hard' })!;
+    expect(hard.shortcuts!.found).toBeGreaterThan(0);
+    expect(hard.shortcuts!.blocked).toBeGreaterThan(0);
+    expect(hard.shortcuts!.blocked).toBeGreaterThanOrEqual(normal.shortcuts!.blocked);
+    expect(compileRoute(graphs[0], { seed: 3, difficulty: 'easy' })!.shortcuts!.found).toBe(0);
+  });
+
   it('suits the world and can be switched off', () => {
     const forest = compileRoute({ ...graphs[0], landscape: landscapeFromWords('forests in british columbia')! }, { seed: 5, clutter: 6 })!;
     expect(forest.spec.parts.filter((p) => p.prop).every((p) => p.prop === 'tree' || p.prop === 'stump' || p.prop === 'rock')).toBe(true);
