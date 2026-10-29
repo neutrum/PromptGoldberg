@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CELL, compileRoute, evaluateMachine, initPhysics, landscapeFromWords, makeConnectPuzzle, simulateSync } from '../src';
+import { CELL, compileRoute, evaluateMachine, footprint, initPhysics, landscapeFromWords, MachineSpec, makeConnectPuzzle, simulateSync } from '../src';
 
 beforeAll(() => initPhysics());
 
@@ -39,6 +39,24 @@ describe('obstacles in the way', () => {
     expect(hard.shortcuts!.blocked).toBeGreaterThanOrEqual(normal.shortcuts!.blocked);
     expect(compileRoute(graphs[0], { seed: 3, difficulty: 'easy' })!.shortcuts!.found).toBe(0);
   });
+
+  it('lays the world landmark on the board off the ball path and fills the free board, within the part limit', () => {
+    const world = landscapeFromWords('a sleeping dragon in a crystal cave')!;
+    expect(world.hero).toBe('dragon');
+    const r = compileRoute({ ...graphs[0], landscape: world }, { seed: 5 })!;
+    const dragon = r.spec.parts.find((p) => p.prop === 'dragon')!;
+    expect(dragon).toBeDefined();
+    expect(MachineSpec.safeParse(r.spec).success).toBe(true);
+    const run = simulateSync(r.spec, { record: true });
+    expect(evaluateMachine(r.spec.goal, run).success).toBe(true);
+    const ball = run.dynamicIds.indexOf(r.spec.parts.find((p) => p.kind === 'ball')!.id);
+    const cells = new Set(footprint(dragon).map((c) => `${c.x},${c.z}`));
+    for (let f = 0; f < run.frameCount; f++) {
+      const b = f * run.frameStride + 1 + ball * 7;
+      expect(cells.has(`${Math.floor(run.frames[b] / CELL)},${Math.floor(run.frames[b + 2] / CELL)}`)).toBe(false);
+    }
+    expect(r.spec.parts.filter((p) => p.prop).length).toBeGreaterThan(10);
+  }, 60_000);
 
   it('suits the world and can be switched off', () => {
     const forest = compileRoute({ ...graphs[0], landscape: landscapeFromWords('forests in british columbia')! }, { seed: 5, clutter: 6 })!;

@@ -2,7 +2,7 @@
  * The parts kit: what each part is made of, as plain geometry. The simulation builds colliders
  * from these and the renderer draws them, so the two never disagree about where a part is.
  */
-import { PROP_LENGTH } from './landscape';
+import { HERO_SCALE, PROP_SIZE } from './landscape';
 import { CELL, type Part, type PartKind, type Yaw } from './schema';
 
 export type Vec3 = [number, number, number];
@@ -98,6 +98,12 @@ export function yawQuat(yaw: Yaw): Quat {
   return [0, Math.sin(angle / 2), 0, Math.cos(angle / 2)];
 }
 
+/** The middle of a prop that covers several cells (its origin cell is the first along and across). */
+export function propCentre(p: Part): Vec3 {
+  const [len, wide] = (p.prop && PROP_SIZE[p.prop]) || [1, 1];
+  return add(add(partOrigin(p), facing(p.yaw), (len - 1) * CELL / 2), sideways(p.yaw), (wide - 1) * CELL / 2);
+}
+
 /** a then b, as one rotation. */
 function mulQuat(a: Quat, b: Quat): Quat {
   const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
@@ -168,11 +174,61 @@ export function assemblePart(p: Part): Assembly {
             fixed(`${p.id}.shank`, { kind: 'cylinder', radius: 0.06, height: 0.45 }, add(o, [0, 0.345, 0]), q, { ...prop, color: tone('#8d959e') });
             break;
           default: {
-            // Tools lying along the facing, over two or three cells; `c` is their middle.
-            const c = add(o, f, ((PROP_LENGTH[p.prop] ?? 1) - 1) * CELL / 2);
+            // Props over several cells (tools lying along the facing, the big landmarks); `c` is their middle.
+            const c = propCentre(p);
+            const s = sideways(p.yaw);
             const side = mulQuat(q, ON_SIDE);
-            const at = (along: number, up: number) => add(add(c, f, along), [0, up, 0]);
+            const at = (along: number, up: number, across = 0) => add(add(add(c, f, along), s, across), [0, up, 0]);
+            // Landmarks are modelled at unit size and stand HERO_SCALE times bigger.
+            const k = HERO_SCALE;
+            const big = (shape: Shape): Shape => shape.kind === 'box' ? { kind: 'box', size: [shape.size[0] * k, shape.size[1] * k, shape.size[2] * k] }
+              : shape.kind === 'sphere' ? { kind: 'sphere', radius: shape.radius * k }
+              : shape.kind === 'cylinder' ? { kind: 'cylinder', radius: shape.radius * k, height: shape.height * k } : shape;
+            const hero = (id: string, shape: Shape, pos: Vec3, color: string, rot = q) => {
+              const d: Vec3 = [(pos[0] - c[0]) * k, (pos[1] - c[1]) * k, (pos[2] - c[2]) * k];
+              fixed(id ? `${p.id}.${id}` : p.id, big(shape), add(c, d), rot, { ...prop, restitution: 0.3, color });
+            };
             switch (p.prop) {
+              // The landmarks: solid wherever a rolling or bouncing ball can reach; details above that are drawn by the scene.
+              case 'dragon': {
+                const skin = tone('#3f7a4a');
+                hero('', { kind: 'box', size: [1.4, 0.5, 0.8] }, at(-0.05, 0.3), skin);
+                hero('neck', { kind: 'box', size: [0.5, 0.36, 0.36] }, at(0.85, 0.42), skin);
+                hero('head', { kind: 'box', size: [0.5, 0.32, 0.38] }, at(1.18, 0.52), skin);
+                hero('tail', { kind: 'box', size: [0.95, 0.2, 0.22] }, at(-1.15, 0.12), skin);
+                break;
+              }
+              case 'castle': {
+                const stone = tone('#b8ad9a');
+                hero('', { kind: 'box', size: [1.5, 0.7, 1.5] }, at(0, 0.35), stone);
+                for (const [k, [a, b]] of ([[0.75, 0.75], [0.75, -0.75], [-0.75, 0.75], [-0.75, -0.75]] as const).entries()) hero(`tower${k}`, { kind: 'cylinder', radius: 0.24, height: 1.15 }, at(a, 0.575, b), stone);
+                break;
+              }
+              case 'ship': {
+                hero('', { kind: 'box', size: [2.2, 0.42, 0.78] }, at(0, 0.21), tone('#7a4a2b'));
+                hero('mast', { kind: 'cylinder', radius: 0.05, height: 1.5 }, at(0.1, 1.17), '#5c3d24');
+                break;
+              }
+              case 'robot': {
+                const metal = tone('#9aa3ad');
+                hero('', { kind: 'box', size: [0.3, 0.55, 0.3] }, at(0, 0.275, 0.24), metal);
+                hero('leg2', { kind: 'box', size: [0.3, 0.55, 0.3] }, at(0, 0.275, -0.24), metal);
+                hero('body', { kind: 'box', size: [0.55, 0.6, 0.8] }, at(0, 0.85), metal);
+                break;
+              }
+              case 'rocket': {
+                const hull = tone('#e8e4dc');
+                hero('', { kind: 'cylinder', radius: 0.34, height: 1.7 }, at(0, 0.85), hull);
+                hero('fin', { kind: 'box', size: [1.0, 0.36, 0.08] }, at(0, 0.18), '#d9452b');
+                hero('fin2', { kind: 'box', size: [0.08, 0.36, 1.0] }, at(0, 0.18), '#d9452b');
+                break;
+              }
+              case 'windmill':
+                hero('', { kind: 'cylinder', radius: 0.36, height: 1.5 }, at(0, 0.75), tone('#efe4cc'));
+                break;
+              case 'teapot':
+                hero('', { kind: 'sphere', radius: 0.62 }, at(0, 0.55), tone('#5b8fd6'));
+                break;
               case 'hammer':
                 fixed(p.id, { kind: 'cylinder', radius: 0.06, height: 0.85 }, at(-0.08, 0.06), side, { ...prop, color: '#b5834a' });
                 fixed(`${p.id}.head`, { kind: 'box', size: [0.18, 0.2, 0.46] }, at(0.4, 0.1), q, { ...prop, color: tone('#5b6168') });
@@ -280,7 +336,12 @@ export function footprint(p: Part): { x: number; z: number }[] {
     case 'ramp': return along(2);
     case 'dominoes': return along(Math.ceil(((p.length ?? DOMINO_DEFAULT) - 1) * KIT.domino.spacing / CELL + 0.5));
     case 'seesaw': return [{ x: p.x - f[0], z: p.z - f[2] }, { x: p.x, z: p.z }, { x: p.x + f[0], z: p.z + f[2] }];
-    case 'wall': return p.prop ? along(PROP_LENGTH[p.prop] ?? 1) : [{ x: p.x, z: p.z }];
+    case 'wall': {
+      const [len, wide] = (p.prop && PROP_SIZE[p.prop]) || [1, 1];
+      if (wide === 1) return along(len);
+      const s = sideways(p.yaw);
+      return along(len).flatMap((c) => Array.from({ length: wide }, (_, j) => ({ x: c.x + s[0] * j, z: c.z + s[2] * j })));
+    }
     default: return [{ x: p.x, z: p.z }];
   }
 }

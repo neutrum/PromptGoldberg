@@ -18,14 +18,25 @@ export const LANDSCAPE_FEATURES = [
 ] as const;
 export type LandscapeFeature = (typeof LANDSCAPE_FEATURES)[number];
 
-/** Fixed obstacles on the board, each with its own collider and drawn exactly as it collides. */
+/** Small fixed obstacles on the board, each with its own collider and drawn exactly as it collides. */
 export const OBSTACLE_PROPS = [
   'rock', 'crate', 'tree', 'cactus', 'stump', 'crystal', 'column',
   'nut', 'bolt', 'tape', 'spool', 'hammer', 'wrench', 'screwdriver', 'pencil',
 ] as const;
-export const ObstacleProp = z.enum(OBSTACLE_PROPS);
+/** One big low-poly landmark lying on the board: the world's centrepiece, solid where the ball can reach. */
+export const HEROES = ['dragon', 'castle', 'ship', 'robot', 'rocket', 'windmill', 'teapot'] as const;
+export type Hero = (typeof HEROES)[number];
+/** Everything a fixed wall can be instead of a wall. */
+export const ObstacleProp = z.enum([...OBSTACLE_PROPS, ...HEROES]);
 export type ObstacleProp = z.infer<typeof ObstacleProp>;
-/** Tools lie across several cells along their facing; everything else fills one. */
+/** How much bigger than their modelled size the landmarks stand, so they read from the default camera. */
+export const HERO_SCALE = 1.5;
+/** Cells a prop covers: along its facing, then across it. Everything not listed fills one cell. */
+export const PROP_SIZE: Partial<Record<ObstacleProp, [number, number]>> = {
+  hammer: [2, 1], wrench: [2, 1], screwdriver: [2, 1], pencil: [3, 1],
+  dragon: [10, 4], castle: [6, 6], ship: [9, 3], robot: [3, 3], rocket: [3, 3], windmill: [3, 3], teapot: [4, 4],
+};
+/** Tools lie across several cells along their facing (kept for the prompts). */
 export const PROP_LENGTH: Partial<Record<ObstacleProp, number>> = { hammer: 2, wrench: 2, screwdriver: 2, pencil: 3 };
 
 const Hex = z.string().regex(/^#[0-9a-f]{6}$/i);
@@ -44,7 +55,8 @@ export const Landscape = z.object({
     kind: z.enum(LANDSCAPE_FEATURES),
     amount: z.enum(['few', 'some', 'many']).default('some'),
   })).min(1).max(8).describe('what fills the world around the board'),
-  obstacles: z.array(ObstacleProp).min(1).max(4).optional().describe('what stands in the ball\'s way on the board, in this world\'s style: tools on a workbench, crystals in a cave, rocks outdoors'),
+  hero: z.enum(HEROES).optional().describe('one big low-poly landmark lying on the board, the world\'s centrepiece: a dragon in its lair, a castle, a pirate ship, a robot, a rocket, a windmill, a giant teapot on a desk'),
+  obstacles: z.array(z.enum(OBSTACLE_PROPS)).min(1).max(4).optional().describe('what stands in the ball\'s way on the board, in this world\'s style: tools on a workbench, crystals in a cave, rocks outdoors'),
   snow: z.boolean().optional().describe('snow on mountain tops and conifers'),
   seed: z.number().int().min(0).max(999_999).optional(),
 });
@@ -110,7 +122,18 @@ const WORLDS: { words: RegExp; world: LandscapeInput }[] = [
 /** A world named in the words, or null. The first match wins, so specific places beat general words. */
 export function landscapeFromWords(text: string): Landscape | null {
   const hit = WORLDS.find((w) => w.words.test(text));
-  return hit ? Landscape.parse({ ...hit.world, seed: seedOf(text) }) : null;
+  return hit ? Landscape.parse({ ...hit.world, hero: heroFromWords(text) ?? hit.world.hero, seed: seedOf(text) }) : null;
+}
+
+const HERO_WORDS: [RegExp, Hero][] = [
+  [/\b(dragons?|wyrm|lair)\b/i, 'dragon'], [/\b(castles?|knights?|kings?|queens?|princess\w*|fortress|medieval)\b/i, 'castle'],
+  [/\b(pirates?|ships?|boats?|treasure|harbou?r|sail\w*)\b/i, 'ship'], [/\b(robots?|android|factory|mech)\b/i, 'robot'],
+  [/\b(rockets?|space|moon|mars|launch pad|astronaut\w*)\b/i, 'rocket'], [/\b(windmills?|farm\w*|countryside|holland|dutch)\b/i, 'windmill'],
+  [/\b(tea\w*|kitchen|desk|breakfast|cafe|coffee)\b/i, 'teapot'],
+];
+/** The centrepiece the words name, or null. */
+export function heroFromWords(text: string): Hero | null {
+  return HERO_WORDS.find(([words]) => words.test(text))?.[1] ?? null;
 }
 
 /** Words that ask for a world rather than a mechanism. */

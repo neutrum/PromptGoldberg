@@ -13,7 +13,7 @@ import { mulberry32 } from './nudge';
 import { makeConnectPuzzle, routeParts } from './puzzle';
 import { finishTime } from './rules';
 import { restingHeight } from './placement';
-import { Landscape, type ObstacleProp } from './landscape';
+import { Landscape, PROP_SIZE, type ObstacleProp } from './landscape';
 import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
@@ -68,10 +68,11 @@ export interface CompileOptions {
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 /** Easy: one obstacle, no probe. Normal and hard: lazy builds are tried and their shortcuts blocked first. */
-export const TIERS: Record<Difficulty, { clutter: number; probe: boolean }> = {
-  easy: { clutter: 1, probe: false },
-  normal: { clutter: 3, probe: true },
-  hard: { clutter: 6, probe: true },
+/** `fill`: the share of the stage's cells the world's obstacles cover away from the route. */
+export const TIERS: Record<Difficulty, { clutter: number; probe: boolean; fill: number }> = {
+  easy: { clutter: 1, probe: false, fill: 0.03 },
+  normal: { clutter: 3, probe: true, fill: 0.05 },
+  hard: { clutter: 6, probe: true, fill: 0.08 },
 };
 
 /** The last layout's lazy builds that also worked, and how many obstacles took away; compileRoute is synchronous. */
@@ -304,7 +305,7 @@ const ADAPT_NOTE: Record<RouteGraph['end'], string> = {
   dominoes: 'This version finishes with a row of dominoes that rings a bell instead.',
 };
 
-const why = (r: string) => { if (process.env.COMPILE_DEBUG) console.log('  layout:', r); return null; };
+const why = (r: string) => { if (process.env.COMPILE_DEBUG) process.stderr.write(`  layout: ${r}\n`); return null; };
 
 function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: (s: MachineSpec) => MachineRun, opts: CompileOptions): MachineSpec | null {
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
@@ -657,6 +658,62 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     }
     probe.blocked = shortcuts.filter((c) => c.blocked).length;
   }
+  // The board itself: the world's centrepiece lying in the biggest open area, then the world's
+  // obstacles spread over the rest, never next to the ball's way. Each kept only if the level still works.
+  {
+    const cellsOf = (r: MachineRun) => new Set(track(r).map((s) => `${cellOf(s.x)},${cellOf(s.z)}`));
+    const visited = cellsOf(run(spec()));
+    const near = new Set<string>();
+    for (const k of visited) { const [x, z] = k.split(',').map(Number); for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) near.add(`${x + dx},${z + dz}`); }
+    const taken = () => new Set(parts.flatMap((p) => footprint(p).map((c) => `${c.x},${c.z}`)));
+    const path = [...visited].map((k) => k.split(',').map(Number));
+    const toPath = (x: number, z: number) => Math.min(8, ...path.map(([a, b]) => Math.abs(a - x) + Math.abs(b - z)));
+    const hero = graph.landscape?.hero;
+    if (hero) {
+      const busy = taken();
+      const spots: { part: Part; score: number }[] = [];
+      for (let x = 0; x < S.x; x++) for (let z = 0; z < S.z; z++) for (const yaw of [0, 90, 180, 270] as Yaw[]) {
+        const y = groundAt(spec().terrain, x, z);
+        if (y < 0) continue;
+        const part: Part = { id: fresh(hero), kind: 'wall', x, y, z, yaw, fixed: true, prop: hero, ...(hero === 'dragon' && graph.landscape ? { color: deepen(graph.landscape.accent) } : {}) };
+        const cells = footprint(part);
+        if (!cells.every((c) => inStage(c.x, c.z) && !near.has(`${c.x},${c.z}`) && !busy.has(`${c.x},${c.z}`) && groundAt(spec().terrain, c.x, c.z) === y)) continue;
+        const cx = cells.reduce((a, c) => a + c.x, 0) / cells.length, cz = cells.reduce((a, c) => a + c.z, 0) / cells.length;
+        // In the open, but near enough the middle of the board to be seen.
+        spots.push({ part, score: Math.min(...cells.map((c) => toPath(c.x, c.z))) * 2 - Math.hypot(cx - S.x / 2, cz - S.z / 2) * 0.35 + rand() * 0.5 });
+      }
+      spots.sort((a, b) => b.score - a.score);
+      for (const { part } of spots.slice(0, 6)) if (keepIf(() => parts.push(part), () => parts.pop())) break;
+    }
+    // No obstacles asked for: no fill either.
+    const fill = opts.clutter === 0 ? 0 : TIERS[opts.difficulty ?? 'normal'].fill;
+    const kinds = worldProps(graph.landscape).filter((k) => !PROP_SIZE[k]);
+    if (fill > 0 && kinds.length) {
+      const busy = taken();
+      const free: { x: number; z: number }[] = [];
+      for (let x = 0; x < S.x; x++) for (let z = 0; z < S.z; z++) if (!near.has(`${x},${z}`) && !busy.has(`${x},${z}`) && groundAt(spec().terrain, x, z) >= 0) free.push({ x, z });
+      for (let i = free.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; }
+      // Evenly spread: no two within a cell of each other.
+      const chosen: { x: number; z: number }[] = [];
+      // Within the 40 parts a machine may have, leaving room for the spares' checks.
+      const want = Math.min(Math.round(fill * S.x * S.z), 38 - parts.length);
+      for (const c of free) {
+        if (chosen.length >= want) break;
+        if (chosen.some((d) => Math.abs(d.x - c.x) <= 1 && Math.abs(d.z - c.z) <= 1)) continue;
+        chosen.push(c);
+      }
+      const props = chosen.map((c, i): Part => {
+        const prop = kinds[i % kinds.length];
+        return { id: fresh(`${prop}-f${i}`), kind: 'wall', x: c.x, y: groundAt(spec().terrain, c.x, c.z), z: c.z, yaw: ([0, 90, 180, 270] as Yaw[])[i % 4], fixed: true, prop,
+          ...(prop === 'tree' && graph.landscape ? { color: graph.landscape.foliage } : prop === 'rock' && graph.landscape ? { color: graph.landscape.rock } : prop === 'crystal' && graph.landscape ? { color: graph.landscape.accent } : {}) };
+      });
+      // All at once; when that breaks the level, keep the ones well away from the ball's way, else none.
+      if (!keepIf(() => parts.push(...props), () => parts.splice(parts.length - props.length, props.length))) {
+        const far = props.filter((p) => toPath(p.x, p.z) >= 4);
+        if (far.length) keepIf(() => parts.push(...far), () => parts.splice(parts.length - far.length, far.length));
+      }
+    }
+  }
   // Nothing in the way yet (flat ground, a wall outside the box): a wall inside the box, off the route.
   if (!obstacles(spec()).length && !terrainInWay(spec()).length) {
     const target0 = parts.find((p) => p.id === target)!;
@@ -689,6 +746,15 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   // A level needs something to build: without the route it must fail.
   if (!makeConnectPuzzle(withSpares)) return why('no connect puzzle');
   return withSpares;
+}
+
+/** A colour pulled toward a deep, saturated version of itself, so a big shape reads against light or dark ground. */
+function deepen(hex: string): string {
+  const n = parseInt(hex.slice(1), 16), ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const max = Math.max(...ch), min = Math.min(...ch);
+  // Stretch the channels apart (more saturation), then darken.
+  const out = ch.map((v) => Math.round((max === min ? v : ((v - min) / (max - min)) * 200 + 20) * 0.7));
+  return `#${out.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** The golden section: a machine should span about this much of each side of its stage. */

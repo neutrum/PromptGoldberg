@@ -10,6 +10,7 @@ import { shapeSize, useModel } from './ModelVisual';
 import { kitUrl, kitVisual } from './kitVisuals';
 import { useSettings } from './settings';
 import { Landscape3D, useWorld, worldMotion } from './Landscape3D';
+import { HeroDecor, isHero } from './Heroes3D';
 
 /** Right-angled wedge: tall at -x, flat at +x, base on y = 0 (matches the physics collider). */
 function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
@@ -231,9 +232,19 @@ function Decor({ parts }: { parts: Part[] }) {
       {parts.map((p) => p.kind === 'fan' ? <FanBlades key={`decor-${p.id}`} part={p} />
         : p.kind === 'bell' ? <BellDome key={`decor-${p.id}`} part={p} />
         : p.kind === 'cannon' ? <CannonBarrel key={`decor-${p.id}`} part={p} />
+        : isHero(p) ? <HeroDecor key={`decor-${p.id}`} part={p} />
+        : p.prop === 'crystal' || p.prop === 'column' ? <PropTop key={`decor-${p.id}`} part={p} />
         : null)}
     </>
   );
+}
+
+/** Above an obstacle's solid part, where no ball reaches: a crystal's point, a column's capital. */
+function PropTop({ part }: { part: Part }) {
+  const [x, y, z] = partOrigin(part);
+  return part.prop === 'crystal'
+    ? <mesh position={[x, y + 0.88, z]} castShadow><coneGeometry args={[0.14, 0.36, 6]} /><meshStandardMaterial color={part.color ?? '#b57bff'} emissive={part.color ?? '#b57bff'} emissiveIntensity={0.5} flatShading /></mesh>
+    : <mesh position={[x, y + 1.0, z]} castShadow><boxGeometry args={[0.44, 0.1, 0.44]} /><meshStandardMaterial color={part.color ?? '#d8ccb0'} flatShading /></mesh>;
 }
 
 // ---- Flashes: a ring that grows and fades where a part fires, bounces, rings or catches.

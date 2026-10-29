@@ -1,4 +1,4 @@
-import { landscapeFromWords, routeParts, spanOf, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { heroFromWords, landscapeFromWords, routeParts, spanOf, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -176,6 +176,10 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: 1, message: opts.graph ? 'Building a level from your words.' : 'Sketching the route for your idea.' });
   const graph: RouteGraphInput = opts.graph ?? await designRoute(deps.llm!, prompt, calls);
   const g = graph as RouteGraph;
+  // The world and its centrepiece go into the layout, so the board is built for them: the AI's, else the mission's words.
+  const world = g.landscape ?? landscapeFromWords(prompt) ?? undefined;
+  const hero = world && (world.hero ?? heroFromWords(prompt) ?? undefined);
+  if (world) g.landscape = { ...world, ...(hero ? { hero } : {}) };
   emit({ type: 'stage', stage: 'verifying', attempt: 1, maxAttempts: 1, message: `Laying out ${g.links.map((l) => l.via).join(', then ')}, ending in ${g.end === 'dominoes' ? 'dominoes' : `a ${g.end}`}, and running it.` });
   const seed = Math.floor(Math.random() * 1e6);
   const flat = wantsFlat(prompt);

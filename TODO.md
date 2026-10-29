@@ -21,7 +21,8 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] Fixes found on the way: a puzzle rebuilt from the player's placements keeps the solution's part order (the physics depends on it); the daily checks every ladder stage with the day's seed, tries three prompts offline, and is remembered per day in memory (before, a server could hand out different no-AI dailies on each request).
 - [x] Goal steps capped at four in the compiler (touch checkpoints dropped first): a long domino chain split into two rows had produced five steps, an invalid machine the client rejected when making the puzzle. Found in the showcase run; regression test added.
 - Showcase (live, verified, 3.5–7.6 s each): clockwork pocket watch, dragon's crystal cave, kid's night desk, sunken Atlantis. Weakest: clockwork cogs read as flat grey discs.
-- Tests: 233 passing across 31 files; typecheck clean.
+- [x] The board is never empty (user feedback: "bleak and boring"): a big low-poly landmark (`landscape.hero`: dragon, castle, ship, robot, rocket, windmill, teapot) lies on the board in the biggest open area off the ball's way, solid where a ball can reach (body, neck, head, tail, towers, hull…), with details above (wings, horns, glowing eyes, roofs, sail, spinning windmill blades); 1.5× scale so it reads from the default camera; the dragon takes the world's accent, deepened. Then the world's obstacles are spread evenly over the free board (3/5/8% of cells for easy/normal/hard, never next to the ball's way, within the 40-part limit), kept only when the level still works. The AI chooses the hero; a keyword fallback names it from the mission (dragon, castle, pirate/ship, robot, rocket/space, windmill/farm, teapot/desk/breakfast). Verified live: dragon cave, pirate cove, breakfast table, each 4.8–6.9 s, about 30 obstacles plus the hero; screenshots checked. Test: the dragon never covers a cell the ball passes.
+- Tests: 234 passing across 31 files; typecheck clean.
 
 ## To do
 
@@ -51,6 +52,8 @@ Speed (asked 2026-10-29):
 - [ ] Photo → themed contraption (Claude vision, no stored photos, EXIF stripped, size cap, rate limit), planned for Nov 3–5.
 
 Follow-ups from 2026-10-29:
+- [ ] Themed small obstacles for more worlds (toast, eggs and cutlery for breakfast; barrels and anchors for pirates): breakfast currently falls back to crates and spools.
+- [ ] Fill pattern reads slightly regular; cluster it (Poisson-disk with noise) like the surroundings.
 - [ ] Cogs: give them visible teeth and an upright stance so the clockwork world reads; check animated pieces in a recorded run.
 - [ ] Remaining interface panels still use fixed colours; move them onto the theme variables.
 - [ ] Landscape on the board itself (trees between parts) needs colliders or a no-go rule first, or the ball will pass through scenery.
