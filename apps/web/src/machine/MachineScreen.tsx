@@ -311,6 +311,7 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
   const adding = !!machine && addedPart(text);
   // In a puzzle, words build with the tray: the level's own names make the examples.
   const fix = useMachine((s) => s.fix);
+  const levelDraft = useMachine((s) => s.levelDraft);
   const building = editing && !!fix && !fix.solved;
   const ballName = fix?.puzzle.spec.parts.find((p) => p.kind === 'ball')?.label ?? 'ball';
   const goalName = fix?.puzzle.spec.parts.find((p) => p.kind === 'bucket' || p.kind === 'bell')?.label ?? 'goal';
@@ -333,13 +334,14 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
   return (
     <div className="mprompt">
       <div className="prompt-heading">
-        <span className="prompt-context">{building ? 'Build with words' : editing ? 'Change this machine' : 'Describe a new level'}</span>
+        <span className="prompt-context">{building ? 'Build your way' : editing ? 'Change this machine' : 'Describe a new level'}</span>
         <span className="prompt-help">{ai.busy ? (ai.creating ? 'Building your level…' : 'Working on your change…') : building ? `Use the parts in your tray to get the ${ballName} to the ${goalName}. Looks and the world can change too.` : editing ? machine?.title : 'A place, a ball and a goal: the AI sets the stage, you solve it.'}</span>
         {!ai.busy && <button type="button" className="text-button new-machine" onClick={() => setPromptMode(editing ? 'create' : 'edit')}>{editing ? 'New level…' : 'Back to this level'}</button>}
         {ai.busy && <button type="button" className="text-button" onClick={() => useMachine.getState().stopAi()}>Cancel</button>}
       </div>
       {deck && !ai.busy && <CardDeck onPick={() => setDeck(false)} />}
       <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        {building && <span className="prompt-tag" title="Adds, moves and turns parts that help the ball">🔧 Build</span>}
         {!editing && <button type="button" className={`lucky ${deck ? 'active' : ''}`} onClick={() => setDeck((d) => !d)} disabled={ai.busy} title="Pick a new machine idea">🎲</button>}
         <input
           ref={inputRef}
@@ -352,6 +354,14 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
         />
         <button className="primary" disabled={ai.busy || !text.trim()}>{ai.busy ? 'Working…' : building ? 'Build →' : adding ? 'Add part →' : editing ? 'Change it →' : 'Create →'}</button>
       </form>
+      {building && (
+        <form onSubmit={(e) => { e.preventDefault(); void useMachine.getState().changeLevel(levelDraft.trim()); }}>
+          <span className="prompt-tag level" title="Changes the level itself: scenery, ground, the world">🌍 Level</span>
+          <input value={levelDraft} onChange={(e) => useMachine.getState().setLevelDraft(e.target.value)} maxLength={300} disabled={ai.busy}
+            placeholder={`Try “build a fence around the ${goalName}” or “make it night”…`} aria-label="Change the level" />
+          <button disabled={ai.busy || !levelDraft.trim()}>{ai.busy ? 'Working…' : 'Change level →'}</button>
+        </form>
+      )}
       {ai.error && <div className="error-inline" role="alert">{ai.error}</div>}
       {remix && <div className="edit-notice remix-offer" role="alertdialog" aria-label="Make it your own copy?"><span>That change reshapes the puzzle itself (it passed the physics check). Make it your own copy? The scored run ends and the full machine shows.</span><button className="primary" onClick={() => void useMachine.getState().acceptRemix()}>Make it my copy</button><button onClick={() => useMachine.getState().declineRemix()}>Keep playing</button></div>}
       {notice && <div className="edit-notice" role="status"><span>{notice}</span>{pending && <><button onClick={() => useMachine.getState().rotatePicked()}>↻ Turn</button><button onClick={() => useMachine.getState().cancelPlacement()}>Cancel</button></>}{!pending && undo && <button disabled={ai.busy} onClick={() => useMachine.getState().undoEdit()}>Undo</button>}</div>}
@@ -445,6 +455,7 @@ function named(note: string, parts: Part[]): string {
 function FixPanel() {
   const fix = useMachine((s) => s.fix)!;
   const tutorial = useMachine((s) => s.tutorial);
+  const busy = useMachine((s) => s.ai.busy);
   const [tip, setTip] = useState(false);
   const phase = useMachine((s) => s.phase);
   const finished = fix.solved && phase === 'done';
@@ -525,8 +536,8 @@ function FixPanel() {
       <div className="mactions">
         {!fix.solved && <button className="primary" onClick={() => void runFix()} disabled={phase === 'simulating' || phase === 'playing'} title={allPlaced ? '' : 'Run it any time, with as many parts as you like'}>▶ Run ({tries(fix.tries)})</button>}
         {!fix.solved && <button onClick={clearPlaced} disabled={!fix.placed.length}>Clear</button>}
-        {!fix.solved && !tutorial && <button onClick={() => void useMachine.getState().solveForMe()} disabled={phase === 'simulating' || phase === 'playing'} title="Only when you want it: the AI puts its own parts down and runs them. No stars for that run.">🤖 Solve it for me</button>}
-        {!fix.solved && !fix.hint && <button onClick={showHint} title={fix.puzzle.verified === false ? `Shows the AI's own idea; nobody has tested it. Costs ${HINT_COST} tries.` : `Shows where the parts go. Costs ${HINT_COST} tries.`}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'} (+{HINT_COST} tries)</button>}
+        {!fix.solved && !tutorial && <button onClick={() => void useMachine.getState().solveForMe()} disabled={phase === 'simulating' || phase === 'playing' || busy} title="Only when you want it: the AI puts its own parts down and runs them. No stars for that run.">🤖 Solve it for me</button>}
+        {!fix.solved && !fix.hint && fix.puzzle.missing.length > 0 && <button onClick={showHint} title={fix.puzzle.verified === false ? `Shows the AI's own idea; nobody has tested it. Costs ${HINT_COST} tries.` : `Shows where the parts go. Costs ${HINT_COST} tries.`}>{fix.puzzle.verified === false ? 'AI\'s idea' : 'Hint'} (+{HINT_COST} tries)</button>}
         {fix.solved && inDaily && !lastStage && <button className="primary" onClick={() => void nextDailyStage()} disabled={phase === 'simulating'}>Next: {KIND_LABEL[DAILY_LADDER[daily.stage]].name} →</button>}
         {fix.solved && inDaily && lastStage && <span className="badge ok">Daily done in {tries(daily.tries)}{daily.best[daily.date] ? ` · best ${daily.best[daily.date]}` : ''}</span>}
         {fix.solved && tutorial && phase === 'done' && <button className="primary" onClick={() => useMachine.getState().addPart('fan')}>Next: add a fan →</button>}

@@ -13,7 +13,7 @@
  */
 import type { Level, LevelStreamEvent } from '@og/shared';
 import type { MachineResult, MachineSpec, MachineStreamEvent, Stage } from '@og/machine';
-import { editMachine, generateMachine, wordsMachine } from './machine/pipeline';
+import { editMachine, generateMachine, solveLevel, wordsMachine } from './machine/pipeline';
 import { createPhysics, type Physics } from './machine/physics';
 import { createLlm, LlmError, type Completion, type LlmBackend, type LlmBackendName } from './llm/client';
 import { editLevel, generateLevel } from './pipeline';
@@ -131,6 +131,8 @@ export type MachineRequest = (
   | { prompt: string; stage?: Stage }
   /** Change an existing machine ("swap the fan for a cannon"). */
   | { machine: MachineSpec; instruction: string }
+  /** Only on the player's request: find a way through a level by adding parts. */
+  | { solve: MachineSpec }
 ) & {
   /** False: design only, no run, no nudging (puzzle play: the player's build is the first run). Default true. */
   verify?: boolean;
@@ -197,7 +199,9 @@ export async function createMachine(request: MachineRequest, options: CreateMach
   const opts = { verify: request.verify };
   const event = 'prompt' in request
     ? await generateMachine(deps, request.prompt, emit, { ...opts, stage: request.stage })
-    : await editMachine(deps, request.machine, request.instruction, emit, opts);
+    : 'solve' in request
+      ? await solveLevel(deps, request.solve, emit)
+      : await editMachine(deps, request.machine, request.instruction, emit, opts);
   return { machine: event.machine, solved: event.solved, verified: event.verified !== false, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage };
 }
 

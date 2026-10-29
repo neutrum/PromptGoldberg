@@ -12,6 +12,8 @@ export interface NudgeOptions {
   budget?: number;
   timeLimitMs?: number;
   seed?: number;
+  /** Parts never moved (the level's own, when the AI solves a level for the player). */
+  keep?: string[];
   onProgress?: (p: { evals: number; bestScore: number }) => void;
 }
 
@@ -38,7 +40,7 @@ export function mulberry32(seed: number) {
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 /** Parts most likely to fix the chain: the failed step's part, the parts touched last, then the rest. */
-function suspects(spec: MachineSpec, run: MachineRun, result: MachineResult): string[] {
+function suspects(spec: MachineSpec, run: MachineRun, result: MachineResult, keep: string[] = []): string[] {
   const order: string[] = [];
   const push = (id: string | undefined) => { if (id && !order.includes(id)) order.push(id); };
   if (result.failedAt !== null) push(spec.goal[result.failedAt].part);
@@ -47,7 +49,7 @@ function suspects(spec: MachineSpec, run: MachineRun, result: MachineResult): st
   push(spec.parts.find((p) => p.kind === 'ball')?.id);
   for (const p of spec.parts) push(p.id);
   // Scenery is the level: it is never nudged.
-  const scenery = new Set(spec.parts.filter((p) => p.fixed).map((p) => p.id));
+  const scenery = new Set([...spec.parts.filter((p) => p.fixed).map((p) => p.id), ...keep]);
   return order.filter((id) => !scenery.has(id));
 }
 
@@ -85,7 +87,7 @@ export function nudgeMachine(spec: MachineSpec, opts: NudgeOptions = {}): NudgeR
 
   let stale = 0;
   while (!done()) {
-    const order = suspects(best.spec, best.run, best.result);
+    const order = suspects(best.spec, best.run, best.result, opts.keep);
     // Mostly the prime suspects; sometimes anything, so a wrong guess cannot trap the search.
     const pick = stale > 8 && rand() < 0.5 ? Math.floor(rand() * order.length) : Math.min(order.length - 1, Math.floor(Math.pow(rand(), 2) * order.length));
     const id = order[pick];

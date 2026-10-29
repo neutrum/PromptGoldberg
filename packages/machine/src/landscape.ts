@@ -21,7 +21,7 @@ export type LandscapeFeature = (typeof LANDSCAPE_FEATURES)[number];
 /** Small fixed obstacles on the board, each with its own collider and drawn exactly as it collides. */
 export const OBSTACLE_PROPS = [
   'rock', 'crate', 'tree', 'cactus', 'stump', 'crystal', 'column',
-  'nut', 'bolt', 'tape', 'spool', 'hammer', 'wrench', 'screwdriver', 'pencil',
+  'nut', 'bolt', 'tape', 'spool', 'hammer', 'wrench', 'screwdriver', 'pencil', 'fence',
 ] as const;
 /** One big low-poly landmark lying on the board: the world's centrepiece, solid where the ball can reach. */
 export const HEROES = ['dragon', 'castle', 'ship', 'robot', 'rocket', 'windmill', 'teapot'] as const;

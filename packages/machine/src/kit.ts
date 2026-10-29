@@ -157,6 +157,8 @@ export function assemblePart(p: Part): Assembly {
         const tone = (fallback: string) => p.color ?? fallback;
         switch (p.prop) {
           case 'rock': fixed(p.id, { kind: 'sphere', radius: 0.21 }, add(o, [0, 0.14, 0]), q, { ...prop, color: tone('#8a8d90') }); break;
+          // A fence panel across the cell, like a low wall: what the ball bounces off is the board drawn.
+          case 'fence': fixed(p.id, { kind: 'box', size: [0.06, 0.32, CELL * 0.98] }, add(o, [0, 0.16, 0]), q, { ...prop, color: tone('#8a6a45') }); break;
           case 'crate': fixed(p.id, { kind: 'box', size: [0.42, 0.42, 0.42] }, add(o, [0, 0.21, 0]), q, { ...prop, color: tone('#a8794a') }); break;
           case 'cactus': fixed(p.id, { kind: 'cylinder', radius: 0.1, height: 0.75 }, add(o, [0, 0.375, 0]), q, { ...prop, color: tone('#5f8f4a') }); break;
           case 'stump': fixed(p.id, { kind: 'cylinder', radius: 0.17, height: 0.3 }, add(o, [0, 0.15, 0]), q, { ...prop, color: tone('#7a5230') }); break;

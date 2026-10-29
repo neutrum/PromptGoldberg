@@ -270,8 +270,19 @@ function DecorOf({ part: p }: { part: Part }) {
         : isHero(p) ? <HeroDecor key={`decor-${p.id}`} part={p} />
         : p.prop === 'landmark' ? <LandmarkDecor key={`decor-${p.id}`} part={p} />
         : p.prop === 'crystal' || p.prop === 'column' ? <PropTop key={`decor-${p.id}`} part={p} />
+        : p.prop === 'fence' ? <FencePosts key={`decor-${p.id}`} part={p} />
         : null}
     </>
+  );
+}
+
+/** A fence panel's posts at its two ends, turned with it. */
+function FencePosts({ part }: { part: Part }) {
+  const [x, y, z] = partOrigin(part);
+  return (
+    <group position={[x, y, z]} rotation={[0, (-part.yaw * Math.PI) / 180, 0]}>
+      {[-0.23, 0.23].map((s) => <mesh key={s} position={[0, 0.2, s]} castShadow><boxGeometry args={[0.08, 0.4, 0.08]} /><meshStandardMaterial color={part.color ?? '#6f5236'} flatShading /></mesh>)}
+    </group>
   );
 }
 

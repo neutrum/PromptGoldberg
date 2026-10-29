@@ -237,8 +237,9 @@ function chainOrder(solution: MachineSpec, loose: Part[]): Part[] {
  */
 export function makeLevelPuzzle(level: MachineSpec): Puzzle | null {
   const fixed = fixedParts(level);
-  const loose = removable(level).filter((p) => !fixed.has(p.id));
-  if (!loose.length) return null;
+  // A level laid out with no solution (it has a par instead) keeps everything on the board, start ramp included: its tray is all it hands over.
+  const loose = level.par ? [] : removable(level).filter((p) => !fixed.has(p.id));
+  if (!loose.length && !level.spares?.length) return null;
   const ids = new Set(loose.map((p) => p.id));
   const goal = level.goal.filter((g) => !(g.type === 'touch' && ids.has(g.part)));
   const spec: MachineSpec = { ...level, goal, parts: level.parts.filter((p) => !ids.has(p.id)), spares: undefined };

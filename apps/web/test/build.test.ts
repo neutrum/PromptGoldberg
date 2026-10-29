@@ -11,12 +11,15 @@ const ctx = (placed: Part[] = []) => ({ parts: [ball, cave, rock, ...placed], ha
 
 describe('building by words', () => {
   it('places a tray part under or beside something named on the board, facing what was said', () => {
-    expect(readBuildMove('put a ramp under the snowball facing the cave', ctx())).toEqual({ action: 'place', index: 0, at: { x: 2, z: 4 }, near: false, yaw: 0, what: 'ramp' });
+    expect(readBuildMove('put a ramp under the snowball facing the cave', ctx())).toEqual({ action: 'place', index: 0, kind: 'ramp', at: { x: 2, z: 4 }, near: false, yaw: 0, what: 'ramp' });
     expect(readBuildMove('add a fan next to the rock facing north', ctx())).toMatchObject({ action: 'place', index: 1, at: { x: 9, z: 9 }, near: true, yaw: 270 });
     expect(readBuildMove('place the coaster track 3 cells east of the ball', ctx())).toMatchObject({ action: 'place', index: 0, at: { x: 5, z: 4 } });
     expect(readBuildMove('put the fan at 7,8', ctx())).toMatchObject({ action: 'place', index: 1, at: { x: 7, z: 8 } });
     // No place named: the part goes in hand for a click.
-    expect(readBuildMove('add a ramp', ctx())).toEqual({ action: 'place', index: 0, what: 'ramp' });
+    expect(readBuildMove('add a ramp', ctx())).toEqual({ action: 'place', index: 0, kind: 'ramp', what: 'ramp' });
+    // Adding always adds: with the tray's ramp already down, or a kind the tray never had, it is a new one.
+    expect(readBuildMove('add a ramp', ctx([{ ...ramp, x: 4, z: 4 }]))).toMatchObject({ action: 'place', index: -1, kind: 'ramp' });
+    expect(readBuildMove('add a cannon next to the rock', ctx())).toMatchObject({ action: 'place', index: -1, kind: 'cannon', at: { x: 9, z: 9 } });
   });
 
   it('moves, turns and removes parts already down', () => {
@@ -27,8 +30,8 @@ describe('building by words', () => {
     expect(readBuildMove('remove the ramp', ctx([down]))).toEqual({ action: 'remove', index: 0, what: 'ramp' });
   });
 
-  it('says plainly what is missing, and leaves other wishes to the AI', () => {
-    expect(readBuildMove('add a cannon', ctx())).toMatchObject({ action: 'error', message: expect.stringContaining('ramp, fan') });
+  it('says plainly what it cannot find, and leaves other wishes to the AI', () => {
+    expect(readBuildMove('move the cannon 2 cells east', ctx())).toMatchObject({ action: 'error' });
     expect(readBuildMove('put a ramp under the dragon', ctx())).toMatchObject({ action: 'error' });
     expect(readBuildMove('make it snowy', ctx())).toBeNull();
     expect(readBuildMove('paint the sky pink', ctx())).toBeNull();

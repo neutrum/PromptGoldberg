@@ -752,7 +752,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
 }
 
 /** A colour pulled toward a deep, saturated version of itself, so a big shape reads against light or dark ground. */
-function deepen(hex: string): string {
+export function deepen(hex: string): string {
   const n = parseInt(hex.slice(1), 16), ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   const max = Math.max(...ch), min = Math.min(...ch);
   // Stretch the channels apart (more saturation), then darken.
@@ -773,7 +773,7 @@ export function spanOf(spec: MachineSpec): number {
 }
 
 /** Obstacles that suit the world: trees in a forest, cacti in a desert, crates and rocks in the workshop. */
-function worldProps(world: Landscape | undefined): ObstacleProp[] {
+export function worldProps(world: Landscape | undefined): ObstacleProp[] {
   if (world?.obstacles?.length) return world.obstacles;
   const kinds = new Set(world?.features.map((f) => f.kind));
   const out: ObstacleProp[] = [];

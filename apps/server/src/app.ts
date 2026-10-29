@@ -330,6 +330,29 @@ export async function buildApp(opts: AppOptions) {
     return { puzzle };
   });
 
+  /** Only when the player asks: the AI looks for a way through their level by adding parts. */
+  app.post<{ Body: { machine?: unknown } }>('/api/machine/solve', async (req, reply) => {
+    const parsed = parseMachine(req.body?.machine);
+    if (!parsed.ok) return sseError(reply, 400, `The level is invalid: ${parsed.issues.slice(0, 3).map((i) => i.message).join('; ')}`);
+    const blocked = guardLlm(req);
+    if (blocked) return sseError(reply, blocked.status, blocked.error);
+    const stream = openSse<MachineStreamEvent>(reply);
+    const started = Date.now();
+    try {
+      const event = await runMachineAi({ solve: parsed.spec }, stream.send, stream.signal);
+      stream.send(event);
+      req.log.info({ ms: Date.now() - started, solved: event.solved }, 'level solve done');
+    } catch (err) {
+      if (stream.signal.aborted) req.log.info('client disconnected during solve');
+      else {
+        req.log.error({ err }, 'level solve failed');
+        stream.send({ type: 'error', error: errorMessage(err) });
+      }
+    } finally {
+      stream.close();
+    }
+  });
+
   app.post<{ Body: { machine?: unknown; instruction?: unknown; verify?: unknown } }>('/api/machine/edit', async (req, reply) => {
     const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
     if (!instruction) return sseError(reply, 400, 'Say what to change, e.g. "swap the fan for a cannon".');
@@ -340,7 +363,8 @@ export async function buildApp(opts: AppOptions) {
     if (blocked) return sseError(reply, blocked.status, blocked.error);
     const stream = openSse<MachineStreamEvent>(reply);
     try {
-      const event = await runMachineAi({ machine: parsed.spec, instruction, verify: true }, stream.send, stream.signal);
+      // verify: false for a change to a level in play: the player builds the way, nothing needs to work yet.
+      const event = await runMachineAi({ machine: parsed.spec, instruction, verify: req.body?.verify !== false }, stream.send, stream.signal);
       stream.send(event);
     } catch (err) {
       if (stream.signal.aborted) req.log.info('client disconnected during machine stream');

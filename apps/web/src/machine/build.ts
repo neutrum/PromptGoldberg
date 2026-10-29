@@ -6,7 +6,8 @@
 import { footprint, type Part, type PartKind, type Yaw } from '@og/machine';
 
 export type BuildMove =
-  | { action: 'place'; index: number; at?: { x: number; z: number }; near?: boolean; yaw?: Yaw; what: string }
+  /** index -1: a new part of `kind` (the tray never limits what the player adds). */
+  | { action: 'place'; index: number; kind: PartKind; at?: { x: number; z: number }; near?: boolean; yaw?: Yaw; what: string }
   | { action: 'turn'; index: number; yaw: Yaw; what: string }
   | { action: 'remove'; index: number; what: string }
   | { action: 'error'; message: string };
@@ -70,10 +71,6 @@ export function readBuildMove(input: string, ctx: { parts: Part[]; hand: Part[];
   }
   const what = kindName(kind);
   const ofKind = ctx.hand.map((h, i) => ({ h, i })).filter(({ h }) => h.kind === kind);
-  if (!ofKind.length) {
-    const names = [...new Set(ctx.hand.map((h) => kindName(h.kind)))].join(', ');
-    return { action: 'error', message: `There is no ${what} in your tray for this level. You have: ${names || 'nothing'}.` };
-  }
   const down = ofKind.filter(({ h }) => ctx.placed.has(h.id));
   const free = ofKind.filter(({ h }) => !ctx.placed.has(h.id));
   const placedPart = (id: string) => ctx.parts.find((p) => p.id === id);
@@ -89,7 +86,7 @@ export function readBuildMove(input: string, ctx: { parts: Part[]; hand: Part[];
   if (compass) yaw = YAW_OF[compass[1]];
   const facingThing = /\b(?:facing|toward|towards|pointing at|aimed at|aim at|into|at)\s+(?:the\s+)?([a-z][a-z -]*?)(?=$|,| and | so | then )/.exec(text);
 
-  if (verb && /^(turn|rotate|point|face)$/.test(verb) && !/\b(under|below|beneath|next to|beside|near|by|on|at|north of|south of|east of|west of|cells?)\b/.test(text.replace(/\b(?:facing|face|toward|towards|pointing)\b.*$/, ''))) {
+  if (verb && /^(turn|rotate|point|face)$/.test(verb) && down.length + free.length > 0 && !/\b(under|below|beneath|next to|beside|near|by|on|at|north of|south of|east of|west of|cells?)\b/.test(text.replace(/\b(?:facing|face|toward|towards|pointing)\b.*$/, ''))) {
     const target = down.at(-1) ?? free[0];
     let turn = yaw;
     if (turn === undefined && facingThing) {
@@ -131,8 +128,10 @@ export function readBuildMove(input: string, ctx: { parts: Part[]; hand: Part[];
     const thing = thingNamed(facingThing[1], ctx.parts);
     if (thing && !(rel && thingNamed(rel[2], ctx.parts) === thing && !near)) yaw = yawToward(at, footprint(thing)[0]);
   }
-  const pick = moveTarget ?? free[0] ?? down.at(-1)!;
-  return { action: 'place', index: pick.i, ...(at ? { at, near } : {}), ...(yaw !== undefined ? { yaw } : {}), what };
+  // Adding: an unplaced one from the tray, else a new one. Moving: the one already down.
+  const pick = moveTarget ?? free[0];
+  if (moving && !pick) return { action: 'error', message: `No ${what} is on the board yet. Say "add a ${what}" first.` };
+  return { action: 'place', index: pick ? pick.i : -1, kind, ...(at ? { at, near } : {}), ...(yaw !== undefined ? { yaw } : {}), what };
 }
 
 /** Cells to try for a placement, nearest first: the spot itself (unless only "near" it), then rings round it. */

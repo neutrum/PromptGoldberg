@@ -225,22 +225,29 @@ describe('a dependable creation and editing flow', () => {
     expect(s.remix).toBeNull();
   });
 
-  it('holds an edit that reshapes the puzzle until the player makes it their own copy', async () => {
+  it('changes the level in play right away: scenery from the words, the rest through the AI, the player’s parts kept', async () => {
     await useMachine.getState().startFix('missing');
-    const reshaped = { ...machine, terrain: [{ name: 'pond', x: 0, z: 0, w: 2, d: 2, h: -1 }] };
-    vi.mocked(streamMachine).mockImplementation(async (_path, _body, emit) => { emit({ ...done, machine: reshaped }); });
-    await useMachine.getState().edit('dig a pond');
-    expect(useMachine.getState().fix).not.toBeNull();
-    expect(useMachine.getState().remix?.spec.terrain).toEqual(reshaped.terrain);
-    useMachine.getState().declineRemix();
-    expect(useMachine.getState()).toMatchObject({ remix: null, mode: 'fix' });
-    await useMachine.getState().edit('dig a pond');
-    await useMachine.getState().acceptRemix();
+    const before = useMachine.getState().fix!.puzzle.spec;
+    // Scenery the words name: straight onto the board, fixed, no AI call.
+    await useMachine.getState().changeLevel('build a fence around the ball');
+    const fenced = useMachine.getState().fix!;
+    const fences = fenced.puzzle.spec.parts.filter((p) => p.prop === 'fence');
+    expect(fences.length).toBeGreaterThan(3);
+    expect(fences.every((p) => p.fixed && p.kind === 'wall')).toBe(true);
+    expect(fenced.edited).toBe(true);
+    expect(vi.mocked(streamMachine)).not.toHaveBeenCalled();
+    // Anything else: the AI changes the level (verify off) and it applies in place.
+    const placed = { ...ramp, x: ramp.x, z: ramp.z };
+    useMachine.setState({ fix: { ...fenced, placed: [placed] } });
+    const pond = { ...fenced.puzzle.spec, terrain: [{ name: 'pond', x: 0, z: 0, w: 2, d: 2, h: -1 }] };
+    vi.mocked(streamMachine).mockImplementation(async (_path, _body, emit) => { emit({ ...done, solved: false, verified: false, machine: pond }); });
+    await useMachine.getState().changeLevel('dig a pond in the corner');
+    expect(vi.mocked(streamMachine).mock.calls[0][1]).toMatchObject({ verify: false, machine: { parts: fenced.puzzle.spec.parts } });
     const s = useMachine.getState();
-    expect(s.fix).toBeNull();
+    expect(s.fix!.puzzle.spec.terrain).toEqual(pond.terrain);
+    expect(s.fix!.placed).toEqual([placed]);
     expect(s.remix).toBeNull();
-    expect(s.machine?.terrain).toEqual(reshaped.terrain);
-    expect(s.machine?.title).toMatch(/\(remix\)$/);
+    expect(before.parts.length).toBeLessThan(s.fix!.puzzle.spec.parts.length);
   });
 
   it('switches to replay and resumes puzzle placements, charging a solution reveal once', async () => {

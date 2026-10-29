@@ -193,3 +193,8 @@
 @keyframes step-pop { from { transform: scale(.3); } to { transform: scale(1); } }
 @keyframes step-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .build-steps li .step-mark { animation: none !important; } }
+
+/* Two inputs during play: build your way, or change the level itself. */
+.mprompt form + form { margin-top: 8px; }
+.prompt-tag { flex: none; align-self: center; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); white-space: nowrap; }
+.prompt-tag.level { background: color-mix(in srgb, #7dc8ff 18%, transparent); color: #9fd6ff; }

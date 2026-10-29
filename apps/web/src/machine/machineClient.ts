@@ -102,7 +102,7 @@ export async function getDailyMachine(): Promise<DailyMachine> {
 
 /** POST a machine request and read the server-sent event stream it returns. */
 export async function streamMachine(
-  path: '/machine' | '/machine/edit',
+  path: '/machine' | '/machine/edit' | '/machine/solve',
   body: unknown,
   onEvent: (e: MachineStreamEvent) => void,
   signal?: AbortSignal,

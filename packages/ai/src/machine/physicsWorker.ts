@@ -4,7 +4,7 @@ import type { WorkerMessage } from '../solver';
 
 export type PhysicsTask =
   | { kind: 'check'; spec: MachineSpec; hash?: boolean }
-  | { kind: 'nudge'; spec: MachineSpec; budget: number; timeLimitMs: number; seed: number }
+  | { kind: 'nudge'; spec: MachineSpec; budget: number; timeLimitMs: number; seed: number; keep?: string[] }
   | { kind: 'puzzle'; spec: MachineSpec; puzzleKind: PuzzleKind; seed: number }
   | { kind: 'compile'; graph: RouteGraphInput; seed: number; flat?: boolean; rules?: Rules; strict?: boolean; stage?: Stage; clutter?: number; difficulty?: Difficulty; layouts?: number };
 
@@ -25,7 +25,7 @@ parentPort!.on('message', async (task: PhysicsTask) => {
     } else {
       let last = 0;
       const res = nudgeMachine(task.spec, {
-        budget: task.budget, timeLimitMs: task.timeLimitMs, seed: task.seed,
+        budget: task.budget, timeLimitMs: task.timeLimitMs, seed: task.seed, keep: task.keep,
         onProgress: (p) => {
           const now = Date.now();
           if (now - last < 100) return;

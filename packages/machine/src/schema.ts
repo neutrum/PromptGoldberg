@@ -102,8 +102,10 @@ export const MachineSpec = z.object({
   stage: Stage.optional().describe('stage size in cells; leave out for the default 24 by 24'),
   landscape: Landscape.optional().describe('looks only: the world around the board (forests, hills, mountains, lakes) when the request describes a place; never changes how the machine runs'),
   terrain: z.array(Terrain).max(6).optional().describe('the shape of the ground: ditches, rivers, pits, banks and hills the route has to deal with; leave out for flat ground'),
-  parts: z.array(Part).min(1).max(40),
-  spares: z.array(Spare).max(4).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),
+  parts: z.array(Part).min(1).max(64),
+  /** A level laid out with no solution: how many parts the AI's idea of a way through would use. */
+  par: z.number().int().min(1).max(12).optional(),
+  spares: z.array(Spare).max(6).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),
   goal: z.array(MachineGoal).min(1).max(4).describe('ordered events; the machine works when all happen in order'),
   duration: z.number().min(4).max(30).default(15).describe('seconds to simulate'),
   rules: Rules.optional().describe('challenge rules, set by the game, not the designer'),

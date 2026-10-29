@@ -11,6 +11,7 @@ import type { Level, SharedLevel } from './levels';
 import firstShot from '@og/machine/fixtures/levels/first-shot.json' with { type: 'json' };
 import { addedPart, isEditInstruction } from './commands';
 import { cellsAround, readBuildMove, yawToward } from './build';
+import { readSceneMove } from './scene';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -28,7 +29,7 @@ export interface MachineAiLog {
 }
 
 /** What the player sees happen while a new level is made. */
-export const BUILD_STEPS = ['Reading your idea', 'Building the world', 'Laying out the level', 'Checking it can be solved'] as const;
+export const BUILD_STEPS = ['Reading your idea', 'Building the world', 'Setting the stage'] as const;
 
 /** How far the machine on screen got: 0 = designed, not proven; 1 = proven by the physics; 2 = final. */
 export type MachineRank = 0 | 1 | 2;
@@ -58,6 +59,8 @@ export interface FixState {
   server?: 'checking' | 'agrees' | 'differs' | 'offline';
   /** The AI solved it on the player's request: no stars, no boards. */
   assisted?: boolean;
+  /** The player changed the level (scenery, ground, world): it is their version now. */
+  edited?: boolean;
   /** The last run met the goal but broke the level's challenge rules (too many parts, too quick). */
   broke?: string[];
 }
@@ -66,7 +69,7 @@ export interface FixState {
 export const HINT_COST = 2;
 
 /** The AI's route length: use as few parts as it did (or fewer) for the parts star. */
-export const parOf = (puzzle: Puzzle) => puzzle.missing.length;
+export const parOf = (puzzle: Puzzle) => puzzle.missing.length || puzzle.solution.par || handOf(puzzle).length;
 
 /** One star for solving, one for using no more parts than par, one for 3 tries or fewer (hints count). */
 export function starsFor(fix: Pick<FixState, 'puzzle' | 'placed' | 'tries'>): number {
@@ -178,6 +181,11 @@ interface MachineState {
   placeAt: (x: number, z: number) => boolean;
   /** Lift a placed part back into the hand (and whatever stood on it, if it is a shelf). */
   pickPlaced: (id: string) => void;
+  /** A change to the level in words ("build a fence around the tomb"): scenery at once, other changes through the AI. */
+  changeLevel: (text: string) => Promise<void>;
+  /** What the player is typing in the level box. */
+  levelDraft: string;
+  setLevelDraft: (text: string) => void;
   /** A building move in words during play ("put a ramp under the ball"); false when the text is not one. */
   buildByWords: (text: string) => boolean;
   /** Parts that just appeared on the board, with when (performance.now()), for their pop-in. */
@@ -306,7 +314,7 @@ export const useMachine = create<MachineState>((set, get) => {
         switch (e.type) {
           case 'stage':
             log(e.message || `${e.stage}…`);
-            if (e.stage === 'verifying' || e.stage === 'nudging') set((s) => ({ ai: { ...s.ai, step: Math.max(s.ai.step, 3) } }));
+            if (e.stage === 'verifying' || e.stage === 'nudging') set((s) => ({ ai: { ...s.ai, step: Math.max(s.ai.step, 2) } }));
             break;
           case 'world': set((s) => ({ ai: { ...s.ai, world: e.landscape, step: Math.max(s.ai.step, 2) } })); break;
           case 'progress': set((s) => ({ ai: { ...s.ai, progress: e.goalLength ? e.bestScore / e.goalLength : 0 } })); break;
@@ -320,7 +328,8 @@ export const useMachine = create<MachineState>((set, get) => {
       // Assignment happens inside the stream callback.
       const result = candidate as Extract<MachineStreamEvent, { type: 'machine' }> | null;
       const unproven = !result?.solved || result.verified === false;
-      if (unproven && !(creating && result)) {
+      const inPlay = path === '/machine/edit' && !!get().fix && !get().fix!.solved;
+      if (unproven && !((creating || inPlay) && result)) {
         throw new Error('I couldn’t verify a working version of that request. Try a simpler route or a different mechanism. Your previous build is still here.');
       }
       const parsed = parseMachine(result.machine);
@@ -338,12 +347,21 @@ export const useMachine = create<MachineState>((set, get) => {
       if (path === '/machine/edit' && playing && !playing.solved) {
         const original = (body as { machine: MachineSpec }).machine;
         if (sameShape(original, parsed.spec)) {
-          set({ ...withLooks(get(), parsed.spec), notice: 'Looks changed. Your puzzle, tries and score are untouched.', draft: '' });
-          log('Looks only: the puzzle is unchanged.');
+          set({ ...withLooks(get(), parsed.spec), notice: 'Looks changed. Your parts and tries are untouched.', draft: '' });
+          log('Looks only.');
           return;
         }
-        set({ remix: { spec: parsed.spec, original, moved: result.moved }, notice: null });
-        log('That change reshapes the puzzle itself.');
+        // The level itself changed (the edit read the level only): the player's parts stay where they are, unless the change took their cell.
+        const level = parsed.spec;
+        const cells = new Set(level.parts.filter((p) => p.kind !== 'platform').flatMap((p) => footprint(p).map((c) => `${c.x},${c.z},${p.y}`)));
+        const placed = playing.placed.filter((p) => !footprint(p).some((c) => cells.has(`${c.x},${c.z},${p.y}`)));
+        const fresh = level.parts.filter((p) => !original.parts.some((q) => q.id === p.id));
+        loadSeq++;
+        set((s) => ({ fix: { ...playing, placed, edited: true, puzzle: { ...playing.puzzle, spec: level, solution: { ...level, parts: [...level.parts, ...playing.puzzle.missing] } } },
+          run: null, result: null, phase: 'idle', draft: '', remix: null,
+          appear: { ...s.appear, ...Object.fromEntries(fresh.map((p, i) => [p.id, performance.now() + i * POP_GAP])) },
+          notice: `Level changed.${placed.length < playing.placed.length ? ' Parts that stood where the change went are back in your tray.' : ' Your parts stay where they were.'}` }));
+        log('The level changed.');
         return;
       }
       await adopt(path, body, parsed.spec, result.moved, !unproven);
@@ -422,7 +440,10 @@ export const useMachine = create<MachineState>((set, get) => {
     async submitPrompt(text) {
       if (get().ai.busy || !text.trim()) return;
       // During play, words build with the parts in the tray; only other wishes (looks, the world) go to the AI.
-      if (get().fix && !get().fix!.solved && get().promptMode === 'edit' && get().buildByWords(text)) return;
+      if (get().fix && !get().fix!.solved && get().promptMode === 'edit') {
+        if (!get().buildByWords(text)) set({ notice: 'This box adds and moves parts ("add a fan next to the rock"). To change the level itself, use the Level box below it.' });
+        return;
+      }
       const kind = addedPart(text);
       if (kind && get().machine) { get().addPart(kind); return; }
       if (get().machine && (get().promptMode === 'edit' || isEditInstruction(text))) {
@@ -434,7 +455,7 @@ export const useMachine = create<MachineState>((set, get) => {
       const { machine, fix } = get();
       if (!machine || get().ai.busy) return;
       const parts = fix ? withPlacements(fix.puzzle, fix.placed).parts : machine.parts;
-      if (parts.length >= 40) { set({ notice: 'This machine has enough parts for now. Try changing one of them.' }); return; }
+      if (parts.length >= 60) { set({ notice: 'This machine has enough parts for now. Try changing one of them.' }); return; }
       let suffix = 1;
       while (parts.some((p) => p.id === `added_${kind}_${suffix}`)) suffix++;
       loadSeq++;
@@ -605,6 +626,31 @@ export const useMachine = create<MachineState>((set, get) => {
       return aiStream('/machine', { prompt, verify: true, stage: requestedStage() }, landscapeFromWords(prompt));
     },
 
+    changeLevel(text) {
+      const { fix, machine } = get();
+      const board = fix ? withPlacements(fix.puzzle, fix.placed) : machine;
+      if (!board || get().ai.busy || !text.trim()) return Promise.resolve();
+      // Scenery the words name goes straight onto the board; anything else goes to the AI as a change to the level.
+      const move = readSceneMove(text, { parts: board.parts, stage: stageOf(board), terrain: board.terrain });
+      if (move && 'error' in move) { set({ notice: move.error }); return Promise.resolve(); }
+      if (move) {
+        const add = (s: MachineSpec): MachineSpec => ({ ...s, parts: [...s.parts, ...move.parts] });
+        loadSeq++;
+        if (fix) set({ fix: { ...fix, edited: true, puzzle: { ...fix.puzzle, spec: add(fix.puzzle.spec), solution: add(fix.puzzle.solution) } } });
+        else set({ machine: add(machine!), lastEdit: machine, proven: false });
+        set((s) => ({ run: null, result: null, phase: 'idle', levelDraft: '',
+          appear: { ...s.appear, ...Object.fromEntries(move.parts.map((p, i) => [p.id, performance.now() + i * POP_GAP])) },
+          notice: `${move.what}: part of the level now. Press Run to see how it changes things.` }));
+        sfx.place();
+        return Promise.resolve();
+      }
+      set({ levelDraft: '' });
+      // The level only (not the player's parts), so the change comes back as a new level to build on.
+      return fix ? aiStream('/machine/edit', { machine: fix.puzzle.spec, instruction: text, verify: false }) : get().edit(text);
+    },
+    levelDraft: '',
+    setLevelDraft: (levelDraft) => set({ levelDraft }),
+
     edit(instruction) {
       const { machine, fix } = get();
       if (!machine) return Promise.resolve();
@@ -757,7 +803,7 @@ export const useMachine = create<MachineState>((set, get) => {
 
     appear: {},
     buildByWords(text) {
-      const fix = get().fix;
+      let fix = get().fix;
       if (!fix || fix.solved) return false;
       const board = withPlacements(fix.puzzle, fix.placed);
       const move = readBuildMove(text, { parts: board.parts, hand: fix.hand, placed: new Set(fix.placed.map((p) => p.id)) });
@@ -769,6 +815,15 @@ export const useMachine = create<MachineState>((set, get) => {
       }
       set({ draft: '' });
       if (move.action === 'error') { set({ notice: move.message }); return true; }
+      // A new part when the tray has none to spare: adding always adds.
+      if (move.action === 'place' && move.index < 0) {
+        let n = 1;
+        while (fix.hand.some((h) => h.id === `added-${move.kind}-${n}`)) n++;
+        const fresh: Part = { id: `added-${move.kind}-${n}`, kind: move.kind, x: 0, y: 0, z: 0, yaw: 0, ...(move.kind === 'platform' ? { length: 3 } : move.kind === 'dominoes' ? { length: 5 } : {}) };
+        fix = { ...fix, hand: [...fix.hand, fresh] };
+        set({ fix });
+        move.index = fix.hand.length - 1;
+      }
       const part = fix.hand[move.index];
       const label = move.what[0].toUpperCase() + move.what.slice(1);
       if (move.action === 'remove') {
@@ -877,6 +932,41 @@ export const useMachine = create<MachineState>((set, get) => {
       const { fix } = get();
       if (!fix || fix.solved || ['simulating', 'playing'].includes(get().phase)) return;
       logPlay(playKey(), 'hint', fix.tries, fix.placed.length);
+      // A level set with no solution: the AI looks for one now, on the server, and the physics checks it.
+      if (!fix.puzzle.missing.length) {
+        aiAbort?.abort();
+        const controller = new AbortController();
+        aiAbort = controller;
+        const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
+        set({ ai: { ...idleAi, busy: true }, notice: null });
+        let found: Extract<MachineStreamEvent, { type: 'machine' }> | null = null;
+        try {
+          await streamMachine('/machine/solve', { machine: fix.puzzle.spec }, (e) => {
+            if (aiAbort !== controller) return;
+            if (e.type === 'stage') log(e.message);
+            else if (e.type === 'machine') found = e;
+            else if (e.type === 'error') throw new Error(e.error);
+          }, controller.signal);
+        } catch (err) {
+          if (aiAbort === controller) set({ ai: { ...idleAi }, notice: `The AI could not look for a way just now: ${err instanceof Error ? err.message : String(err)}` });
+          return;
+        }
+        if (aiAbort !== controller) return;
+        set({ ai: { ...idleAi } });
+        const res = found as Extract<MachineStreamEvent, { type: 'machine' }> | null;
+        const now = get().fix;
+        if (!now || now.solved) return;
+        if (!res?.solved) {
+          set({ notice: 'The AI could not find a way through this level. Your board is as you left it; maybe there is a way nobody has found yet.' });
+          return;
+        }
+        const added = res.machine.parts.filter((p) => !now.puzzle.spec.parts.some((q) => q.id === p.id));
+        set({ fix: { ...now, hand: [...handOf(now.puzzle).map((m) => ({ ...m })), ...added], placed: added, hint: true, assisted: true, picking: null },
+          appear: { ...get().appear, ...Object.fromEntries(added.map((p, i) => [p.id, performance.now() + i * 120])) },
+          notice: 'Here is one way the AI found. Watch it run, then try your own.' });
+        await get().runFix();
+        return;
+      }
       set({ fix: { ...fix, placed: fix.puzzle.missing.map((p) => ({ ...p })), hint: true, assisted: true, picking: null },
         appear: { ...get().appear, ...Object.fromEntries(fix.puzzle.missing.map((p, i) => [p.id, performance.now() + i * 120])) },
         notice: fix.puzzle.verified === false ? 'This is the AI’s own idea; nobody has run it yet. Watch what happens.' : 'Here is one way the AI found. Watch it run, then try your own.' });

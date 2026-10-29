@@ -1,44 +1,48 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { handOf, makeLevelPuzzle, parseMachine, withPlacements, type MachineSpec } from '../src';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { checkMachine, evaluateMachine, initPhysics, landscapeFromWords, layoutLevel, makeLevelPuzzle, MachineSpec, simulateSync, type RouteGraphInput } from '../src';
 
-const load = (name: string): MachineSpec => {
-  const parsed = parseMachine(JSON.parse(readFileSync(join(import.meta.dirname, '../src/fixtures', name), 'utf8')));
-  if (!parsed.ok) throw new Error(parsed.issues.map((i) => i.message).join('; '));
-  return parsed.spec;
-};
+beforeAll(() => initPhysics());
 
-describe('a level nobody has run', () => {
-  const level: MachineSpec = { ...load('ramp-dominoes-bell.json'), spares: [{ kind: 'trampoline' }, { kind: 'platform', length: 4 }] };
+const graphs: RouteGraphInput[] = [
+  { title: 'Snowball Cave', links: [{ via: 'ramp', turn: 'left' }, { via: 'fan', turn: 'right' }], end: 'bucket', names: { ball: 'snowball', target: 'cave' }, landscape: landscapeFromWords('a snowball in the high tatras')! },
+  { title: 'River Bell', links: [{ via: 'cannon', turn: 'right' }], end: 'bell', ground: 'river' },
+  { title: 'Domino Hill', start: 'hill', links: [{ via: 'fan', turn: 'left' }], end: 'dominoes', row: 6, ground: 'pit', landscape: landscapeFromWords('a sleeping dragon in a crystal cave')! },
+];
 
-  it('keeps the stage, hands out the route parts and the spares, and runs no physics', () => {
-    const puzzle = makeLevelPuzzle(level)!;
-    expect(puzzle).not.toBeNull();
-    expect(puzzle.verified).toBe(false);
-    expect(puzzle.failedAt).toBe(-1);
-    expect(puzzle.spec.parts.map((p) => p.id).sort()).toEqual(['ball', 'bell', 'row', 'shelf', 'wall']);
-    expect(puzzle.spec.terrain).toEqual(level.terrain);
-    expect(puzzle.missing.map((p) => p.id)).toEqual(['ramp', 'cannon']);
-    expect(puzzle.spares!.map((p) => `${p.id}:${p.kind}:${p.length ?? ''}`)).toEqual(['spare1:trampoline:', 'spare2:platform:4']);
-    expect(handOf(puzzle).map((p) => p.kind)).toEqual(['ramp', 'cannon', 'trampoline', 'platform']);
-    // The spares never leak into the specs the physics sees.
-    expect(puzzle.spec.spares).toBeUndefined();
-    expect(puzzle.solution.spares).toBeUndefined();
+describe('levels with no solution laid out', () => {
+  it('always gives a valid stage that is not already solved, with a tray and a par, in milliseconds', () => {
+    for (const [i, graph] of graphs.entries()) for (const seed of [1, 2, 3, 4, 5]) {
+      const started = performance.now();
+      const spec = layoutLevel(graph, { seed: seed * 17 + i });
+      expect(performance.now() - started, graph.title).toBeLessThan(200);
+      expect(MachineSpec.safeParse(spec).success, graph.title).toBe(true);
+      expect(checkMachine(spec), graph.title).toEqual([]);
+      expect(evaluateMachine(spec.goal, simulateSync(spec, { record: false })).success, `${graph.title} solves itself`).toBe(false);
+      expect(spec.spares!.length).toBeGreaterThanOrEqual(2);
+      expect(spec.par).toBe(graph.links.length + 1);
+      // The puzzle hands over the tray only: the ball, its start ramp and everything else stay.
+      const puzzle = makeLevelPuzzle(spec)!;
+      expect(puzzle.missing).toEqual([]);
+      expect(puzzle.spec.parts).toHaveLength(spec.parts.length);
+      expect(puzzle.spares!.length).toBe(spec.spares!.length);
+    }
   });
 
-  it('is null when there is nothing to hand out', () => {
-    const bare: MachineSpec = { ...level, parts: level.parts.filter((p) => ['ball', 'row', 'bell'].includes(p.id)), spares: undefined };
-    expect(makeLevelPuzzle(bare)).toBeNull();
+  it('puts the world on the board: its landmark and obstacles, the goal far from the start', () => {
+    const spec = layoutLevel(graphs[0], { seed: 7 });
+    expect(spec.parts.some((p) => p.prop === 'landmark' && p.label === 'mountain chalet')).toBe(true);
+    expect(spec.parts.filter((p) => p.prop && p.prop !== 'landmark').length).toBeGreaterThan(15);
+    const ball = spec.parts.find((p) => p.kind === 'ball')!, cave = spec.parts.find((p) => p.kind === 'bucket')!;
+    expect(cave.label).toBe('cave');
+    expect(Math.hypot(ball.x - cave.x, ball.z - cave.z)).toBeGreaterThan(9);
+    const dragon = layoutLevel(graphs[2], { seed: 3 });
+    expect(dragon.parts.some((p) => p.prop === 'dragon')).toBe(true);
+    expect(dragon.parts.some((p) => p.kind === 'dominoes')).toBe(true);
   });
 
-  it('plays the hand back into a machine, spares included, with the AI\'s nudges for parts dropped where it had them', () => {
-    const puzzle = makeLevelPuzzle({ ...level, parts: level.parts.map((p) => (p.id === 'cannon' ? { ...p, dx: 0.2 } : p)) })!;
-    const hand = handOf(puzzle);
-    const placed = [{ ...hand[1] }, { ...hand[2], x: 3, y: 0, z: 3 }];
-    const spec = withPlacements(puzzle, placed);
-    expect(spec.parts.find((p) => p.id === 'cannon')?.dx).toBe(0.2);
-    expect(spec.parts.find((p) => p.id === 'spare1')).toMatchObject({ kind: 'trampoline', x: 3, z: 3 });
-    expect(parseMachine(spec).ok).toBe(true);
+  it('is the same level for the same seed, and harder means more in the way', () => {
+    expect(layoutLevel(graphs[1], { seed: 9 })).toEqual(layoutLevel(graphs[1], { seed: 9 }));
+    const count = (d: 'easy' | 'hard') => layoutLevel(graphs[1], { seed: 9, difficulty: d }).parts.filter((p) => p.prop).length;
+    expect(count('hard')).toBeGreaterThan(count('easy'));
   });
 });

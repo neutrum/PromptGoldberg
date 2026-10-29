@@ -1,4 +1,4 @@
-import { heroFromWords, landscapeFromWords, routeParts, spanOf, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { heroFromWords, landscapeFromWords, layoutLevel, partNames, routeParts, spanOf, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -46,6 +46,8 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
   rules?: Rules;
   mission?: string;
   requirements?: (spec: MachineSpec) => string[];
+  /** Parts the optimizer never moves. */
+  keep?: string[];
 }): Promise<MachineEvent> {
   const { maxAttempts, signal } = deps;
   const calls: Completion[] = [];
@@ -107,7 +109,7 @@ async function machineLoop(deps: MachinePipelineDeps, emit: Emit, loop: {
       emit({ type: 'stage', stage: 'nudging', attempt, maxAttempts, message: `Almost: ${first.result.steps.find((s) => !s.satisfied)?.note ?? 'goal missed'}. Nudging parts.` });
       emit({ type: 'progress', attempt, evals: 1, bestScore: first.result.score, goalLength });
       const nudged = await deps.physics.nudge(spec, {
-        budget: deps.budget, timeLimitMs: deps.timeLimitMs, seed: attempt, signal,
+        budget: deps.budget, timeLimitMs: deps.timeLimitMs, seed: attempt, signal, keep: loop.keep,
         onProgress: (p) => emit({ type: 'progress', attempt, evals: p.evals, bestScore: p.bestScore, goalLength }),
       });
       emit({ type: 'progress', attempt, evals: nudged.evals, bestScore: nudged.result.score, goalLength });
@@ -173,73 +175,49 @@ const routeOn = () => process.env.MACHINE_ROUTE !== 'off';
  */
 async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> & { llm?: LlmBackend }, prompt: string, emit: Emit, opts: { graph?: RouteGraphInput; note?: string; stage?: Stage } = {}): Promise<MachineEvent> {
   const calls: Completion[] = [];
-  emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: 1, message: opts.graph ? 'Building a level from your words.' : 'Sketching the route for your idea.' });
-  const graph: RouteGraphInput = opts.graph ?? await designRoute(deps.llm!, prompt, calls);
+  const seed = Math.floor(Math.random() * 1e6);
+  emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: 1, message: opts.graph ? 'Building a level from your words.' : 'Reading your idea.' });
+  // The AI's idea of the level; when the AI cannot be reached, the mission's own words.
+  let note = opts.note;
+  let graph: RouteGraphInput;
+  try {
+    graph = opts.graph ?? await designRoute(deps.llm!, prompt, calls);
+  } catch (err) {
+    if (deps.signal?.aborted) throw err;
+    graph = routeFromWords(prompt, seed);
+    note = 'The AI could not be reached, so this level was set from the words in your request.';
+  }
   const g = graph as RouteGraph;
-  // The world and its centrepiece go into the layout, so the board is built for them: the AI's, else the mission's words.
+  // The world and its centrepiece: the AI's, else the mission's words.
   const world = g.landscape ?? landscapeFromWords(prompt) ?? undefined;
   const hero = world && (world.hero ?? heroFromWords(prompt) ?? undefined);
   if (world) g.landscape = { ...world, ...(hero && !world.landmark ? { hero } : {}) };
   if (g.landscape) emit({ type: 'world', landscape: g.landscape, title: g.title });
-  emit({ type: 'stage', stage: 'verifying', attempt: 1, maxAttempts: 1, message: `Laying out ${g.links.map((l) => l.via).join(', then ')}, ending in ${g.end === 'dominoes' ? 'dominoes' : `a ${g.end}`}, and running it.` });
-  const seed = Math.floor(Math.random() * 1e6);
-  const flat = wantsFlat(prompt);
-  // A challenge in the mission ("only three parts", "make it last"): the compiled route keeps it,
-  // so a parts limit leaves room for the start ramp and one part per link.
+  emit({ type: 'stage', stage: 'verifying', attempt: 1, maxAttempts: 1, message: 'Setting the stage: the start, the goal and what stands between them.' });
+  // The stage only: nothing is solved here. The player builds the way; the AI solves it only when asked.
+  // One run with nothing placed makes sure the level does not solve itself.
   const rules = rulesOf(prompt);
-  // Try another layout, then the mission's mechanisms with the AI's names and title.
-  // Strict compilation and the requirement check reject dropped links or changed finishes.
-  const words = routeFromWords(prompt, seed);
-  // Three layouts of the graph at once, one per worker, then the one that spans the stage best;
-  // the mission's own mechanisms are the fallback.
-  const compile = (attempt: RouteGraphInput, k: number, difficulty = tierOf(prompt)) => deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, difficulty, layouts: 1, signal: deps.signal });
-  const ways = deps.physics.mode === 'inline' ? [0] : [0, 1, 2];
-  const laid = (await Promise.all(ways.map((k) => compile(graph, k)))).map((res, k) => ({ res, k }))
-    .filter((r): r is { res: NonNullable<typeof r.res>; k: number } => !!r.res).sort((a, b) => spanOf(b.res.spec) - spanOf(a.res.spec));
-  const results = async function* () {
-    yield* laid;
+  let spec: MachineSpec | null = null;
+  let result: MachineResult | null = null;
+  for (let k = 0; k < 4 && !spec; k++) {
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await compile({ ...graph, links: words.links, end: g.end }, 3);
-    if (res) yield { res, k: 3 };
-    // The player builds the route, so the level only needs to be solvable: simpler hidden routes in
-    // the same world, the same start and finish where they fit, until one is laid out.
-    const finish = g.end === 'dominoes' ? 'bell' : g.end;
-    const simpler: { links: RouteGraphInput['links']; end: RouteGraph['end'] }[] = [
-      { links: [{ via: g.links[0]?.via === 'trampoline' || g.links[0]?.via === 'seesaw' ? 'ramp' : g.links[0]?.via ?? 'ramp', turn: 'right' }], end: finish },
-      { links: [{ via: 'ramp', turn: 'left' }], end: finish },
-      { links: [{ via: 'fan', turn: 'right' }], end: 'bell' },
-      { links: [{ via: 'ramp', turn: 'right' }], end: 'bucket' },
-    ];
-    // A timed challenge needs a long chain: a simpler route can never meet it.
-    for (const [i, s] of (rules?.minSeconds ? [] : simpler).entries()) {
-      if (deps.signal?.aborted) throw new SolverError('aborted');
-      const easy = await compile({ ...graph, ...s, ground: 'auto', row: undefined, rings: 1 }, 4 + i, i < 2 ? tierOf(prompt) : 'easy');
-      if (easy) yield { res: easy, k: 4 + i };
-    }
-  };
-  for await (const { res, k } of results()) {
-    const notes = [opts.note, res.spec.closest].filter(Boolean);
-    const world = res.spec.landscape ?? landscapeFromWords(prompt) ?? undefined;
-    const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined, ...(world ? { landscape: world } : {}) };
-    // The fallbacks keep the world and the finish, not every mechanism the mission named.
-    if (k < 4 && missionProblems(prompt, spec).length) continue;
-    const check = await deps.physics.check(spec, { signal: deps.signal });
-    if (!check.result.success) continue;
-    emit({ type: 'draft', machine: spec, status: 'solved', attempt: 1, result: check.result });
-    return {
-      type: 'machine', machine: spec, solved: true, verified: true, attempts: 1, cached: false, result: check.result, moved: [], attempt: 1,
-      notes: [`Route graph (${g.links.map((l) => `${l.via} ${l.turn ?? 'straight'}`).join(', ')} -> ${g.end}${res.adapted ? `, adapted to ${res.adapted}` : ''}) laid out in ${res.tries} layout(s), ${res.sims} runs.`,
-        ...(res.shortcuts ? [`Shortcuts by another path: ${res.shortcuts.found}, ${res.shortcuts.blocked} blocked by obstacles; forgiving placements: ${res.shortcuts.slack}.`] : [])],
-    };
+    const laid = layoutLevel(graph, { seed: seed + k, stage: opts.stage, difficulty: tierOf(prompt), flat: wantsFlat(prompt) });
+    const level: MachineSpec = { ...laid, ...(rules ? { rules } : {}), closest: [note, laid.closest].filter(Boolean).join(' ') || undefined };
+    const check = await deps.physics.check(level, { signal: deps.signal });
+    if (!check.result.success || k === 3) { spec = level; result = check.result; }
   }
-  throw new SolverError('I couldn’t verify a route that keeps all of those requirements. Try one or two mechanisms and a bucket or bell finish.');
+  emit({ type: 'draft', machine: spec!, status: 'designed', attempt: 1 });
+  return {
+    type: 'machine', machine: spec!, solved: false, verified: false, attempts: 1, cached: false, result: result!, moved: [], attempt: 1,
+    notes: [`Level set from the idea (${g.links.map((l) => l.via).join(', ')} -> ${g.end}); not solved: the player builds the way.`],
+  };
 }
 
 /** A level with no AI at all: the compiler builds one from the mission's words (the AI is down or out of budget). */
 export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'>, prompt: string, emit: Emit, stage?: Stage): Promise<MachineEvent> {
   const unsupported = unsupportedRequest(prompt);
   if (unsupported) return Promise.reject(new SolverError(unsupported));
-  return routeLevel(deps, prompt, emit, { stage, graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'Offline builder: AI is unavailable. This verified route uses the mechanisms and keywords in your request.' });
+  return routeLevel(deps, prompt, emit, { stage, graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'Offline builder: AI is unavailable. This level is set from the mechanisms and keywords in your request.' });
 }
 
 /**
@@ -276,6 +254,53 @@ export async function generateMachine(deps: MachinePipelineDeps, prompt: string,
     validate: (json: unknown) => validateMachineDesign(withStage(json, stage), { flat: wantsFlat(prompt), difficulty: difficultyOf(prompt) }),
   };
   return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);
+}
+
+/** Kinds the AI may add when it solves a level: the mechanisms, never scenery or goals. */
+const SOLVE_KINDS = ['ramp', 'platform', 'fan', 'trampoline', 'cannon', 'seesaw', 'wall'];
+
+/** What a solution changed that it must not: the level's own parts stay exactly as they are. */
+export function solveProblems(level: MachineSpec, spec: MachineSpec): string[] {
+  const problems: string[] = [];
+  for (const p of level.parts) {
+    const q = spec.parts.find((r) => r.id === p.id);
+    if (!q) problems.push(`Keep "${p.id}": only add parts, never remove the level's.`);
+    else if (q.kind !== p.kind || q.x !== p.x || q.y !== p.y || q.z !== p.z || q.yaw !== p.yaw || (q.length ?? null) !== (p.length ?? null)) problems.push(`Leave "${p.id}" exactly where it is (x ${p.x}, y ${p.y}, z ${p.z}, yaw ${p.yaw}).`);
+  }
+  const added = spec.parts.filter((p) => !level.parts.some((q) => q.id === p.id));
+  if (!added.length) problems.push('Add the parts that get the ball to the goal.');
+  for (const p of added) if (!SOLVE_KINDS.includes(p.kind) || p.fixed || p.prop) problems.push(`"${p.id}" is a ${p.kind}: add only ramps, shelves, fans, trampolines, cannons, seesaws or walls.`);
+  if (added.length > 8) problems.push('Use at most 8 added parts.');
+  if (JSON.stringify(spec.goal) !== JSON.stringify(level.goal)) problems.push('Keep the goal exactly as it is.');
+  return problems;
+}
+
+/**
+ * Only when the player asks: the AI looks for a way through a level by adding parts, and the
+ * physics checks it (nudging only the added parts). An honest miss when it finds none.
+ */
+export function solveLevel(deps: MachinePipelineDeps, level: MachineSpec, emit: Emit): Promise<MachineEvent> {
+  const names = partNames(level.parts);
+  const ball = level.parts.find((p) => p.kind === 'ball');
+  const target = level.parts.find((p) => p.id === level.goal.at(-1)?.part);
+  const instruction = `Solve this level: add parts so the ${ball ? names.get(ball.id) : 'ball'} reaches the ${target ? names.get(target.id) : 'goal'} and the goal happens. Only ADD new parts (ramps, shelves, fans, trampolines, cannons, seesaws, walls) on free cells, each with a new id; never move, remove or change any part already there, and keep the goal as it is.`;
+  return machineLoop(deps, emit, {
+    firstStage: 'editing',
+    firstMessage: 'The AI is looking for a way through.',
+    design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => {
+      try {
+        return await editByOps(deps.llm, level, instruction, calls);
+      } catch (err) {
+        if (deps.signal?.aborted) throw err;
+        return editMachineDesign(deps.llm, level, instruction, calls, onProgress);
+      }
+    },
+    request: editMachineRequest(level, instruction),
+    rules: level.rules,
+    requirements: (spec) => solveProblems(level, spec),
+    validate: validateMachineEdit(level),
+    keep: level.parts.map((p) => p.id),
+  });
 }
 
 export function editMachine(deps: MachinePipelineDeps, machine: MachineSpec, instruction: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {

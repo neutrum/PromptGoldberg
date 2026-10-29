@@ -24,6 +24,8 @@ export interface NudgeJob {
   budget: number;
   timeLimitMs: number;
   seed?: number;
+  /** Parts never moved. */
+  keep?: string[];
   signal?: AbortSignal;
   onProgress?: (p: { evals: number; bestScore: number }) => void;
 }
@@ -69,10 +71,10 @@ export function createPhysics(mode: 'worker' | 'inline' | 'auto' = 'auto', maxCo
       }, { timeoutMs: opts.timeoutMs ?? 15_000, signal: opts.signal });
     },
     nudge(spec, job) {
-      const task: PhysicsTask = { kind: 'nudge', spec, budget: job.budget, timeLimitMs: job.timeLimitMs, seed: job.seed ?? 1 };
+      const task: PhysicsTask = { kind: 'nudge', spec, budget: job.budget, timeLimitMs: job.timeLimitMs, seed: job.seed ?? 1, keep: job.keep };
       return attempt(task, async () => {
         await initPhysics();
-        const res = nudgeMachine(spec, { budget: job.budget, timeLimitMs: job.timeLimitMs, seed: job.seed, onProgress: job.onProgress });
+        const res = nudgeMachine(spec, { budget: job.budget, timeLimitMs: job.timeLimitMs, seed: job.seed, keep: job.keep, onProgress: job.onProgress });
         return { spec: res.spec, result: res.result, evals: res.evals, solved: res.solved, moved: res.moved, events: res.run.events };
       }, { timeoutMs: job.timeLimitMs + 20_000, signal: job.signal, onProgress: job.onProgress });
     },

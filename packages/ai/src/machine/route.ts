@@ -12,7 +12,7 @@ import { requestValidated, type Validation } from '../llm/design';
 
 export const ROUTE_SCHEMA = JSON.stringify(z.toJSONSchema(RouteGraph, { io: 'input' }));
 
-export const ROUTE_PROMPT = `You design puzzle levels for Prompt Goldberg, a browser game in the spirit of The Incredible Machine. A player types a mission (a goal and a place); you reply with the level's ROUTE GRAPH: the story of how the ball gets from its start to the target. A compiler lays the graph out on the stage and the physics engine proves it works; the player then gets the route's parts in a bin and builds it themselves.
+export const ROUTE_PROMPT = `You design puzzle levels for Prompt Goldberg, a browser game in the spirit of The Incredible Machine. A player types a mission (a goal and a place); you reply with the level's ROUTE GRAPH: the story of how the ball gets from its start to the target. The game sets the stage from it (where the ball starts, the goal, the ground, the world) and puts your links in the player's tray; nothing is solved for the player, they build the way themselves.
 
 THE GRAPH
 - start: "shelf" (the ball starts on a high shelf) or "hill" (on top of a hill).

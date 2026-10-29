@@ -30,9 +30,15 @@ Kept current with every commit so work can be handed between agents and compared
 - [x] Development runs on the local Claude CLI (`LLM_BACKEND=cli`); production uses the API (user rule). Measured: Tatras prompt 25 s on the CLI vs 10–11 s on the API.
 - Verified live (API): Tatras prompt 10–11 s, lighthouse cliffs 10 s, Kyoto gong 8 s, cat in the kitchen 6 s, all solvable levels with fitting landmarks; browser screenshots checked for the build-up, the level and a word-placed ramp.
 - [x] Nothing runs or judges by itself (user, 2026-10-29: "we cannot run the machine because AI couldn't solve it"): no automatic opening run on any puzzle; Run works any time, even with no parts placed; a missed run shows a quiet "Not there yet" note in the level's own names ("vampire tomb", not the id). A new level is never rejected for the AI's own check: unproven, it opens as a level nobody has solved yet. The AI solves it only when the player asks: "🤖 Solve it for me" (puts its parts down and runs them, no stars) or typing "solve it" / "help me" / "hint". Timed challenges skip the simpler-route fallback (a short route can never meet them).
-- Tests: 241 passing across 32 files; typecheck clean.
+- [x] Generation solves nothing (user: the hidden check slowed it down and is the AI solving): `layoutLevel` (packages/machine/src/level.ts) sets the stage from the AI's idea with no physics: start shelf or hill, goal far off near the golden section of the diagonal (bucket sunk in a pit, bell, or dominoes and bell), river or pit between, landmark, world obstacles; a floor path from where the ball comes down to the goal is kept clear. One run with nothing placed checks the level does not solve itself. Tray = the idea's mechanisms + a ramp + spares; par = the idea's length. Live (local Claude): level in 15 s (was 25–33 s).
+- [x] Solve only on request: "🤖 Solve it for me" calls the new `/api/machine/solve` (AI adds parts, never moves the level's; the physics checks and nudges only the added parts; an honest miss when none works). Hint hidden when no solution is known.
+- [x] Two prompt inputs during play: 🔧 Build (adds, moves, turns parts; "add a fan" always adds one, from the tray or new) and 🌍 Level (changes the level: "build a fence around the tomb", "three rocks next to the ball", "a wall between the fan and the cave" go straight on as fixed scenery; other changes go to the AI with verify off and apply in place, the player's parts kept). New `fence` obstacle (a board the ball bounces off, posts drawn). No more "make it my copy". Part limit 40 → 64.
+- Tests: 244 passing across 34 files; typecheck clean.
 
 ## To do
+
+- [ ] "Solve it for me" took over 200 s on local Claude (several AI designs, each a slow CLI call): cap it (one design, a short nudge, about 30 s) and show progress.
+- [ ] Modular refactor for the judging criteria (generalizability 25%, technical depth 20%): see the architecture plan.
 
 From 2026-10-29 (goal correction):
 - [ ] Goal looks from the theme: a "cave" goal is still drawn as a plain bucket; draw caves, holes, sinks, boats and ovens round the target (decor only, honest collider unchanged).
