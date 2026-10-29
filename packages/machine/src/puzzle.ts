@@ -263,5 +263,9 @@ export function withPlacements(puzzle: Puzzle, placed: Part[]): MachineSpec {
     const s = puzzle.solution.parts.find((q) => q.id === p.id);
     return s && s.x === p.x && s.y === p.y && s.z === p.z && s.yaw === p.yaw ? { ...p, dx: s.dx, dz: s.dz } : p;
   });
-  return { ...puzzle.spec, parts: [...puzzle.spec.parts, ...parts] };
+  // In the solution's order: the physics is sensitive to the order bodies are added, so a build
+  // that puts every part back is exactly the machine that was verified.
+  const order = new Map(puzzle.solution.parts.map((p, i) => [p.id, i]));
+  const all = [...puzzle.spec.parts, ...parts];
+  return { ...puzzle.spec, parts: all.map((p, i) => ({ p, k: order.get(p.id) ?? puzzle.solution.parts.length + i })).sort((a, b) => a.k - b.k).map((e) => e.p) };
 }

@@ -62,6 +62,8 @@ export interface CompileOptions {
   difficulty?: Difficulty;
   /** Obstacles to stand in the way (overrides the difficulty's count; 0 for none). */
   clutter?: number;
+  /** Working layouts to compare for the best span before settling (default 3; 1 when callers compare in parallel). */
+  layouts?: number;
 }
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -102,6 +104,8 @@ function track(run: MachineRun): Sample[] {
 }
 
 const cellOf = (v: number) => Math.floor(v / CELL);
+// Whether links and the goal reach far down the ball's runs (the first pass) or stay close (the fallback).
+let reach = true;
 // The stage of the route being compiled; compileRoute is synchronous, so one at a time.
 let S: Stage = { x: GRID.x, z: GRID.z };
 const inStage = (x: number, z: number) => onStage(S, x, z);
@@ -190,10 +194,26 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
   // A level that works but breaks the challenge is kept in case nothing keeps it: the rule is then
   // eased to what this route does, and the level says so.
   let eased: MachineSpec | null = null;
+  // Without a challenge, the layout that spans the stage best: tries go on until one reaches the
+  // golden section of both sides, or the attempts run out.
+  let best: { spec: MachineSpec; span: number; tries: number; shortcuts: typeof probe } | null = null;
+  let laidOut = 0;
+  // Reaching layouts first; when none fits, the close ones that always used to.
+  let fitted = false;
+  for (const far of [true, false]) {
+  reach = far;
+  // The close pass only when nothing fitted at all; a layout that only broke the challenge would break it there too.
+  if (best || fitted) break;
   for (let tryNo = 1; tryNo <= attempts; tryNo++) {
     const spec = layOut(graph, links, rand, run, opts);
     if (!spec) continue;
-    if (!opts.rules) return { spec, tries: tryNo, sims, shortcuts: { ...probe } };
+    fitted = true;
+    if (!opts.rules) {
+      const span = spanOf(spec);
+      if (!best || span > best.span) best = { spec, span, tries: tryNo, shortcuts: { ...probe } };
+      if (span >= GOLDEN || ++laidOut >= (opts.layouts ?? 3)) break;
+      continue;
+    }
     if (opts.strict) {
       const t = finishTime(evaluateMachine(spec.goal, run(spec))) ?? 0;
       if ((opts.rules.maxParts === undefined || routeParts(spec).length <= opts.rules.maxParts)
@@ -206,6 +226,9 @@ export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}):
     if (kept.ok) return { spec: kept.spec, tries: tryNo, sims, shortcuts: { ...probe } };
     eased ??= kept.spec;
   }
+  }
+  reach = true;
+  if (best) return { spec: best.spec, tries: best.tries, sims, shortcuts: best.shortcuts };
   if (opts.strict) return null;
   if (eased) return { spec: eased, tries: attempts, sims, shortcuts: { ...probe } };
   const ruled = (spec: MachineSpec) => (opts.rules ? withRules(spec, opts.rules, run).spec : spec);
@@ -329,6 +352,9 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
 
   for (const [n, link] of links.entries()) {
     const out = turnYaw(landed.yaw, link.turn);
+    // How far the ball rolls freely from here: rolling links may stand well down that run, so the route spans the stage.
+    const roll = groundPath(samples, spec().terrain, landed.t - 0.01).length;
+    const far = (near: number[]) => reach ? [...new Set([Math.floor(roll * 0.6), Math.floor(roll * 0.45), ...near].filter((k) => k >= 1))] : near;
     const pid = fresh(link.via);
     const wallId = fresh(id(names.scenery, 'wall'));
     const candidates: Part[] = [];
@@ -348,13 +374,13 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
         for (const back of [0, 1]) { const x = edge - (yaw === 0 ? back : -back); candidates.push({ id: pid, kind: 'cannon', x, y: hillH, z: sz, yaw: out }); }
       }
       // In the path of the rolling ball, a cell or few ahead so it arrives steady.
-      for (const k of [2, 1, 3, 4]) { const c = step(landed.x, landed.z, landed.yaw, k); candidates.push({ id: pid, kind: 'cannon', x: c.x, y: g(c.x, c.z), z: c.z, yaw: out }); }
+      for (const k of far([2, 1, 3, 4])) { const c = step(landed.x, landed.z, landed.yaw, k); candidates.push({ id: pid, kind: 'cannon', x: c.x, y: g(c.x, c.z), z: c.z, yaw: out }); }
     } else if (link.via === 'fan') {
       // A fan alone only bends a rolling ball a little. A fixed wall across the path stops it, and
       // the fan beside the wall, on the far side from where the ball should go, blows it round the corner.
       const away = ((out + 180) % 360) as Yaw;
       if (link.turn !== 'straight') {
-        for (const k of [3, 4, 2, 5]) for (const back of [1, 2]) {
+        for (const k of far([3, 4, 2, 5]).filter((k) => k >= 2)) for (const back of [1, 2]) {
           const w = step(landed.x, landed.z, landed.yaw, k);
           const c = step(w.x, w.z, landed.yaw, -back);
           const f = step(c.x, c.z, away, 1);
@@ -451,10 +477,10 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
         pushEnd([{ id: target, kind: 'bucket', x: d.x, y: sunk, z: d.z, yaw: 0, dx: d.dx, dz: d.dz }], [{ type: 'bucket', part: target }], { name: names.ground ?? 'pit', x: d.x, z: d.z, w: 1, d: 1, h: sunk });
       }
     }
-    else if (!opts.flat) for (const c of path.slice(2, 6)) pushEnd([{ id: target, kind: 'bucket', x: c.x, y: -2, z: c.z, yaw: 0 }], [{ type: 'bucket', part: target }], { name: names.ground ?? 'pit', x: c.x, z: c.z, w: 1, d: 1, h: -2 });
+    else if (!opts.flat) for (const c of reach ? path.slice(2, 14).reverse() : path.slice(2, 6)) pushEnd([{ id: target, kind: 'bucket', x: c.x, y: -2, z: c.z, yaw: 0 }], [{ type: 'bucket', part: target }], { name: names.ground ?? 'pit', x: c.x, z: c.z, w: 1, d: 1, h: -2 });
   } else if (graph.end === 'bell') {
     const times = graph.rings;
-    for (const c of path.slice(1, 6)) for (const fine of [true, false]) pushEnd([{ id: target, kind: 'bell', x: c.x, y: groundAt(spec().terrain, c.x, c.z), z: c.z, yaw: 0, ...(fine ? { dx: c.dx, dz: c.dz } : {}) }], [{ type: 'bell', part: target, times }]);
+    for (const c of reach ? path.slice(1, 16).reverse() : path.slice(1, 6)) for (const fine of [true, false]) pushEnd([{ id: target, kind: 'bell', x: c.x, y: groundAt(spec().terrain, c.x, c.z), z: c.z, yaw: 0, ...(fine ? { dx: c.dx, dz: c.dz } : {}) }], [{ type: 'bell', part: target, times }]);
     // Rung more than once: the bell in a pit the ball rattles around in, a little further on so the route still turns its corner first.
     if (times > 1) for (const c of path.slice(2, 10)) {
       const y = groundAt(spec().terrain, c.x, c.z);
@@ -477,7 +503,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     const count = Math.ceil(n / 8);
     const sizes = Array.from({ length: count }, (_, k) => Math.floor(n / count) + (k < n % count ? 1 : 0));
     const gap = KIT.domino.spacing / CELL;
-    for (const c of path.slice(1, 4)) {
+    for (const c of reach ? path.slice(1, 10).reverse() : path.slice(1, 4)) {
       const d = landed.yaw;
       const f = facing(d);
       const rows: Part[] = [];
@@ -654,6 +680,18 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   // A level needs something to build: without the route it must fail.
   if (!makeConnectPuzzle(withSpares)) return why('no connect puzzle');
   return withSpares;
+}
+
+/** The golden section: a machine should span about this much of each side of its stage. */
+export const GOLDEN = 0.618;
+
+/** How much of the stage a machine spans: the smaller of its width and depth shares (parts, not obstacles). */
+export function spanOf(spec: MachineSpec): number {
+  const stage = { x: spec.stage?.x ?? GRID.x, z: spec.stage?.z ?? GRID.z };
+  const cells = spec.parts.filter((p) => !p.prop).flatMap((p) => footprint(p));
+  if (!cells.length) return 0;
+  const xs = cells.map((c) => c.x), zs = cells.map((c) => c.z);
+  return Math.min((Math.max(...xs) - Math.min(...xs) + 1) / stage.x, (Math.max(...zs) - Math.min(...zs) + 1) / stage.z);
 }
 
 /** Obstacles that suit the world: trees in a forest, cacti in a desert, crates and rocks in the workshop. */

@@ -36,7 +36,7 @@ export interface Physics {
   /** Break a working machine for the player (dozens of short runs; cheap here, slow in a browser). */
   puzzle(spec: MachineSpec, kind: PuzzleKind, seed: number, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<Puzzle | null>;
   /** Lay a route graph out by following the ball (a few to a few hundred short runs). */
-  compile(graph: RouteGraphInput, opts: { seed: number; flat?: boolean; rules?: Rules; strict?: boolean; stage?: Stage; clutter?: number; difficulty?: Difficulty; timeoutMs?: number; signal?: AbortSignal }): Promise<CompileResult | null>;
+  compile(graph: RouteGraphInput, opts: { seed: number; flat?: boolean; rules?: Rules; strict?: boolean; stage?: Stage; clutter?: number; difficulty?: Difficulty; layouts?: number; timeoutMs?: number; signal?: AbortSignal }): Promise<CompileResult | null>;
 }
 
 const WORKER_URL = new URL('./physicsWorker.ts', import.meta.url);
@@ -77,9 +77,9 @@ export function createPhysics(mode: 'worker' | 'inline' | 'auto' = 'auto', maxCo
       }, { timeoutMs: job.timeLimitMs + 20_000, signal: job.signal, onProgress: job.onProgress });
     },
     compile(graph, opts) {
-      return attempt({ kind: 'compile', graph, seed: opts.seed, flat: opts.flat, rules: opts.rules, strict: opts.strict, stage: opts.stage, clutter: opts.clutter, difficulty: opts.difficulty }, async () => {
+      return attempt({ kind: 'compile', graph, seed: opts.seed, flat: opts.flat, rules: opts.rules, strict: opts.strict, stage: opts.stage, clutter: opts.clutter, difficulty: opts.difficulty, layouts: opts.layouts }, async () => {
         await initPhysics();
-        return compileRoute(graph, { seed: opts.seed, flat: opts.flat, rules: opts.rules, strict: opts.strict, stage: opts.stage, clutter: opts.clutter, difficulty: opts.difficulty });
+        return compileRoute(graph, { seed: opts.seed, flat: opts.flat, rules: opts.rules, strict: opts.strict, stage: opts.stage, clutter: opts.clutter, difficulty: opts.difficulty, layouts: opts.layouts });
       }, { timeoutMs: opts.timeoutMs ?? 30_000, signal: opts.signal });
     },
     puzzle(spec, kind, seed, opts = {}) {

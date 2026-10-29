@@ -1,4 +1,4 @@
-import { landscapeFromWords, routeParts, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { landscapeFromWords, routeParts, spanOf, type Difficulty, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
@@ -185,12 +185,20 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   // Try another layout, then the mission's mechanisms with the AI's names and title.
   // Strict compilation and the requirement check reject dropped links or changed finishes.
   const words = routeFromWords(prompt, seed);
-  const tries: RouteGraphInput[] = [graph, graph, { ...graph, links: words.links, end: g.end }];
-  for (const [k, attempt] of tries.entries()) {
+  // Three layouts of the graph at once, one per worker, then the one that spans the stage best;
+  // the mission's own mechanisms are the fallback.
+  const compile = (attempt: RouteGraphInput, k: number) => deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, difficulty: tierOf(prompt), layouts: 1, signal: deps.signal });
+  const ways = deps.physics.mode === 'inline' ? [0] : [0, 1, 2];
+  const laid = (await Promise.all(ways.map((k) => compile(graph, k)))).map((res, k) => ({ res, k }))
+    .filter((r): r is { res: NonNullable<typeof r.res>; k: number } => !!r.res).sort((a, b) => spanOf(b.res.spec) - spanOf(a.res.spec));
+  const results = async function* () {
+    yield* laid;
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, difficulty: tierOf(prompt), signal: deps.signal });
-    if (!res) continue;
-    const notes = [opts.note, res.spec.closest, k === 2 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
+    const res = await compile({ ...graph, links: words.links, end: g.end }, 3);
+    if (res) yield { res, k: 3 };
+  };
+  for await (const { res, k } of results()) {
+    const notes = [opts.note, res.spec.closest, k === 3 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
     const world = res.spec.landscape ?? landscapeFromWords(prompt) ?? undefined;
     const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined, ...(world ? { landscape: world } : {}) };
     if (missionProblems(prompt, spec).length) continue;

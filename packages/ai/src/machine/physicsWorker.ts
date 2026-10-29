@@ -6,7 +6,7 @@ export type PhysicsTask =
   | { kind: 'check'; spec: MachineSpec; hash?: boolean }
   | { kind: 'nudge'; spec: MachineSpec; budget: number; timeLimitMs: number; seed: number }
   | { kind: 'puzzle'; spec: MachineSpec; puzzleKind: PuzzleKind; seed: number }
-  | { kind: 'compile'; graph: RouteGraphInput; seed: number; flat?: boolean; rules?: Rules; strict?: boolean; stage?: Stage; clutter?: number; difficulty?: Difficulty };
+  | { kind: 'compile'; graph: RouteGraphInput; seed: number; flat?: boolean; rules?: Rules; strict?: boolean; stage?: Stage; clutter?: number; difficulty?: Difficulty; layouts?: number };
 
 /** Runs machine simulations off the main thread; stays alive for the next task. */
 const ready = initPhysics();
@@ -19,7 +19,7 @@ parentPort!.on('message', async (task: PhysicsTask) => {
       const run = simulateSync(task.spec, { record: !!task.hash });
       post({ type: 'done', result: { result: evaluateMachine(task.spec.goal, run), events: run.events, hash: task.hash ? traceHash(run) : undefined } });
     } else if (task.kind === 'compile') {
-      post({ type: 'done', result: compileRoute(task.graph, { seed: task.seed, flat: task.flat, rules: task.rules, strict: task.strict, stage: task.stage, clutter: task.clutter, difficulty: task.difficulty }) });
+      post({ type: 'done', result: compileRoute(task.graph, { seed: task.seed, flat: task.flat, rules: task.rules, strict: task.strict, stage: task.stage, clutter: task.clutter, difficulty: task.difficulty, layouts: task.layouts }) });
     } else if (task.kind === 'puzzle') {
       post({ type: 'done', result: makePuzzleOfKind(task.spec, task.puzzleKind, { seed: task.seed }) });
     } else {

@@ -88,8 +88,11 @@ export async function buildApp(opts: AppOptions) {
   const daily = new DailyStore(
     join(opts.dataDir, 'daily'),
     opts.llm && ((request) => createMachine(request, { llm: llm!, physics, maxAttempts: limits.maxAttempts, deadlineMs: limits.levelDeadlineMs })),
-    // The daily ends with "build the chain", so the machine must have connecting parts to hand out.
-    async (machine) => (await physics.puzzle(machine, 'connect', 1)) !== null,
+    // Every stage of the day's ladder must be a puzzle this machine can make, with the day's seed.
+    async (machine, date) => {
+      for (const kind of DAILY_LADDER) if ((await physics.puzzle(machine, kind, dailySeed(date))) === null) return false;
+      return true;
+    },
     (prompt) => createMachineOffline(prompt, { physics }),
   );
   const machines = await MachineGallery.open(opts.dataDir);

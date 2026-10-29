@@ -37,12 +37,14 @@ const dayIndex = (date: string) => Math.floor(Date.parse(date) / 86_400_000);
 
 export class DailyStore {
   private inflight = new Map<string, Promise<DailyMachine>>();
+  /** Every day's machine once made, so this server hands out one machine per day even if saving it failed. */
+  private made = new Map<string, DailyMachine>();
 
   /** `playable` says whether a machine can be turned into the day's puzzles; a machine that cannot is skipped. */
   constructor(
     private dir: string,
     private create: ((request: MachineRequest) => Promise<CreateMachineResult>) | null,
-    private playable: (machine: MachineSpec) => Promise<boolean> = async () => true,
+    private playable: (machine: MachineSpec, date: string) => Promise<boolean> = async () => true,
     /** Builds a level with no AI (the route compiler, from the prompt's words): the day still gets its own machine. */
     private offline: ((prompt: string) => Promise<CreateMachineResult>) | null = null,
   ) {}
@@ -53,9 +55,11 @@ export class DailyStore {
 
   /** Today's machine: from disk, else generated once (concurrent callers share the generation). */
   get(date = todayUtc()): Promise<DailyMachine> {
+    const known = this.made.get(date);
+    if (known) return Promise.resolve(known);
     const running = this.inflight.get(date);
     if (running) return running;
-    const p = this.load(date).finally(() => this.inflight.delete(date));
+    const p = this.load(date).then((daily) => { this.made.set(date, daily); return daily; }).finally(() => this.inflight.delete(date));
     this.inflight.set(date, p);
     return p;
   }
@@ -75,24 +79,26 @@ export class DailyStore {
         const prompt = DAILY_PROMPTS[(start + k) % DAILY_PROMPTS.length];
         try {
           const res = await this.create({ prompt });
-          if (res.solved && (await this.playable(res.machine))) return { date, prompt, machine: res.machine, generated: true };
+          if (res.solved && (await this.playable(res.machine, date))) return { date, prompt, machine: res.machine, generated: true };
         } catch {
           // Try the next prompt; the fallback below always works.
         }
       }
     }
     if (this.offline) {
-      try {
-        const prompt = DAILY_PROMPTS[start];
-        const res = await this.offline(prompt);
-        if (res.solved && (await this.playable(res.machine))) {
-          // Kept for the day like an AI one, so everyone gets the same machine.
-          const daily = { date, prompt, machine: res.machine, generated: false };
-          await writeFileAtomic(this.file(date), JSON.stringify(daily)).catch(() => undefined);
-          return daily;
+      for (let k = 0; k < 3; k++) {
+        try {
+          const prompt = DAILY_PROMPTS[(start + k) % DAILY_PROMPTS.length];
+          const res = await this.offline(prompt);
+          if (res.solved && (await this.playable(res.machine, date))) {
+            // Kept for the day like an AI one, so everyone gets the same machine.
+            const daily = { date, prompt, machine: res.machine, generated: false };
+            await writeFileAtomic(this.file(date), JSON.stringify(daily)).catch(() => undefined);
+            return daily;
+          }
+        } catch {
+          // Try the next prompt; the classic below always works.
         }
-      } catch {
-        // The classic below always works.
       }
     }
     const machine = MachineSpec.parse({ ...sample, caption: 'The AI is resting today, so here is a classic.' });
