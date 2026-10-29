@@ -1,8 +1,8 @@
-import { routeParts, ruleProblems, rulesOf, type Rules, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
+import { routeParts, ruleProblems, rulesOf, type Rules, type Stage, type MachineResult, type MachineSpec, type MachineStreamEvent } from '@og/machine';
 import type { Completion, LlmBackend } from '../llm/client';
 import { SolverError } from '../solver';
 import type { Validation } from '../llm/design';
-import { designMachine, difficultyOf, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
+import { designMachine, difficultyOf, withStage, editMachineDesign, editMachineRequest, pickTwist, redesignMachine, sketchMachine, validateMachineDesign, validateMachineEdit, wantsFlat, type MachineDesign } from './design';
 import type { Physics } from './physics';
 import { designRoute, routable, routeFromWords } from './route';
 import { editByOps } from './editOps';
@@ -164,7 +164,7 @@ const routeOn = () => process.env.MACHINE_ROUTE !== 'off';
  * The fast path: a route graph from the AI (or from the mission's words), laid out by the compiler
  * in the physics pool. The level that comes back has been run end to end.
  */
-async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> & { llm?: LlmBackend }, prompt: string, emit: Emit, opts: { graph?: RouteGraphInput; note?: string } = {}): Promise<MachineEvent> {
+async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> & { llm?: LlmBackend }, prompt: string, emit: Emit, opts: { graph?: RouteGraphInput; note?: string; stage?: Stage } = {}): Promise<MachineEvent> {
   const calls: Completion[] = [];
   emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: 1, message: opts.graph ? 'Building a level from your words.' : 'Sketching the route for your idea.' });
   const graph: RouteGraphInput = opts.graph ?? await designRoute(deps.llm!, prompt, calls);
@@ -181,7 +181,7 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   const tries: RouteGraphInput[] = [graph, graph, { ...graph, links: words.links, end: g.end }];
   for (const [k, attempt] of tries.entries()) {
     if (deps.signal?.aborted) throw new SolverError('aborted');
-    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, signal: deps.signal });
+    const res = await deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, signal: deps.signal });
     if (!res) continue;
     const notes = [opts.note, res.spec.closest, k === 2 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
     const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined };
@@ -198,10 +198,10 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
 }
 
 /** A level with no AI at all: the compiler builds one from the mission's words (the AI is down or out of budget). */
-export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'>, prompt: string, emit: Emit): Promise<MachineEvent> {
+export function wordsMachine(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'>, prompt: string, emit: Emit, stage?: Stage): Promise<MachineEvent> {
   const unsupported = unsupportedRequest(prompt);
   if (unsupported) return Promise.reject(new SolverError(unsupported));
-  return routeLevel(deps, prompt, emit, { graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'Offline builder: AI is unavailable. This verified route uses the mechanisms and keywords in your request.' });
+  return routeLevel(deps, prompt, emit, { stage, graph: routeFromWords(prompt, Math.floor(Math.random() * 1000)), note: 'Offline builder: AI is unavailable. This verified route uses the mechanisms and keywords in your request.' });
 }
 
 /**
@@ -213,26 +213,29 @@ function withChallenge(design: MachineDesign, prompt: string): MachineDesign {
   return rules ? { ...design, spec: { ...design.spec, rules } } : design;
 }
 
-export async function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean } = {}): Promise<MachineEvent> {
+export async function generateMachine(deps: MachinePipelineDeps, prompt: string, emit: Emit, opts: { verify?: boolean; stage?: Stage } = {}): Promise<MachineEvent> {
   const unsupported = unsupportedRequest(prompt);
   if (unsupported) throw new SolverError(unsupported);
   if (routeOn() && routable(prompt)) {
     try {
-      return await routeLevel(deps, prompt, emit);
+      return await routeLevel(deps, prompt, emit, { stage: opts.stage });
     } catch (err) {
       if (deps.signal?.aborted) throw err;
       emit({ type: 'stage', stage: 'designing', attempt: 1, maxAttempts: deps.maxAttempts, message: 'That route did not fit the stage; designing it part by part instead.' });
     }
   }
   const twist = pickTwist(prompt);
+  const stage = opts.stage;
+  // The full designer is told the stage, and the stage is set on whatever it replies.
+  const brief = stage ? `${prompt}\n\nThe stage is ${stage.x} by ${stage.z} cells (x 0..${stage.x - 1}, z 0..${stage.z - 1}); set "stage": {"x": ${stage.x}, "z": ${stage.z}}.` : prompt;
   const loop = {
     firstStage: 'designing' as const,
     firstMessage: 'Designing a level for your idea.',
-    design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => withChallenge(await designMachine(deps.llm, prompt, calls, onProgress, { twist, bin: opts.verify === false }), prompt),
-    request: `Design a machine for this request:\n\n${prompt}`,
+    design: async (calls: Completion[], onProgress: (textSoFar: string) => void) => withChallenge(await designMachine(deps.llm, brief, calls, onProgress, { twist, bin: opts.verify === false, stage }), prompt),
+    request: `Design a machine for this request:\n\n${brief}`,
     mission: prompt,
     rules: rulesOf(prompt),
-    validate: (json: unknown) => validateMachineDesign(json, { flat: wantsFlat(prompt), difficulty: difficultyOf(prompt) }),
+    validate: (json: unknown) => validateMachineDesign(withStage(json, stage), { flat: wantsFlat(prompt), difficulty: difficultyOf(prompt) }),
   };
   return opts.verify === false ? designOnly(deps, emit, loop) : machineLoop(deps, emit, loop);
 }

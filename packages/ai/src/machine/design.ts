@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { binProblems, layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, Terrain, TERRAIN_MAX, TERRAIN_MIN, TURN_MIN, type BinRule, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
+import { binProblems, layoutProblems, lockedParts, lockProblems, MachineSpec, Part, parseMachine, partNames, SPREAD_MIN, Terrain, TERRAIN_MAX, TERRAIN_MIN, TURN_MIN, type BinRule, type Stage, type MachineEvent, type MachineResult, type SpecIssue } from '@og/machine';
 import example from '@og/machine/fixtures/ramp-dominoes-bell.json' with { type: 'json' };
 import type { Completion, LlmBackend } from '../llm/client';
 import { requestValidated, type Validation } from '../llm/design';
@@ -18,7 +18,7 @@ export const MACHINE_PROMPT = `You design Rube Goldberg puzzle levels for Prompt
 THE GAME: the player then sees only the ball, the goal parts and the scenery, where you put them, and gets every other part of your machine in a bin to build the route with. So a level is a journey across the stage: the ball starts on a shelf 3 to 6 cells up near one side or corner, the final goal part is far away (at least ${SPREAD_MIN} cells counting x, y and z together; 12 to 16 is the sweet spot) and AROUND A CORNER: at least ${TURN_MIN} cells away along x and ${TURN_MIN} along z, never straight ahead on the same row. So the route turns at least once: a cannon or fan facing 90 or 270 sends the ball along z, a ramp and shelf with yaw 90 run along z, a wall stops a roll and a fan pushes it sideways. A goal part straight ahead of the start is not a level. Prefer simple, reliable links: a ramp onto a shelf, a drop off its end onto a lower shelf or the floor, dominoes, a seesaw, a fan beside the path. Use at most one cannon unless the request asks for more, and never chain two flights; keep the machine working first, spectacular second.
 
 THE STAGE
-A grid of 0.5 m cells: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south), y from ${TERRAIN_MIN} (the bottom of the deepest ditch) through 0 (the flat floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
+A grid of 0.5 m cells, 24 by 24 unless the machine's "stage" says otherwise: x from 0 (west) to 23 (east), z from 0 (north) to 23 (south) (on a "stage" of {"x":X,"z":Z}, x runs 0 to X-1 and z 0 to Z-1), y from ${TERRAIN_MIN} (the bottom of the deepest ditch) through 0 (the flat floor) to 15 (height of a part's base, in cells). Gravity points down. One ball (radius 0.16 m, a third of a cell) starts at rest and everything else is triggered by it. There are no walls around the stage: a ball that rolls off the edge is lost.
 
 FACING ("yaw"): 0 = toward +x (east), 90 = toward +z (south), 180 = toward -x (west), 270 = toward -z (north). A leg of the route runs straight along x (yaw 0 or 180) or along z (yaw 90 or 270); corners are turned by a cannon or a fan facing the new direction, or by dropping the ball onto a ramp that faces the new way.
 
@@ -123,6 +123,20 @@ export function difficultyOf(request: string): Difficulty {
 }
 
 /** True when the request asks for flat ground, the one case where the designer may leave the terrain out. */
+const inner = (json: unknown): Record<string, unknown> | null => {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const o = json as Record<string, unknown>;
+  return o.machine && typeof o.machine === 'object' ? (o.machine as Record<string, unknown>) : o;
+};
+const hasStage = (json: unknown) => !!inner(json) && 'stage' in inner(json)!;
+
+/** Set the stage on a designer's reply (top level or nested under "machine"). */
+export function withStage(json: unknown, stage: Stage | undefined): unknown {
+  const o = inner(json);
+  if (!stage || !o) return json;
+  return o === json ? { ...o, stage } : { ...(json as object), machine: { ...o, stage } };
+}
+
 export const wantsFlat = (request: string) => /\bflat\b/i.test(request);
 
 /**
@@ -156,10 +170,11 @@ export function validateMachineDesign(json: unknown, opts: { layout?: boolean; f
 export function validateMachineEdit(original: MachineSpec): (json: unknown) => Validation<MachineDesign> {
   return (json) => {
     // The lock first: "you moved the ball" is the reason the model needs, not "the goal got closer".
-    const v = validateMachineDesign(json, { layout: false });
+    // A rewrite that leaves the stage out keeps the original's.
+    const v = validateMachineDesign(hasStage(json) ? json : withStage(json, original.stage), { layout: false });
     if (!v.ok) return v;
-    // The ground is locked with the targets, so an edit never has to add terrain a flat original lacks.
-    const problems = [...lockProblems(original, v.value.spec), ...layoutProblems(v.value.spec, { flat: true })];
+    // An edit never has to add terrain or scenery: a player who fills in the river gets no river.
+    const problems = [...lockProblems(original, v.value.spec), ...layoutProblems(v.value.spec, { flat: true, scenery: false })];
     return problems.length ? { ok: false, problems: problems.map((p) => `- ${p}`).join('\n') } : v;
   };
 }
@@ -173,7 +188,7 @@ export function describeLocks(spec: MachineSpec): string {
   });
   return `Names the player uses for the parts: ${[...names].map(([id, name]) => `${name} = "${id}"`).join(', ')}.
 
-FIXED PARTS (the game's rule): the ball and every part the goal names stay exactly as they are, same id, kind, x, y, z, yaw and length: ${locked.join('; ')}. Never move, remove, replace or re-aim them. The ground ("terrain") stays exactly as it is too. Every goal step stays in the same order; a bell may ring more times, never fewer; steps may be added. Players build the chain between the fixed parts themselves, so moving a fixed part would end the game instead of changing it. If the request asks to change a fixed part, leave that part alone and apply the rest of the request to the other parts (add, move or swap those).`;
+FIXED PARTS (the game's rule): the ball and every part the goal names stay exactly as they are, same id, kind, x, y, z, yaw and length: ${locked.join('; ')}. Never move, remove, replace or re-aim them. The ground ("terrain") changes only when the player asks to dig, raise, flatten or move it, and never under the ball or a goal part; a part standing on reshaped ground gets the new ground's height as its y. Every goal step stays in the same order; a bell may ring more times, never fewer; steps may be added. Players build the chain between the fixed parts themselves, so moving a fixed part would end the game instead of changing it. If the request asks to change a fixed part, leave that part alone and apply the rest of the request to the other parts (add, move or swap those).`;
 }
 
 /** Parts that are already complete in a partly streamed reply, so a UI can show them appear. */
@@ -223,13 +238,13 @@ function completeObjects<T>(textSoFar: string, key: string, schema: { safeParse:
 
 const MODEL = () => process.env.CLAUDE_MACHINE_MODEL ?? 'claude-sonnet-5-5';
 
-export async function designMachine(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void, opts: { twist?: string; bin?: boolean } = {}): Promise<MachineDesign> {
+export async function designMachine(llm: LlmBackend, userPrompt: string, calls: Completion[], onProgress?: (textSoFar: string) => void, opts: { twist?: string; bin?: boolean; stage?: Stage } = {}): Promise<MachineDesign> {
   const twist = opts.twist ? `\n\nThis level's twist, use it: ${opts.twist}.` : '';
   const difficulty = difficultyOf(userPrompt);
   return requestValidated(
     llm,
     { system: MACHINE_PROMPT, prompt: `Design a level for this mission:\n\n${userPrompt}${twist}\n\nDifficulty: ${DIFFICULTY[difficulty].brief}.`, thinking: 'off', maxTokens: 4000, model: MODEL() },
-    (json) => validateMachineDesign(json, { flat: wantsFlat(userPrompt), difficulty, bin: opts.bin }),
+    (json) => validateMachineDesign(withStage(json, opts.stage), { flat: wantsFlat(userPrompt), difficulty, bin: opts.bin }),
     calls,
     2,
     onProgress,

@@ -3,7 +3,7 @@
  * a pit). Scenery like the fixed walls: part of the level, never in the player's bin. Flat ground
  * is the absence of terrain, so a machine without any plays exactly as before.
  */
-import { CELL, GRID, type Terrain } from './schema';
+import { CELL, GRID, type Stage, type Terrain } from './schema';
 
 /** The ground height (cells) at a column; later blocks cover earlier ones. Flat ground is 0. */
 export function groundAt(terrain: Terrain[] | undefined, x: number, z: number): number {
@@ -33,15 +33,15 @@ export interface GroundRun {
  * out right. Only columns whose height differs from `base` (default: the lowest ground) are returned;
  * the rest is the base slab.
  */
-export function groundRuns(terrain: Terrain[] | undefined, base = lowestGround(terrain)): GroundRun[] {
+export function groundRuns(terrain: Terrain[] | undefined, base = lowestGround(terrain), stage: Stage = GRID): GroundRun[] {
   if (!terrain?.length) return [];
   const rows: GroundRun[] = [];
-  for (let z = 0; z < GRID.z; z++) {
+  for (let z = 0; z < stage.z; z++) {
     let x = 0;
-    while (x < GRID.x) {
+    while (x < stage.x) {
       const h = groundAt(terrain, x, z);
       let x1 = x + 1;
-      while (x1 < GRID.x && groundAt(terrain, x1, z) === h) x1++;
+      while (x1 < stage.x && groundAt(terrain, x1, z) === h) x1++;
       if (h !== base) rows.push({ x0: x, z0: z, w: x1 - x, d: 1, h });
       x = x1;
     }

@@ -11,6 +11,8 @@ import { addedPart, isEditInstruction } from './commands';
 import { LookWorkshop } from './LookWorkshop';
 import { PartsTray } from './PartsTray';
 import { guideDismissed, WorkshopGuide } from './WorkshopGuide';
+import { SettingsPanel } from './SettingsPanel';
+import { themeStyle, useSettings } from './settings';
 
 const WELCOME_KEY = 'pg.welcomed';
 const flag = (key: string) => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
@@ -602,6 +604,8 @@ export function MachineScreen() {
   const machine = useMachine(s => s.machine);
   const example = !!machine && machine === exampleMachine;
   const [cameraReset, setCameraReset] = useState(0);
+  const [settings, setSettings] = useState(false);
+  const theme = useSettings((s) => s.theme);
   const inputRef = useRef<HTMLInputElement>(null);
   // A shared link opens its level at once; otherwise a sample machine runs until the visitor builds one.
   useEffect(() => {
@@ -629,14 +633,14 @@ export function MachineScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <div className="app play machine-screen">
+    <div className="app play machine-screen" style={themeStyle(theme)}>
       <div className="machine-viewport"><MachineScene resetView={cameraReset} /><StageControls example={example} onResetView={() => setCameraReset((n) => n + 1)} /></div>
       <div className="hud-top">
         <div className="hud-left mbrand">
           <button className="brand" onClick={() => setWelcome('intro')} title="About the workshop"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>Prompt <b>Goldberg</b></span></button>
           <span className="mtag">The chain reaction workshop</span>
         </div>
-        <div className="hud-right"><ModeSwitch /><button onClick={() => { setWelcome(false); setGuideVersion(v => v + 1); setShowGuide(true); }}>?<span className="label"> How to play</span></button>{LEVELS.length > 0 && <button onClick={() => setWelcome('levels')} title="Example puzzles">🎮<span className="label"> Puzzles</span></button>}<details className="workshop-menu"><summary aria-label="More options">•••</summary><div><DailyButton /><SoundToggle /></div></details></div>
+        <div className="hud-right"><ModeSwitch /><button onClick={() => { setWelcome(false); setGuideVersion(v => v + 1); setShowGuide(true); }}>?<span className="label"> How to play</span></button>{LEVELS.length > 0 && <button onClick={() => setWelcome('levels')} title="Example puzzles">🎮<span className="label"> Puzzles</span></button>}<details className="workshop-menu"><summary aria-label="More options">•••</summary><div><DailyButton /><SoundToggle /><button onClick={(e) => { (e.currentTarget.closest('details') as HTMLDetailsElement).open = false; setSettings(true); }} title="Stage size and theme">⚙<span className="label"> Settings</span></button></div></details></div>
       </div>
       <div className="mside">
         <GoalPanel example={example} />
@@ -649,6 +653,7 @@ export function MachineScreen() {
         <PromptBar inputRef={inputRef} />
       </div>
       {welcome && <Welcome onClose={closeWelcome} library={welcome === 'levels'} />}
+      {settings && <SettingsPanel onClose={() => setSettings(false)} />}
       {showGuide && !welcome && machine && <WorkshopGuide key={guideVersion} example={example} inputRef={inputRef} onClose={() => setShowGuide(false)} />}
     </div>
   );

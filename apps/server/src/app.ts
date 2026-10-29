@@ -8,7 +8,7 @@ import { LevelCache } from './cache';
 import { DailyStore, todayUtc } from './daily';
 import { checkBuild, DailyBoard, MachineGallery, PLAY_EVENTS, playerName, PlayLog, type PlayEvent } from './machines';
 import { GalleryStore } from './gallery';
-import { DAILY_LADDER, dailySeed, parseMachine, PUZZLE_KINDS, type MachineStreamEvent, type PuzzleKind } from '@og/machine';
+import { DAILY_LADDER, dailySeed, GRID, parseMachine, PUZZLE_KINDS, Stage, STAGE_MAX, STAGE_MIN, type MachineStreamEvent, type PuzzleKind } from '@og/machine';
 import {
   coachTip, createLevel, createMachine, createMachineOffline, createPhysics, createSolver, designSystem, LlmError, SolverError,
   type CreateLevelResult, type CreateMachineResult, type LevelRequest, type LlmBackend, type MachineRequest, type Physics, type Solver, type SolverMode,
@@ -137,8 +137,8 @@ export async function buildApp(opts: AppOptions) {
     return { type: 'machine', machine: res.machine, solved: res.solved, verified: res.verified, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
   };
 
-  const runMachineOffline = async (prompt: string, emit: (e: MachineStreamEvent) => void, signal: AbortSignal): Promise<Extract<MachineStreamEvent, { type: 'machine' }>> => {
-    const res = await createMachineOffline(prompt, { physics, signal, onEvent: emit });
+  const runMachineOffline = async (prompt: string, emit: (e: MachineStreamEvent) => void, signal: AbortSignal, stage?: Stage): Promise<Extract<MachineStreamEvent, { type: 'machine' }>> => {
+    const res = await createMachineOffline(prompt, { physics, signal, onEvent: emit, stage });
     return { type: 'machine', machine: res.machine, solved: res.solved, verified: true, attempts: res.attempts, notes: res.notes, cached: false, result: res.result, moved: res.moved };
   };
 
@@ -259,8 +259,12 @@ export async function buildApp(opts: AppOptions) {
     await streamPipeline(req, reply, (emit, signal) => runAi({ level: parsed.level, instruction }, emit, signal));
   });
 
-  app.post<{ Body: { prompt?: unknown; verify?: unknown } }>('/api/machine', async (req, reply) => {
+  app.post<{ Body: { prompt?: unknown; verify?: unknown; stage?: unknown } }>('/api/machine', async (req, reply) => {
     const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+    // The default 24 by 24 stage is sent as no stage, so existing levels and caches stay the same.
+    const staged = req.body?.stage === undefined ? undefined : Stage.safeParse(req.body.stage);
+    if (staged && !staged.success) return sseError(reply, 400, `The stage must be ${STAGE_MIN} to ${STAGE_MAX} cells each way.`);
+    const stage = staged?.data && (staged.data.x !== GRID.x || staged.data.z !== GRID.z) ? staged.data : undefined;
     const verify = true;
     if (!prompt) return sseError(reply, 400, 'Describe the machine you want, e.g. "get the ball into the bucket using dominoes and a fan".');
     if (prompt.length > limits.maxPromptChars) return sseError(reply, 400, `That description is too long: keep it under ${limits.maxPromptChars} characters.`);
@@ -272,8 +276,8 @@ export async function buildApp(opts: AppOptions) {
     const started = Date.now();
     try {
       const event = offline
-        ? await runMachineOffline(prompt, stream.send, stream.signal)
-        : await runMachineAi({ prompt, verify }, stream.send, stream.signal);
+        ? await runMachineOffline(prompt, stream.send, stream.signal, stage)
+        : await runMachineAi({ prompt, verify, stage }, stream.send, stream.signal);
       stream.send(event);
       req.log.info({ ms: Date.now() - started, solved: event.solved, verified: event.verified !== false, attempts: event.attempts }, 'machine stream done');
     } catch (err) {

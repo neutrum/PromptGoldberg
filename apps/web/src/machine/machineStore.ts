@@ -1,8 +1,9 @@
 import {
-  DAILY_LADDER, dailySeed, dropAt, footprint, GRID, handOf, isSupported, lockedParts, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, routeParts, ruleProblems, samePlace, supportsOf, withPlacements,
+  DAILY_LADDER, dailySeed, dropAt, footprint, GRID, inStage, stageOf, handOf, isSupported, lockedParts, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, routeParts, ruleProblems, samePlace, supportsOf, withPlacements,
   type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
+import { requestedStage } from './settings';
 import { LOOK_KINDS, LookRef } from '@og/machine';
 import { sfx } from '../game/audio';
 import { clearMachine, getDailyMachine, logPlay, makePuzzle, playedMachine, publishMachine, simulateInWorker, streamMachine, submitDaily, verifyOnServer, type MachineItem, type Score } from './machineClient';
@@ -348,7 +349,7 @@ export const useMachine = create<MachineState>((set, get) => {
       const visible = fix ? withPlacements(fix.puzzle, fix.placed) : machine;
       const moving = visible.parts.some(p => p.id === pendingPart.id);
       const part = dropAt(visible.parts, pendingPart, x, z, { terrain: visible.terrain, ...(moving && pendingPart.kind === 'platform' ? { y: pendingPart.y } : {}) });
-      if (!part || footprint(part).some(c => c.x < 0 || c.z < 0 || c.x >= GRID.x || c.z >= GRID.z)) { set({ notice: 'Choose a clear spot inside the stage.' }); return false; }
+      if (!part || footprint(part).some(c => !inStage(stageOf(visible), c.x, c.z))) { set({ notice: 'Choose a clear spot inside the stage.' }); return false; }
       const changed = { ...visible, parts: moving ? visible.parts.map(p => p.id === part.id ? part : p) : [...visible.parts, part] };
       set((s) => ({ machine: changed, lastEdit: visible, fix: null, suspendedFix: null, mode: 'build', puzzle: false, tutorial: false,
         level: null, board: null, daily: { ...s.daily, date: '', stage: 0, tries: 0, builds: [] },
@@ -502,7 +503,7 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     create(prompt) {
-      return aiStream('/machine', { prompt, verify: true });
+      return aiStream('/machine', { prompt, verify: true, stage: requestedStage() });
     },
 
     edit(instruction) {

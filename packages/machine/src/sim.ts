@@ -5,7 +5,7 @@
  */
 import RAPIER from '@dimforge/rapier3d-compat';
 import { assemble, facing, KIT, partCentre, type Body, type Vec3 } from './kit';
-import { CELL, type MachineSpec, type Part } from './schema';
+import { CELL, stageOf, type MachineSpec, type Part } from './schema';
 import { groundRuns, lowestGround } from './terrain';
 
 export const STEP_HZ = 120;
@@ -96,9 +96,11 @@ export function simulateSync(spec: MachineSpec, opts: SimulateOptions = {}): Mac
   // ground is the one slab at 0, exactly as before terrain existed.
   const base = lowestGround(spec.terrain);
   const baseTop = base * CELL;
+  const stage = stageOf(spec);
+  const GRID_HALF_X = (stage.x * CELL) / 2, GRID_HALF_Z = (stage.z * CELL) / 2;
   const floor = world.createCollider(RAPIER.ColliderDesc.cuboid(GRID_HALF_X + 2, 0.5, GRID_HALF_Z + 2).setTranslation(GRID_HALF_X, baseTop - 0.5, GRID_HALF_Z).setFriction(0.6));
   floor.setRestitution(0.2);
-  for (const g of groundRuns(spec.terrain, base)) {
+  for (const g of groundRuns(spec.terrain, base, stage)) {
     const top = g.h * CELL, bottom = baseTop - 0.5;
     const block = world.createCollider(RAPIER.ColliderDesc.cuboid((g.w * CELL) / 2, (top - bottom) / 2, (g.d * CELL) / 2)
       .setTranslation((g.x0 + g.w / 2) * CELL, (top + bottom) / 2, (g.z0 + g.d / 2) * CELL).setFriction(0.6));
@@ -287,8 +289,6 @@ function rotateInv(q: { x: number; y: number; z: number; w: number }, v: Vec3): 
   return [v[0] + 2 * (w * cx + dx), v[1] + 2 * (w * cy + dy), v[2] + 2 * (w * cz + dz)];
 }
 
-const GRID_HALF_X = (24 * CELL) / 2;
-const GRID_HALF_Z = (24 * CELL) / 2;
 
 /** Position and rotation of a dynamic body at a frame (interpolation is the renderer's business). */
 export function bodyAt(run: MachineRun, bodyIndex: number, frame: number): { position: Vec3; rotation: [number, number, number, number] } {

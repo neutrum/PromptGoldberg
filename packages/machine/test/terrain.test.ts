@@ -125,9 +125,13 @@ describe('level rules for the ground', () => {
     expect(layoutProblems(sunkenRamp).some((p) => /"ramp" .* would rest at y 2/.test(p))).toBe(true);
   });
 
-  it('edits may not reshape the ground', () => {
+  it('edits may reshape the ground, but never under the ball or a goal part', () => {
+    // Filling the ditch touches no fixed part.
     const filled = { ...spec, terrain: spec.terrain!.slice(0, 1) };
-    expect(lockProblems(spec, filled)).toEqual([expect.stringMatching(/ground .* was changed/)]);
+    expect(lockProblems(spec, filled)).toEqual([]);
+    // Levelling the bank pulls the ground from under the ball.
+    const levelled = { ...spec, terrain: spec.terrain!.slice(1) };
+    expect(lockProblems(spec, levelled)).toEqual([expect.stringMatching(/ground under "ball"/)]);
     const reordered = { ...spec, terrain: [...spec.terrain!].reverse() };
     expect(lockProblems(spec, reordered)).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { compileRoute, evaluateMachine, initPhysics, layoutProblems, makeConnectPuzzle, simulateSync } from '../src';
+import { checkMachine, compileRoute, evaluateMachine, initPhysics, layoutProblems, makeConnectPuzzle, simulateSync } from '../src';
 
 beforeAll(() => initPhysics());
 
@@ -9,6 +9,23 @@ describe('compileRoute', () => {
     expect(impossibleTime).toBeNull();
     const droppedLink = compileRoute({ title: 'Fan then bounce', links: [{ via: 'fan', turn: 'right' }, { via: 'trampoline' }], end: 'bell' }, { strict: true });
     expect(droppedLink).toBeNull();
+  });
+
+  it('lays a route out on a smaller or larger stage, inside its bounds', () => {
+    for (const stage of [{ x: 16, z: 16 }, { x: 32, z: 28 }]) {
+      const r = compileRoute({ title: 'Sized', links: [{ via: 'fan', turn: 'left' }], end: 'bell' }, { seed: 3, stage });
+      expect(r, `${stage.x}x${stage.z}`).not.toBeNull();
+      expect(r!.spec.stage).toEqual(stage);
+      expect(checkMachine(r!.spec)).toEqual([]);
+      expect(evaluateMachine(r!.spec.goal, simulateSync(r!.spec)).success).toBe(true);
+    }
+  });
+
+  it("rejects parts and ground off a machine's own stage", () => {
+    const r = compileRoute({ title: 'Big', links: [{ via: 'fan', turn: 'left' }], end: 'bell' }, { seed: 3 })!;
+    const far = r.spec.parts.reduce((a, p) => Math.max(a, p.x, p.z), 0);
+    expect(checkMachine({ ...r.spec, stage: { x: 12, z: 12 } }).some((i) => /off the 12 by 12 stage/.test(i.message))).toBe(far >= 12);
+    expect(checkMachine({ ...r.spec, stage: { x: 12, z: 12 }, parts: r.spec.parts.map((p) => ({ ...p, x: 0, z: 0 })), terrain: [{ x: 10, z: 0, w: 4, d: 2, h: -1 }] }).some((i) => /runs past the 12 by 12 stage/.test(i.message))).toBe(true);
   });
 
   it('lays a route graph out into a level that runs, passes the level rules and leaves a bin', () => {

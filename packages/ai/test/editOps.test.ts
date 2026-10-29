@@ -16,6 +16,22 @@ describe('edits as diff ops', () => {
     expect(spec.parts.find((p) => p.id === 'ramp')?.yaw).toBe(90);
     expect(problems).toEqual(['remove: no part "nope"']);
   });
+  it('reshapes the ground and resizes the stage, with parts on the ground following it', () => {
+    const free = level.parts.find((p: { kind: string; y: number }) => p.kind !== 'ball' && p.kind !== 'platform' && p.y === 0 && !level.goal.some((g: { part: string }) => g.part === (p as unknown as { id: string }).id));
+    const { spec, problems } = applyOps(level, { ops: [
+      { op: 'ground', name: 'hill', x: free.x, z: free.z, w: 1, d: 1, h: 1 },
+      { op: 'stage', x: 28, z: 20 },
+    ] });
+    expect(problems).toEqual([]);
+    expect(spec.terrain?.at(-1)).toEqual({ name: 'hill', x: free.x, z: free.z, w: 1, d: 1, h: 1 });
+    expect(spec.parts.find((p) => p.id === free.id)?.y).toBe(1);
+    expect(spec.stage).toEqual({ x: 28, z: 20 });
+    const flat = applyOps(spec, { ops: [{ op: 'flatten', name: 'hill' }, { op: 'stage', x: 24, z: 24 }] });
+    expect(flat.problems).toEqual([]);
+    expect(flat.spec.parts.find((p) => p.id === free.id)?.y).toBe(0);
+    expect(flat.spec.stage).toBeUndefined();
+    expect(applyOps(level, { ops: [{ op: 'flatten', name: 'volcano' }] }).problems[0]).toMatch(/no ground named "volcano"/);
+  });
   it('changes appearance without losing placement or optimizer offsets', () => {
     const { spec, problems } = applyOps(level, { ops: [{ op: 'set', id: 'ramp', color: '#ff7f50', label: 'Pizza slide' }] });
     expect(problems).toEqual([]);

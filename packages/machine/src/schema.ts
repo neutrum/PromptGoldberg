@@ -2,8 +2,21 @@ import { z } from 'zod';
 
 /** Side of one grid cell in metres. Parts snap to cells; the optimizer nudges within them. */
 export const CELL = 0.5;
-/** Stage size in cells (x and z are horizontal, y is up). */
+/** The default stage in cells (x and z are horizontal, y is up). A machine may carry its own `stage`. */
 export const GRID = { x: 24, y: 16, z: 24 } as const;
+/** Smallest and largest stage side a machine may choose, in cells. */
+export const STAGE_MIN = 12;
+export const STAGE_MAX = 32;
+export interface Stage { x: number; z: number }
+export const Stage = z.object({
+  x: z.number().int().min(STAGE_MIN).max(STAGE_MAX).describe('cells along x'),
+  z: z.number().int().min(STAGE_MIN).max(STAGE_MAX).describe('cells along z'),
+});
+/** The stage a machine stands on (the default when it names none). */
+export function stageOf(spec?: { stage?: Stage } | null): Stage {
+  return spec?.stage ?? { x: GRID.x, z: GRID.z };
+}
+export const inStage = (stage: Stage, x: number, z: number) => x >= 0 && x < stage.x && z >= 0 && z < stage.z;
 /** How far the ground can be dug below the floor and raised above it, in cells. */
 export const TERRAIN_MIN = -2;
 export const TERRAIN_MAX = 3;
@@ -11,10 +24,10 @@ export const TERRAIN_MAX = 3;
 /** A rectangle of ground at another height: a ditch or river (negative), a bank or hill (positive). */
 export const Terrain = z.object({
   name: z.string().optional().describe('what it is, in the player\'s words: "river", "moat", "pit", "hill", "bank"'),
-  x: z.number().int().min(0).max(GRID.x - 1).describe('west-most cell'),
-  z: z.number().int().min(0).max(GRID.z - 1).describe('north-most cell'),
-  w: z.number().int().min(1).max(GRID.x).describe('cells along x'),
-  d: z.number().int().min(1).max(GRID.z).describe('cells along z'),
+  x: z.number().int().min(0).max(STAGE_MAX - 1).describe('west-most cell'),
+  z: z.number().int().min(0).max(STAGE_MAX - 1).describe('north-most cell'),
+  w: z.number().int().min(1).max(STAGE_MAX).describe('cells along x'),
+  d: z.number().int().min(1).max(STAGE_MAX).describe('cells along z'),
   h: z.number().int().min(TERRAIN_MIN).max(TERRAIN_MAX).describe('ground height in cells: negative digs a ditch, river or pit below the floor; positive raises a bank or hill'),
 });
 export type Terrain = z.infer<typeof Terrain>;
@@ -38,9 +51,9 @@ export const Part = z.object({
   id: z.string().regex(/^[a-z0-9_-]+$/i).describe('short unique id'),
   kind: PartKind,
   label: z.string().max(40).optional().describe('player-facing name, e.g. pizza, oven, castle wall; the kind still defines its physics'),
-  x: z.number().int().min(0).max(GRID.x - 1).describe('cell along x (0 = west edge)'),
+  x: z.number().int().min(0).max(STAGE_MAX - 1).describe('cell along x (0 = west edge)'),
   y: z.number().int().min(TERRAIN_MIN).max(GRID.y - 1).describe('height of the part\'s base in cells (0 = flat floor; on raised ground the ground\'s h, in a ditch its negative h)'),
-  z: z.number().int().min(0).max(GRID.z - 1).describe('cell along z (0 = north edge)'),
+  z: z.number().int().min(0).max(STAGE_MAX - 1).describe('cell along z (0 = north edge)'),
   yaw: Yaw.default(0).describe('facing: 0 = +x, 90 = +z, 180 = -x, 270 = -z. A ramp slopes DOWN toward its facing; fans blow and cannons fire toward it; dominoes and platforms extend toward it'),
   length: z.number().int().min(1).max(8).optional().describe('platforms: cells long (default 3); dominoes: how many (default 5)'),
   color: z.string().optional().describe('hex colour'),
@@ -82,6 +95,7 @@ export const MachineSpec = z.object({
   title: z.string(),
   caption: z.string().optional().describe('one sentence for players: what should happen, no numbers'),
   closest: z.string().optional().describe('only when the request could not be built as asked: one honest sentence for the player saying what was built instead'),
+  stage: Stage.optional().describe('stage size in cells; leave out for the default 24 by 24'),
   terrain: z.array(Terrain).max(6).optional().describe('the shape of the ground: ditches, rivers, pits, banks and hills the route has to deal with; leave out for flat ground'),
   parts: z.array(Part).min(1).max(40),
   spares: z.array(Spare).max(4).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),
@@ -109,6 +123,13 @@ export function checkMachine(spec: MachineSpec, opts: CheckOptions = {}): SpecIs
   spec.parts.forEach((p, i) => {
     if (ids.has(p.id)) issues.push({ path: `parts.${i}.id`, message: `duplicate id "${p.id}"` });
     ids.add(p.id);
+  });
+  const stage = stageOf(spec);
+  spec.parts.forEach((p, i) => {
+    if (!inStage(stage, p.x, p.z)) issues.push({ path: `parts.${i}`, message: `"${p.id}" at x ${p.x} z ${p.z} is off the ${stage.x} by ${stage.z} stage` });
+  });
+  (spec.terrain ?? []).forEach((t, i) => {
+    if (t.x + t.w > stage.x || t.z + t.d > stage.z) issues.push({ path: `terrain.${i}`, message: `ground "${t.name ?? 'block'}" runs past the ${stage.x} by ${stage.z} stage` });
   });
   const balls = spec.parts.filter((p) => p.kind === 'ball');
   if (balls.length !== 1) issues.push({ path: 'parts', message: `exactly one ball is needed (found ${balls.length})` });

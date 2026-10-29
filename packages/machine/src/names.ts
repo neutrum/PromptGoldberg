@@ -1,4 +1,4 @@
-import { DOMINO_DEFAULT, PLATFORM_DEFAULT } from './kit';
+import { DOMINO_DEFAULT, footprint, PLATFORM_DEFAULT } from './kit';
 import { restingHeight } from './placement';
 import type { MachineSpec, Part, Terrain } from './schema';
 import { groundAt, terrainInBox } from './terrain';
@@ -24,7 +24,7 @@ export function spread(spec: MachineSpec): number {
  * Why a design is not a level yet: the goal sits right next to the start, or a part floats where
  * no hand could put it. Empty when it is fine.
  */
-export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean; spreadMin?: number } = {}): string[] {
+export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean; spreadMin?: number; scenery?: boolean } = {}): string[] {
   const spreadMin = opts.spreadMin ?? SPREAD_MIN;
   const problems: string[] = [];
   const d = spread(spec);
@@ -51,7 +51,7 @@ export function layoutProblems(spec: MachineSpec, opts: { flat?: boolean; spread
     const rest = restingHeight(spec.parts, p.x, p.z, undefined, spec.terrain);
     if (p.y !== rest) problems.push(`"${p.id}" (${p.kind}) at y ${p.y} is not standing on anything: at (${p.x}, ${p.z}) it would rest at y ${rest} (the ground there${rest < 0 ? ', a ditch' : rest > 0 ? ', raised ground or a shelf' : ''}). Set its y to ${rest}, or add a platform whose cells include (${p.x}, ${p.z}) with y ${p.y}`);
   }
-  if (!obstacles(spec).length && !terrainInWay(spec).length) {
+  if (opts.scenery !== false && !obstacles(spec).length && !terrainInWay(spec).length) {
     problems.push(`no scenery in the way: put a wall with "fixed": true, or a ditch, river, pit or hill in "terrain", between the ball (x ${ball?.x}, z ${ball?.z}) and the farthest target (x ${target?.x}, z ${target?.z}), in the ball's path, so the route has to go over or around it`);
   }
   return problems;
@@ -150,8 +150,12 @@ export function lockProblems(original: MachineSpec, edited: MachineSpec): string
   const problems: string[] = [];
   const names = partNames(original.parts);
   const now = new Map(edited.parts.map((p) => [p.id, p]));
-  if (!sameGround(original.terrain, edited.terrain)) {
-    problems.push(`the ground ("terrain") is part of the level and was changed: keep it exactly as it was (${JSON.stringify(original.terrain ?? [])})`);
+  // The ground may be reshaped, but never under a fixed part: the ball and the targets keep their footing.
+  for (const id of lockedParts(original)) {
+    const was = original.parts.find((p) => p.id === id);
+    if (!was) continue;
+    const moved = footprint(was).find((c) => groundAt(original.terrain, c.x, c.z) !== groundAt(edited.terrain, c.x, c.z));
+    if (moved) problems.push(`the ground under "${id}" (the ${names.get(id)}) at x ${moved.x} z ${moved.z} changed from height ${groundAt(original.terrain, moved.x, moved.z)} to ${groundAt(edited.terrain, moved.x, moved.z)}: reshape the ground elsewhere, never under the ball or a goal part`);
   }
   for (const id of lockedParts(original)) {
     const was = original.parts.find((p) => p.id === id);

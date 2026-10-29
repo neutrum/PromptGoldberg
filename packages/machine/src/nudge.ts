@@ -4,7 +4,7 @@
  * contraptions are local, so the part the chain breaks at is where to look.
  */
 import { evaluateMachine, type MachineResult } from './goal';
-import { GRID, TERRAIN_MIN, type MachineSpec, type Part } from './schema';
+import { GRID, stageOf, TERRAIN_MIN, type MachineSpec, type Part, type Stage } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 
 export interface NudgeOptions {
@@ -55,7 +55,7 @@ function suspects(spec: MachineSpec, run: MachineRun, result: MachineResult): st
  * Fine offsets (within the cell) and, less often, a whole-cell move or a height change. A shelf
  * only shifts within its cell: a whole-cell move would pull the floor from under what stands on it.
  */
-function perturb(p: Part, rand: () => number, scale: number): Part {
+function perturb(p: Part, rand: () => number, scale: number, stage: Stage): Part {
   const r = p.kind === 'platform' ? 0 : rand();
   if (r < 0.7) {
     return { ...p, dx: clamp((p.dx ?? 0) + (rand() - 0.5) * scale, -0.5, 0.5), dz: clamp((p.dz ?? 0) + (rand() - 0.5) * scale, -0.5, 0.5) };
@@ -63,7 +63,7 @@ function perturb(p: Part, rand: () => number, scale: number): Part {
   if (r < 0.9) {
     const axis = rand() < 0.5 ? 'x' : 'z';
     const step = rand() < 0.5 ? -1 : 1;
-    return { ...p, [axis]: clamp(p[axis] + step, 0, GRID[axis] - 1) };
+    return { ...p, [axis]: clamp(p[axis] + step, 0, stage[axis] - 1) };
   }
   return { ...p, y: clamp(p.y + (rand() < 0.5 ? -1 : 1), TERRAIN_MIN, GRID.y - 1) };
 }
@@ -90,7 +90,7 @@ export function nudgeMachine(spec: MachineSpec, opts: NudgeOptions = {}): NudgeR
     const pick = stale > 8 && rand() < 0.5 ? Math.floor(rand() * order.length) : Math.min(order.length - 1, Math.floor(Math.pow(rand(), 2) * order.length));
     const id = order[pick];
     const scale = stale > 12 ? 1 : 0.5;
-    const candidate: MachineSpec = { ...best.spec, parts: best.spec.parts.map((p) => (p.id === id ? perturb(p, rand, scale) : p)) };
+    const candidate: MachineSpec = { ...best.spec, parts: best.spec.parts.map((p) => (p.id === id ? perturb(p, rand, scale, stageOf(spec)) : p)) };
     const trial = evaluate(candidate);
     if (trial.result.score > best.result.score + 1e-9) {
       best = trial;

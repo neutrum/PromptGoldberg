@@ -1,3 +1,14 @@
+# Next — 2026-10-29
+
+Done today: Tripo part kit thumbnails in the Parts panel; wooden workbench scene (stone plinth, posts under raised parts, edge scenery); terrain and stage size by prompt (`ground`, `flatten`, `stage` edit ops; the ground may change except under the ball and goal parts); per-machine stage 12–32 cells; Settings (stage size for new machines, five theme presets plus custom interface and scene colours, saved in the browser).
+
+Player brief (given earlier to ChatGPT), still to do:
+- [ ] Interface after the reference image in docs/ (as a reference, not a copy). The available parts are already in the right vertical panel.
+- [ ] First run self-explanatory for players and judges: tooltip tutorial and visible cues that each step went as it should. A 4-step quick start exists; audit it against a fresh visit.
+- [ ] A structured prompt handbook so writing prompts is fun, with generated example images.
+- [ ] Denser scenes: random decoy objects so the route is not obvious, probably in later levels or a harder difficulty.
+- [ ] Remaining interface panels still use fixed colours; move them onto the theme variables.
+
 # Current workshop revision — 2026-10-27
 
 - Player feedback follow-up: one current-machine prompt by default, literal add commands become local part placement, explicit Run, Undo, and an in-app ramp → run → fan lesson. New-machine creation is separate. Optional Tripo custom looks were added October 29; see docs/TRIPO.md. The reference's broader scenic redesign remains to do.

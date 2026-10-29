@@ -12,7 +12,7 @@
  * while it works, so players can start before the proof is done.
  */
 import type { Level, LevelStreamEvent } from '@og/shared';
-import type { MachineResult, MachineSpec, MachineStreamEvent } from '@og/machine';
+import type { MachineResult, MachineSpec, MachineStreamEvent, Stage } from '@og/machine';
 import { editMachine, generateMachine, wordsMachine } from './machine/pipeline';
 import { createPhysics, type Physics } from './machine/physics';
 import { createLlm, LlmError, type Completion, type LlmBackend, type LlmBackendName } from './llm/client';
@@ -21,7 +21,7 @@ import { createSolver, type Solver } from './solver';
 
 export type LevelRequest =
   /** Design a new level from a description. */
-  | { prompt: string }
+  | { prompt: string; stage?: Stage }
   /** Change an existing level ("make the giant heavier"); keeps its player and controls. */
   | { level: Level; instruction: string };
 
@@ -128,7 +128,7 @@ export { designSystem } from './llm/design';
 
 export type MachineRequest = (
   /** Design a new machine from a description. */
-  | { prompt: string }
+  | { prompt: string; stage?: Stage }
   /** Change an existing machine ("swap the fan for a cannon"). */
   | { machine: MachineSpec; instruction: string }
 ) & {
@@ -196,7 +196,7 @@ export async function createMachine(request: MachineRequest, options: CreateMach
   const emit = options.onEvent ?? (() => {});
   const opts = { verify: request.verify };
   const event = 'prompt' in request
-    ? await generateMachine(deps, request.prompt, emit, opts)
+    ? await generateMachine(deps, request.prompt, emit, { ...opts, stage: request.stage })
     : await editMachine(deps, request.machine, request.instruction, emit, opts);
   return { machine: event.machine, solved: event.solved, verified: event.verified !== false, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage };
 }
@@ -207,9 +207,9 @@ export { createPhysics, type Physics } from './machine/physics';
  * A level with no AI call: the route compiler builds it from the mission's words. For when the AI
  * is unavailable or out of budget; the level carries an honest note saying so, and it is verified.
  */
-export async function createMachineOffline(prompt: string, options: Pick<CreateMachineOptions, 'physics' | 'signal' | 'onEvent'> = {}): Promise<CreateMachineResult> {
+export async function createMachineOffline(prompt: string, options: Pick<CreateMachineOptions, 'physics' | 'signal' | 'onEvent'> & { stage?: Stage } = {}): Promise<CreateMachineResult> {
   const physics = options.physics ?? (defaultPhysics ??= createPhysics('auto'));
-  const event = await wordsMachine({ physics, signal: options.signal }, prompt, options.onEvent ?? (() => {}));
+  const event = await wordsMachine({ physics, signal: options.signal }, prompt, options.onEvent ?? (() => {}), options.stage);
   return { machine: event.machine, solved: event.solved, verified: true, result: event.result, moved: event.moved, attempts: event.attempts, notes: event.notes, usage: [] };
 }
 export { routeFromWords, routable } from './machine/route';

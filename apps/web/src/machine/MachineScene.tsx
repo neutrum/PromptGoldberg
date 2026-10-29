@@ -1,6 +1,6 @@
 import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { assemble, assemblePart, CELL, dropAt, facing, footprint, FRAME_HZ, GRID, groundAt, groundRuns, KIT, lockedParts, lowestGround, partCentre, partNames, partOrigin, restingHeight, TARGET_KINDS, WATER_WORDS, yawQuat, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
+import { assemble, assemblePart, CELL, dropAt, facing, footprint, FRAME_HZ, GRID, groundAt, groundRuns, stageOf, type Stage, KIT, lockedParts, lowestGround, partCentre, partNames, partOrigin, restingHeight, TARGET_KINDS, WATER_WORDS, yawQuat, type Body, type MachineRun, type Part, type Terrain } from '@og/machine';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -8,6 +8,7 @@ import { sfx } from '../game/audio';
 import { useMachine } from './machineStore';
 import { shapeSize, useModel } from './ModelVisual';
 import { kitUrl, kitVisual } from './kitVisuals';
+import { useSettings } from './settings';
 
 /** Right-angled wedge: tall at -x, flat at +x, base on y = 0 (matches the physics collider). */
 function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
@@ -344,20 +345,20 @@ function Playback({ run, dynamic }: { run: MachineRun; dynamic: Map<string, THRE
 }
 
 /** Fit the whole route at any aspect ratio; leave subsequent orbiting to the player. */
-function MachineCamera({ parts, resetView }: { parts: Part[]; resetView: number }) {
+function MachineCamera({ parts, resetView, stage }: { parts: Part[]; resetView: number; stage: Stage }) {
   const camera = useThree((s) => s.camera);
   const viewport = useThree((s) => s.size);
   const controls = useRef<OrbitControlsImpl>(null);
   const bounds = useMemo(() => {
     const box = new THREE.Box3();
-    if (!parts.length) box.setFromCenterAndSize(new THREE.Vector3((GRID.x * CELL) / 2, 0.5, (GRID.z * CELL) / 2), new THREE.Vector3(6, 2, 6));
+    if (!parts.length) box.setFromCenterAndSize(new THREE.Vector3((stage.x * CELL) / 2, 0.5, (stage.z * CELL) / 2), new THREE.Vector3(6, 2, 6));
     for (const p of parts) box.expandByPoint(new THREE.Vector3((p.x + 0.5) * CELL, p.y * CELL + 0.3, (p.z + 0.5) * CELL));
     // Frame the playable route, not the full-width river or empty stage around it.
     for (const p of parts) for (const c of footprint(p)) box.expandByPoint(new THREE.Vector3((c.x + 0.5) * CELL, p.y * CELL, (c.z + 0.5) * CELL));
     box.expandByScalar(CELL * 1.5);
     const centre = box.getCenter(new THREE.Vector3());
     return { centre, box };
-  }, [parts]);
+  }, [parts, stage]);
   const framedFor = useRef<string>('');
   useEffect(() => {
     // Frame each machine once; later changes to the same machine keep the player's view.
@@ -391,19 +392,19 @@ let droppedAt = 0;
  * Fix mode: hover the stage to see where the part in hand would land (the floor, or the platform
  * under the cursor), click to drop it there. A cell something else stands in shows red.
  */
-function Placement({ part, parts, lift, terrain }: { part: Part; parts: Part[]; lift: number; terrain?: Terrain[] }) {
+function Placement({ part, parts, lift, terrain, stage }: { part: Part; parts: Part[]; lift: number; terrain?: Terrain[]; stage: Stage }) {
   const [cell, setCell] = useState<{ x: number; z: number } | null>(null);
   const shelf = part.kind === 'platform';
-  const w = GRID.x * CELL, d = GRID.z * CELL;
+  const w = stage.x * CELL, d = stage.z * CELL;
   const toCell = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
     const x = Math.floor(e.point.x / CELL), z = Math.floor(e.point.z / CELL);
-    if (x < 0 || z < 0 || x >= GRID.x || z >= GRID.z) return null;
+    if (x < 0 || z < 0 || x >= stage.x || z >= stage.z) return null;
     return { x, z };
   };
   const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z, { y: lift, terrain }) : null), [parts, part, cell, lift, terrain]);
   const y = cell ? (landing?.y ?? restingHeight(parts, cell.x, cell.z, part.id, terrain)) : 0;
   const base = lowestGround(terrain);
-  const ground = useMemo(() => groundRuns(terrain, base), [terrain, base]);
+  const ground = useMemo(() => groundRuns(terrain, base, stage), [terrain, base, stage]);
   const ghost = useMemo(() => (landing ? assemblePart(landing).bodies : []), [landing]);
   const cells = useMemo(() => (cell ? footprint({ ...part, x: cell.x, y, z: cell.z }) : []), [part, cell, y]);
   const platforms = useMemo(() => parts.filter((p) => p.kind === 'platform' && p.id !== part.id), [parts, part.id]);
@@ -487,27 +488,28 @@ function NameTag({ part, name, locked }: { part: Part; name: string; locked: boo
  * ground stacked on it as blocks, exactly as the physics builds it. Sunken blocks with a watery
  * name get a water surface.
  */
-function Ground({ terrain }: { terrain?: Terrain[] }) {
-  const w = GRID.x * CELL, d = GRID.z * CELL;
+function Ground({ terrain, stage }: { terrain?: Terrain[]; stage: Stage }) {
+  const theme = useSettings((s) => s.theme);
+  const w = stage.x * CELL, d = stage.z * CELL;
   const base = lowestGround(terrain);
-  const runs = useMemo(() => groundRuns(terrain, base), [terrain, base]);
+  const runs = useMemo(() => groundRuns(terrain, base, stage), [terrain, base, stage]);
   const water = (terrain ?? []).filter((t) => t.h < 0 && t.name && WATER_WORDS.test(t.name));
   // A wooden workbench on a stone plinth: raised ground is stone, dug ground is darker earth.
-  const tone = (h: number) => (h > 0 ? '#a39684' : h === 0 ? '#b88b58' : '#6e5a45');
+  const tone = (h: number) => (h > 0 ? theme.raised : h === 0 ? theme.board : theme.dug);
   const plinthTop = base * CELL - 0.02;
   return (
     <>
       <mesh position={[w / 2, plinthTop - 0.3, d / 2]} receiveShadow>
         <boxGeometry args={[w + 3, 0.6, d + 3]} />
-        <meshStandardMaterial color="#6d7177" roughness={1} />
+        <meshStandardMaterial color={theme.plinth} roughness={1} />
       </mesh>
-      <Scenery y={plinthTop} />
+      {theme.scenery && <Scenery y={plinthTop} w={w} d={d} foliage={theme.foliage} />}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL - 0.001, d / 2]} receiveShadow>
         <planeGeometry args={[w, d]} />
         <meshStandardMaterial color={tone(base)} roughness={0.9} />
       </mesh>
-      <Grid position={[w / 2, base * CELL + 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#a57a4b" sectionSize={CELL * 4} sectionColor="#8e6639" fadeDistance={30} infiniteGrid={false} />
-      {base < 0 && <Grid position={[w / 2, 0.008, d / 2]} args={[w, d]} cellSize={CELL} cellColor="#a57a4b" sectionSize={CELL * 4} sectionColor="#8e6639" fadeDistance={22} infiniteGrid={false} />}
+      {theme.showGrid && <Grid position={[w / 2, base * CELL + 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor={theme.grid} sectionSize={CELL * 4} sectionColor={theme.grid} fadeDistance={40} infiniteGrid={false} />}
+      {theme.showGrid && base < 0 && <Grid position={[w / 2, 0.008, d / 2]} args={[w, d]} cellSize={CELL} cellColor={theme.grid} sectionSize={CELL * 4} sectionColor={theme.grid} fadeDistance={30} infiniteGrid={false} />}
       {runs.map((g) => {
         const top = g.h * CELL, bottom = base * CELL - 0.02;
         return (
@@ -520,7 +522,7 @@ function Ground({ terrain }: { terrain?: Terrain[] }) {
       {water.map((t, i) => (
         <mesh key={`water-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[(t.x + t.w / 2) * CELL, -0.05, (t.z + t.d / 2) * CELL]}>
           <planeGeometry args={[t.w * CELL, t.d * CELL]} />
-          <meshStandardMaterial color="#2a78b8" transparent opacity={0.7} roughness={0.25} depthWrite={false} />
+          <meshStandardMaterial color={theme.water} transparent opacity={0.7} roughness={0.25} depthWrite={false} />
         </mesh>
       ))}
     </>
@@ -532,6 +534,7 @@ function Ground({ terrain }: { terrain?: Terrain[] }) {
  * thin enough that a marble passing under a shelf rarely clips one.
  */
 function Supports({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] }) {
+  const post = useSettings((s) => s.theme.post);
   const posts = useMemo(() => {
     const out: { x: number; z: number; bottom: number; top: number }[] = [];
     for (const p of parts) {
@@ -552,7 +555,7 @@ function Supports({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] }) {
         <group key={i} position={[s.x, 0, s.z]}>
           <mesh position={[0, (s.bottom + s.top) / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[0.07, s.top - s.bottom, 0.07]} />
-            <meshStandardMaterial color="#6b4a2b" roughness={0.85} />
+            <meshStandardMaterial color={post} roughness={0.85} />
           </mesh>
           <mesh position={[0, s.bottom + 0.03, 0]} receiveShadow>
             <boxGeometry args={[0.15, 0.06, 0.15]} />
@@ -564,20 +567,24 @@ function Supports({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] }) {
   );
 }
 
-// Fixed scenery around the board's back edges, outside every placeable cell and away from the camera side.
-const TREES: [number, number, number][] = [[-0.55, 1.2, 1], [-0.7, 4.6, 0.8], [-0.5, 8.4, 1.15], [-0.65, 11.2, 0.9], [2.4, -0.6, 0.95], [6.1, -0.7, 1.1], [9.8, -0.55, 0.85]];
-const ROCKS: [number, number, number][] = [[-0.45, 2.9, 0.22], [-0.5, 10, 0.16], [4.3, -0.45, 0.2], [12.45, 3.5, 0.14], [8, 12.45, 0.12], [11.6, -0.4, 0.18]];
-function Scenery({ y }: { y: number }) {
+// Scenery on the apron round the board: [along the edge (fraction of it), out from it (m), size].
+const TREES: [number, number, number][] = [[0.1, 0.55, 1], [0.38, 0.7, 0.8], [0.7, 0.5, 1.15], [0.93, 0.65, 0.9]];
+const BACK_TREES: [number, number, number][] = [[0.2, 0.6, 0.95], [0.51, 0.7, 1.1], [0.82, 0.55, 0.85]];
+const ROCKS: [number, number, number][] = [[0.24, 0.45, 0.22], [0.83, 0.5, 0.16], [0.36, 0.45, 0.2], [0.29, 0.45, 0.14], [0.67, 0.45, 0.12], [0.97, 0.4, 0.18]];
+function Scenery({ y, w, d, foliage }: { y: number; w: number; d: number; foliage: string }) {
+  // Trees along the west and north (back) edges, away from the camera; rocks on every edge.
+  const trees = [...TREES.map(([a, o, k]) => [-o, a * d, k]), ...BACK_TREES.map(([a, o, k]) => [a * w, -o, k])];
+  const rocks = ROCKS.map(([a, o, r], i) => (i < 2 ? [-o, a * d, r] : i < 4 ? [a * w, -o, r] : i === 4 ? [w + o, a * d, r] : [a * w, d + o, r]));
   return (
     <>
-      {TREES.map(([x, z, s], i) => (
+      {trees.map(([x, z, s], i) => (
         <group key={`tree-${i}`} position={[x, y, z]} scale={s}>
           <mesh position={[0, 0.2, 0]} castShadow><cylinderGeometry args={[0.05, 0.07, 0.4, 6]} /><meshStandardMaterial color="#5c3d24" roughness={0.9} /></mesh>
-          <mesh position={[0, 0.6, 0]} castShadow><coneGeometry args={[0.36, 0.6, 7]} /><meshStandardMaterial color="#2f5a3c" roughness={0.9} flatShading /></mesh>
-          <mesh position={[0, 0.95, 0]} castShadow><coneGeometry args={[0.26, 0.5, 7]} /><meshStandardMaterial color="#3a6c47" roughness={0.9} flatShading /></mesh>
+          <mesh position={[0, 0.6, 0]} castShadow><coneGeometry args={[0.36, 0.6, 7]} /><meshStandardMaterial color={foliage} roughness={0.9} flatShading /></mesh>
+          <mesh position={[0, 0.95, 0]} castShadow><coneGeometry args={[0.26, 0.5, 7]} /><meshStandardMaterial color={foliage} roughness={0.9} flatShading /></mesh>
         </group>
       ))}
-      {ROCKS.map(([x, z, r], i) => (
+      {rocks.map(([x, z, r], i) => (
         <mesh key={`rock-${i}`} position={[x, y + r * 0.5, z]} rotation={[i, i * 2, 0]} castShadow receiveShadow>
           <dodecahedronGeometry args={[r, 0]} /><meshStandardMaterial color="#8a8d90" roughness={1} flatShading />
         </mesh>
@@ -610,6 +617,7 @@ function Machine3D({ resetView }: { resetView: number }) {
   }, [fix, run, machine, sketch, puzzle, veiled, pending]);
   // The ground is scenery: it shows from the first streamed block on, veil or not.
   const terrain = fix ? fix.puzzle.spec.terrain : run?.spec.terrain ?? machine?.terrain ?? sketch?.terrain;
+  const stage = useMemo(() => stageOf(fix ? fix.puzzle.spec : run?.spec ?? machine), [fix, run, machine]);
   // Build mode, or a solved puzzle: clicking a part names it in the prompt ("move " + click = "move dominoes #2").
   const spec = fix ? fix.puzzle.solution : machine;
   const naming = !!spec && !busy && !pending && (!fix || fix.solved);
@@ -636,8 +644,8 @@ function Machine3D({ resetView }: { resetView: number }) {
       ? new Set(parts.filter(p => !p.fixed && !lockedParts(spec).has(p.id)).map(p => p.id)) : null;
   return (
     <>
-      <MachineCamera parts={framed} resetView={resetView} />
-      <Ground terrain={terrain} />
+      <MachineCamera parts={framed} resetView={resetView} stage={stage} />
+      <Ground terrain={terrain} stage={stage} />
       <Supports parts={parts} terrain={terrain} />
       {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (
@@ -660,7 +668,7 @@ function Machine3D({ resetView }: { resetView: number }) {
         return <Html key={`label-${p.id}`} position={[x, y + 0.65, z]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}><span className={`scene-label ${p.kind === 'ball' ? 'start' : 'target'}`}>{p.kind === 'ball' ? 'Start · ' : 'Goal · '}{p.label ?? p.kind}</span></Html>;
       })}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
-      {picking && (pending || building) && <Placement part={picking} parts={parts} lift={fix?.lift ?? (pending?.kind === 'platform' ? pending.y : 0)} terrain={terrain} />}
+      {picking && (pending || building) && <Placement part={picking} parts={parts} lift={fix?.lift ?? (pending?.kind === 'platform' ? pending.y : 0)} terrain={terrain} stage={stage} />}
       <Decor parts={parts.filter(p => !p.look || p.kind === 'fan')} />
       <Confetti />
       <Flashes />
@@ -703,10 +711,11 @@ function AnimationFrames() {
 }
 
 export function MachineScene({ resetView = 0 }: { resetView?: number }) {
+  const sky = useSettings((s) => s.theme.sky);
   return (
     <Canvas className="scene" frameloop="demand" dpr={[1, 1.25]} shadows camera={{ fov: 45, position: [8, 6, 12], near: 0.05, far: 200 }} gl={{ antialias: true, powerPreference: 'low-power' }}>
-      <color attach="background" args={['#30495d']} />
-      <fog attach="fog" args={['#30495d', 28, 60]} />
+      <color attach="background" args={[sky]} />
+      <fog attach="fog" args={[sky, 28, 60]} />
       <hemisphereLight args={['#fff4dd', '#718fa0', 2.2]} />
       <directionalLight position={[6, 12, 4]} intensity={2.5} castShadow shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12} shadow-camera-top={12} shadow-camera-bottom={-12} shadow-bias={-0.0005} />
       <Machine3D resetView={resetView} />

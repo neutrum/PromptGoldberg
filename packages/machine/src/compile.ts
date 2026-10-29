@@ -12,7 +12,7 @@ import { layoutProblems, obstacles, terrainInWay } from './names';
 import { mulberry32 } from './nudge';
 import { makeConnectPuzzle, routeParts } from './puzzle';
 import { finishTime } from './rules';
-import { CELL, checkMachine, GRID, Spare, TERRAIN_MIN, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
+import { CELL, checkMachine, GRID, inStage as onStage, Spare, TERRAIN_MIN, type Stage, type MachineGoal, type MachineSpec, type Part, type Rules, type Terrain, type Yaw } from './schema';
 import { simulateSync, type MachineRun } from './sim';
 import { groundAt } from './terrain';
 
@@ -53,6 +53,8 @@ export interface CompileOptions {
   flat?: boolean;
   /** A challenge the level carries; the compiled route must keep it (or the rule is eased and the level says so). */
   rules?: Rules;
+  /** Stage size in cells (default 24 by 24). */
+  stage?: Stage;
 }
 
 export interface CompileResult {
@@ -80,7 +82,9 @@ function track(run: MachineRun): Sample[] {
 }
 
 const cellOf = (v: number) => Math.floor(v / CELL);
-const inStage = (x: number, z: number) => x >= 0 && x < GRID.x && z >= 0 && z < GRID.z;
+// The stage of the route being compiled; compileRoute is synchronous, so one at a time.
+let S: Stage = { x: GRID.x, z: GRID.z };
+const inStage = (x: number, z: number) => onStage(S, x, z);
 const turnYaw = (yaw: Yaw, turn: RouteLink['turn']): Yaw => (turn === 'straight' ? yaw : (((yaw + (turn === 'right' ? 90 : 270)) % 360) as Yaw));
 
 /** The first moment after `after` when the ball is down on the ground (not on a shelf or part), with its cell and heading. */
@@ -146,6 +150,7 @@ const step = (x: number, z: number, yaw: Yaw, n: number) => {
  */
 export function compileRoute(input: RouteGraphInput, opts: CompileOptions = {}): CompileResult | null {
   const graph = RouteGraph.parse(input);
+  S = opts.stage ?? { x: GRID.x, z: GRID.z };
   const rand = mulberry32(opts.seed ?? 1);
   const attempts = opts.attempts ?? 12;
   let sims = 0;
@@ -265,9 +270,9 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   // The first leg runs along x; which way the route turns decides which edge it starts near.
   const firstTurn = links.find((l) => l.turn !== 'straight')?.turn ?? 'right';
   let yaw: Yaw = rand() < 0.5 ? 0 : 180;
-  const sx = yaw === 0 ? 1 + Math.floor(rand() * 3) : GRID.x - 2 - Math.floor(rand() * 3);
+  const sx = yaw === 0 ? 1 + Math.floor(rand() * 3) : S.x - 2 - Math.floor(rand() * 3);
   const southward = turnYaw(yaw, firstTurn) === 90;
-  const sz = southward ? 2 + Math.floor(rand() * 4) : GRID.z - 3 - Math.floor(rand() * 4);
+  const sz = southward ? 2 + Math.floor(rand() * 4) : S.z - 3 - Math.floor(rand() * 4);
   const hill = !opts.flat && (graph.start === 'hill' || (graph.ground === 'auto' && rand() < 0.25));
   const hillH = hill ? 2 + Math.floor(rand() * 2) : 0;
   const shelfLen = 4 + Math.floor(rand() * 3);
@@ -290,7 +295,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   const goal: MachineGoal[] = [];
   /** An id no part has yet: "wall", then "wall2", "wall3"... */
   const fresh = (base: string) => { let out = base; for (let k = 2; parts.some((p) => p.id === out); k++) out = `${base}${k}`; return out; };
-  const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, terrain: terrain.length ? [...terrain] : undefined,
+  const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, ...(opts.stage ? { stage: opts.stage } : {}), terrain: terrain.length ? [...terrain] : undefined,
     parts: parts.map((p) => ({ ...p, label: p.kind === 'ball' ? names.ball : p.kind === 'bucket' || p.kind === 'bell' ? names.target : p.kind === 'wall' && p.fixed ? names.scenery : p.label })),
     goal: [...goal], duration: 15 });
 
@@ -440,7 +445,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
         const far = step(c.x, c.z, landed.yaw, long - 1);
         const x0 = Math.min(c.x, far.x), z0 = Math.min(c.z, far.z);
         const pit: Terrain = { name: names.ground ?? 'pit', x: x0, z: z0, w: Math.abs(far.x - c.x) + 1, d: Math.abs(far.z - c.z) + 1, h: y - depth };
-        if (x0 < 0 || z0 < 0 || x0 + pit.w > GRID.x || z0 + pit.d > GRID.z) continue;
+        if (x0 < 0 || z0 < 0 || x0 + pit.w > S.x || z0 + pit.d > S.z) continue;
         const along = facing(landed.yaw);
         const fines = [{ dx: c.dx, dz: c.dz }, { dx: along[0] ? 0 : c.dx, dz: along[2] ? 0 : c.dz }, {}];
         for (const fine of long === 1 ? fines : fines.slice(1)) pushEnd([{ id: target, kind: 'bell', x: far.x, y: y - depth, z: far.z, yaw: 0, ...fine }], [{ type: 'bell', part: target, times }], pit);
@@ -495,8 +500,8 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     const along = f.yaw === 90 || f.yaw === 270;
     const mid = along ? Math.round((f.from.z + f.to.z) / 2) : Math.round((f.from.x + f.to.x) / 2);
     const river: Terrain = along
-      ? { name: names.ground ?? 'river', x: 0, z: mid - 1, w: GRID.x, d: 2, h: -1 }
-      : { name: names.ground ?? 'river', x: mid - 1, z: 0, w: 2, d: GRID.z, h: -1 };
+      ? { name: names.ground ?? 'river', x: 0, z: mid - 1, w: S.x, d: 2, h: -1 }
+      : { name: names.ground ?? 'river', x: mid - 1, z: 0, w: 2, d: S.z, h: -1 };
     // The river must not run under the start or the target.
     if (!parts.some((p) => groundAt([river], p.x, p.z) < 0)) keepIf(() => terrain.push(river), () => terrain.pop());
   }
@@ -513,8 +518,8 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     const target0 = parts.find((p) => p.id === target)!;
     const visited = new Set(track(run(spec())).map((s) => `${cellOf(s.x)},${cellOf(s.z)}`));
     // Near the route: the box between the start and the target, plus a margin.
-    const x0 = Math.max(0, Math.min(ball.x, target0.x) - 3), x1 = Math.min(GRID.x - 2, Math.max(ball.x, target0.x) + 3);
-    const z0 = Math.max(0, Math.min(ball.z, target0.z) - 3), z1 = Math.min(GRID.z - 2, Math.max(ball.z, target0.z) + 3);
+    const x0 = Math.max(0, Math.min(ball.x, target0.x) - 3), x1 = Math.min(S.x - 2, Math.max(ball.x, target0.x) + 3);
+    const z0 = Math.max(0, Math.min(ball.z, target0.z) - 3), z1 = Math.min(S.z - 2, Math.max(ball.z, target0.z) + 3);
     const spots: { x: number; z: number }[] = [];
     for (let x = x0; x < x1; x++) for (let z = z0; z < z1; z++) {
       const cells = [[x, z], [x + 1, z], [x, z + 1], [x + 1, z + 1]];
