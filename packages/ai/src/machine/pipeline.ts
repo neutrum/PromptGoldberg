@@ -179,7 +179,8 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   // The world and its centrepiece go into the layout, so the board is built for them: the AI's, else the mission's words.
   const world = g.landscape ?? landscapeFromWords(prompt) ?? undefined;
   const hero = world && (world.hero ?? heroFromWords(prompt) ?? undefined);
-  if (world) g.landscape = { ...world, ...(hero ? { hero } : {}) };
+  if (world) g.landscape = { ...world, ...(hero && !world.landmark ? { hero } : {}) };
+  if (g.landscape) emit({ type: 'world', landscape: g.landscape, title: g.title });
   emit({ type: 'stage', stage: 'verifying', attempt: 1, maxAttempts: 1, message: `Laying out ${g.links.map((l) => l.via).join(', then ')}, ending in ${g.end === 'dominoes' ? 'dominoes' : `a ${g.end}`}, and running it.` });
   const seed = Math.floor(Math.random() * 1e6);
   const flat = wantsFlat(prompt);
@@ -191,7 +192,7 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
   const words = routeFromWords(prompt, seed);
   // Three layouts of the graph at once, one per worker, then the one that spans the stage best;
   // the mission's own mechanisms are the fallback.
-  const compile = (attempt: RouteGraphInput, k: number) => deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, difficulty: tierOf(prompt), layouts: 1, signal: deps.signal });
+  const compile = (attempt: RouteGraphInput, k: number, difficulty = tierOf(prompt)) => deps.physics.compile(attempt, { seed: seed + k, flat, rules, strict: true, stage: opts.stage, difficulty, layouts: 1, signal: deps.signal });
   const ways = deps.physics.mode === 'inline' ? [0] : [0, 1, 2];
   const laid = (await Promise.all(ways.map((k) => compile(graph, k)))).map((res, k) => ({ res, k }))
     .filter((r): r is { res: NonNullable<typeof r.res>; k: number } => !!r.res).sort((a, b) => spanOf(b.res.spec) - spanOf(a.res.spec));
@@ -200,12 +201,27 @@ async function routeLevel(deps: Pick<MachinePipelineDeps, 'physics' | 'signal'> 
     if (deps.signal?.aborted) throw new SolverError('aborted');
     const res = await compile({ ...graph, links: words.links, end: g.end }, 3);
     if (res) yield { res, k: 3 };
+    // The player builds the route, so the level only needs to be solvable: simpler hidden routes in
+    // the same world, the same start and finish where they fit, until one is laid out.
+    const finish = g.end === 'dominoes' ? 'bell' : g.end;
+    const simpler: { links: RouteGraphInput['links']; end: RouteGraph['end'] }[] = [
+      { links: [{ via: g.links[0]?.via === 'trampoline' || g.links[0]?.via === 'seesaw' ? 'ramp' : g.links[0]?.via ?? 'ramp', turn: 'right' }], end: finish },
+      { links: [{ via: 'ramp', turn: 'left' }], end: finish },
+      { links: [{ via: 'fan', turn: 'right' }], end: 'bell' },
+      { links: [{ via: 'ramp', turn: 'right' }], end: 'bucket' },
+    ];
+    for (const [i, s] of simpler.entries()) {
+      if (deps.signal?.aborted) throw new SolverError('aborted');
+      const easy = await compile({ ...graph, ...s, ground: 'auto', row: undefined, rings: 1 }, 4 + i, i < 2 ? tierOf(prompt) : 'easy');
+      if (easy) yield { res: easy, k: 4 + i };
+    }
   };
   for await (const { res, k } of results()) {
-    const notes = [opts.note, res.spec.closest, k === 3 ? 'The route was rearranged to fit the stage; the requested mechanisms and finish are kept.' : undefined].filter(Boolean);
+    const notes = [opts.note, res.spec.closest].filter(Boolean);
     const world = res.spec.landscape ?? landscapeFromWords(prompt) ?? undefined;
     const spec: MachineSpec = { ...res.spec, closest: notes.join(' ') || undefined, ...(world ? { landscape: world } : {}) };
-    if (missionProblems(prompt, spec).length) continue;
+    // The fallbacks keep the world and the finish, not every mechanism the mission named.
+    if (k < 4 && missionProblems(prompt, spec).length) continue;
     const check = await deps.physics.check(spec, { signal: deps.signal });
     if (!check.result.success) continue;
     emit({ type: 'draft', machine: spec, status: 'solved', attempt: 1, result: check.result });

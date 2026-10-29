@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { HERO_SCALE, HEROES, propCentre, type Hero, type Part } from '@og/machine';
+import { CELL, HERO_SCALE, HEROES, propCentre, type Hero, type LandmarkShape, type Part } from '@og/machine';
 import { worldMotion } from './Landscape3D';
 
 /**
@@ -111,6 +111,49 @@ function Teapot({ color }: { color: string }) {
       <mesh position={[-0.66, 0.62, 0]} castShadow><torusGeometry args={[0.26, 0.06, 8, 16]} /><M color={color} /></mesh>
     </>
   );
+}
+
+/** A gable roof one cell each way, its ridge along x, its eaves at y 0. */
+function useRoof() {
+  const geometry = useMemo(() => {
+    const tri = new THREE.Shape([new THREE.Vector2(-0.5, 0), new THREE.Vector2(0.5, 0), new THREE.Vector2(0, 1)]);
+    const g = new THREE.ExtrudeGeometry(tri, { depth: 1, bevelEnabled: false });
+    // Extruded along z, centred: turn it so the ridge runs along x.
+    g.translate(0, 0, -0.5);
+    g.rotateY(Math.PI / 2);
+    return g;
+  }, []);
+  useLayoutEffect(() => () => geometry.dispose(), [geometry]);
+  return geometry;
+}
+
+/** The tops of a composed landmark: cones and roofs (its solid shapes are drawn from their colliders). */
+function Tops({ shapes }: { shapes: LandmarkShape[] }) {
+  const roof = useRoof();
+  return (
+    <>
+      {shapes.map((s, i) => {
+        const [along, up, across] = s.at.map((v) => v * CELL), [a, h, b] = s.size.map((v) => v * CELL);
+        return s.shape === 'cone'
+          ? <mesh key={i} position={[along, up + h / 2, across]} castShadow><coneGeometry args={[a / 2, h, 12]} /><M color={s.color} /></mesh>
+          : s.shape === 'roof'
+            ? <mesh key={i} geometry={roof} position={[along, up, across]} scale={[a, h, b]} castShadow><M color={s.color} /></mesh>
+            : null;
+      })}
+    </>
+  );
+}
+
+/** A composed landmark's tops, on its footprint and turned with it. */
+export function LandmarkDecor({ part }: { part: Part }) {
+  const ref = useRef<THREE.Group>(null);
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const [x, y, z] = propCentre(part);
+    ref.current.position.set(x, y, z);
+    ref.current.rotation.set(0, (-part.yaw * Math.PI) / 180, 0);
+  }, [part]);
+  return <group ref={ref}><Tops shapes={part.build ?? []} /></group>;
 }
 
 /** A landmark's details, set on its footprint and turned with it. */

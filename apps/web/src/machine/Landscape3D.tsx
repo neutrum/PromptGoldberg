@@ -12,7 +12,8 @@ const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(pre
 /** The world of the machine on screen, if it has one and the player shows machine worlds. */
 export function useWorld(): { theme: Theme; landscape: Landscape | null } {
   const theme = useSettings((s) => s.theme);
-  const landscape = useMachine((s) => (s.fix ? s.fix.puzzle.spec.landscape : s.run?.spec.landscape ?? s.machine?.landscape)) ?? null;
+  // While a new level is made, its world shows at once and the board waits for its parts.
+  const landscape = useMachine((s) => (s.ai.busy && s.ai.creating ? s.ai.world : s.fix ? s.fix.puzzle.spec.landscape : s.run?.spec.landscape ?? s.machine?.landscape)) ?? null;
   return useMemo(() => {
     if (!landscape || !theme.landscapes) return { theme, landscape: null };
     return {

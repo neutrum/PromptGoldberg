@@ -5,12 +5,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { sfx } from '../game/audio';
-import { useMachine } from './machineStore';
+import { POP_MS, useMachine } from './machineStore';
+import { requestedStage } from './settings';
 import { shapeSize, useModel } from './ModelVisual';
 import { kitUrl, kitVisual } from './kitVisuals';
 import { useSettings } from './settings';
 import { Landscape3D, useWorld, worldMotion } from './Landscape3D';
-import { HeroDecor, isHero } from './Heroes3D';
+import { HeroDecor, isHero, LandmarkDecor } from './Heroes3D';
 
 /** Right-angled wedge: tall at -x, flat at +x, base on y = 0 (matches the physics collider). */
 function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
@@ -225,16 +226,51 @@ function CannonBarrel({ part }: { part: Part }) {
   );
 }
 
-function Decor({ parts }: { parts: Part[] }) {
+// ---- Pop-in: a new level builds up part by part, each growing out of the board with a little overshoot.
+
+/** Until when something is still popping in, so the frame loop keeps drawing. */
+let popUntil = 0;
+const overshoot = (t: number) => { const c = 1.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+
+function Pop({ at = 0, pivot, flash, children }: { at?: number; pivot: [number, number, number]; flash?: string; children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  const fired = useRef(false);
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    const t = (performance.now() - at) / POP_MS;
+    if (t >= 1) { if (g.scale.x !== 1) g.scale.setScalar(1); return; }
+    if (t > 0 && flash && !fired.current) {
+      fired.current = true;
+      flashAt(new THREE.Vector3(pivot[0], pivot[1] + 0.15, pivot[2]), flash);
+    }
+    g.scale.setScalar(t <= 0 ? 0.0001 : Math.max(0.0001, overshoot(t)));
+  });
+  const waiting = performance.now() < at + POP_MS;
+  return <group ref={ref} position={pivot} scale={waiting ? 0.0001 : 1}><group position={[-pivot[0], -pivot[1], -pivot[2]]}>{children}</group></group>;
+}
+
+const POP_FLASH: Partial<Record<string, string>> = { ball: '#ff8f6b', bucket: '#7de0a7', bell: '#ffe066' };
+
+function Decor({ parts, appear }: { parts: Part[]; appear: Record<string, number> }) {
   useFrame((_, delta) => { if (useMachine.getState().phase === 'playing') for (const g of spinning) g.rotation.x += Math.min(delta, 0.05) * 14; });
   return (
     <>
-      {parts.map((p) => p.kind === 'fan' ? <FanBlades key={`decor-${p.id}`} part={p} />
+      {parts.map((p) => <Pop key={`decor-${p.id}`} at={appear[p.id]} pivot={partOrigin(p)}><DecorOf part={p} /></Pop>)}
+    </>
+  );
+}
+
+function DecorOf({ part: p }: { part: Part }) {
+  return (
+    <>
+      {p.kind === 'fan' ? <FanBlades key={`decor-${p.id}`} part={p} />
         : p.kind === 'bell' ? <BellDome key={`decor-${p.id}`} part={p} />
         : p.kind === 'cannon' ? <CannonBarrel key={`decor-${p.id}`} part={p} />
         : isHero(p) ? <HeroDecor key={`decor-${p.id}`} part={p} />
+        : p.prop === 'landmark' ? <LandmarkDecor key={`decor-${p.id}`} part={p} />
         : p.prop === 'crystal' || p.prop === 'column' ? <PropTop key={`decor-${p.id}`} part={p} />
-        : null)}
+        : null}
     </>
   );
 }
@@ -617,19 +653,24 @@ function Machine3D({ resetView }: { resetView: number }) {
   const veiled = useMachine((s) => s.veiled);
   const pending = useMachine((s) => s.pendingPart);
   const lastEdit = useMachine((s) => s.lastEdit);
+  const creating = useMachine((s) => s.ai.busy && s.ai.creating);
+  const appear = useMachine((s) => s.appear);
+  useMemo(() => { popUntil = Math.max(0, ...Object.values(appear)) + POP_MS; }, [appear]);
   // Puzzle play never draws the solution: while the AI writes it, only the targets take shape; once it is
   // proven, nothing shows until the puzzle has the connecting parts out.
   const parts = useMemo(() => {
+    // A new level on its way: its world is up, its board fills in once the level is laid out.
+    if (creating) return [];
     if (fix) return [...fix.puzzle.spec.parts, ...fix.placed];
     if (veiled) return [];
     if (run?.spec.parts) return run.spec.parts;
     if (machine?.parts) return pending ? machine.parts.filter(p => p.id !== pending.id) : machine.parts;
     const drawn = sketch?.parts ?? [];
     return puzzle ? drawn.filter((p) => TARGET_KINDS.includes(p.kind)) : drawn;
-  }, [fix, run, machine, sketch, puzzle, veiled, pending]);
+  }, [fix, run, machine, sketch, puzzle, veiled, pending, creating]);
   // The ground is scenery: it shows from the first streamed block on, veil or not.
-  const terrain = fix ? fix.puzzle.spec.terrain : run?.spec.terrain ?? machine?.terrain ?? sketch?.terrain;
-  const stage = useMemo(() => stageOf(fix ? fix.puzzle.spec : run?.spec ?? machine), [fix, run, machine]);
+  const terrain = creating ? undefined : fix ? fix.puzzle.spec.terrain : run?.spec.terrain ?? machine?.terrain ?? sketch?.terrain;
+  const stage = useMemo(() => (creating ? requestedStage() ?? stageOf(undefined) : stageOf(fix ? fix.puzzle.spec : run?.spec ?? machine)), [fix, run, machine, creating]);
   // Build mode, or a solved puzzle: clicking a part names it in the prompt ("move " + click = "move dominoes #2").
   const spec = fix ? fix.puzzle.solution : machine;
   const naming = !!spec && !busy && !pending && (!fix || fix.solved);
@@ -637,7 +678,7 @@ function Machine3D({ resetView }: { resetView: number }) {
   const locked = useMemo(() => (naming && spec ? lockedParts(spec) : null), [naming, spec]);
   const [hover, setHover] = useState<string | null>(null);
   const hovered = hover && names?.has(hover) ? parts.find((p) => p.id === hover) : null;
-  const bodies = useMemo(() => (run ? run.bodies : assemble(parts).bodies), [run, parts]);
+  const bodies = useMemo(() => (run && !creating ? run.bodies : assemble(parts).bodies), [run, parts, creating]);
   const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
   const picking = pending ?? (fix && fix.picking !== null && !fix.solved ? fix.hand[fix.picking] : null);
   const hints = useMemo(() => (fix?.hint && !fix.solved ? assemble(fix.puzzle.missing.filter((p) => !fix.placed.some((q) => q.id === p.id))).bodies : []), [fix]);
@@ -659,8 +700,9 @@ function Machine3D({ resetView }: { resetView: number }) {
       <MachineCamera parts={framed} resetView={resetView} stage={stage} />
       <Ground terrain={terrain} stage={stage} />
       <Supports parts={parts} terrain={terrain} />
-      {run && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
+      {run && !creating && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
       {bodies.map((b) => (
+        <Pop key={b.id} at={appear[b.part]} pivot={partOrigin(parts.find((p) => p.id === b.part) ?? { id: '', kind: 'wall', x: 0, y: 0, z: 0, yaw: 0 })} flash={b.id === b.part ? POP_FLASH[b.kind] ?? '#ffffff' : undefined}>
         <BodyMesh
           key={b.id}
           body={b}
@@ -673,6 +715,7 @@ function Machine3D({ resetView }: { resetView: number }) {
           onGrab={liftable?.has(b.part) ? () => { const s = useMachine.getState(); if (fix) s.pickPlaced(b.part); else if (!s.movePart(b.part)) return; useMachine.setState({ dragging: true }); sfx.place(); } : undefined}
           onClick={names?.has(b.part) ? () => { useMachine.getState().insertPart(b.part); sfx.place(); } : undefined}
         />
+        </Pop>
       ))}
       {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} />}
       {spec && phase !== 'playing' && parts.filter((p) => p.kind === 'ball' || spec.goal.some((g) => g.part === p.id && g.type !== 'touch')).map((p) => {
@@ -681,7 +724,7 @@ function Machine3D({ resetView }: { resetView: number }) {
       })}
       {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
       {picking && (pending || building) && <Placement part={picking} parts={parts} lift={fix?.lift ?? (pending?.kind === 'platform' ? pending.y : 0)} terrain={terrain} stage={stage} />}
-      <Decor parts={parts.filter(p => !p.look || p.kind === 'fan')} />
+      <Decor parts={parts.filter(p => !p.look || p.kind === 'fan')} appear={appear} />
       <Confetti />
       <Flashes />
     </>
@@ -710,7 +753,7 @@ function AnimationFrames() {
   const invalidate = useThree(s => s.invalidate);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useFrame(() => {
-    if (!timer.current && !document.hidden && (useMachine.getState().phase === 'playing' || worldMotion.active || particles.length || flashes.length)) {
+    if (!timer.current && !document.hidden && (useMachine.getState().phase === 'playing' || performance.now() < popUntil || worldMotion.active || particles.length || flashes.length)) {
       timer.current = setTimeout(() => { timer.current = null; invalidate(); }, 1000 / 30);
     }
   });

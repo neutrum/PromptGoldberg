@@ -22,7 +22,7 @@ THE GRAPH
   - trampoline: a falling ball (off a shelf or out of a cannon) bounces up and on. Always straight; put it first or right after a cannon.
   - ramp: a falling ball lands on a ramp against a wall and rolls off the way the ramp faces. Turns left or right.
   - seesaw: a falling ball lands on the plank, tips it and rolls on. Always straight; like a trampoline it needs a falling ball (first, or right after a cannon or trampoline).
-- end: "bucket" (the ball lands in it: after a cannon or a drop), "bell" (the rolling ball rings it), "dominoes" (it knocks a row over that rings a bell).
+- end: "bucket" (the ball lands in it: after a cannon or a drop; whenever the ball must get into or inside something: a cave, a hole, a basket, a sink), "bell" (the rolling ball rings it), "dominoes" (it knocks a row over that rings a bell).
 - rings: how many times the bell must ring (2 for "ring it twice"); default 1.
 - row: dominoes in the chain for a dominoes ending (default 5; 10 to 16 for "a long domino chain" or "lots of dominoes").
 - CHALLENGES: the game enforces "only N parts" and "make it last N seconds" itself. For "only N parts" use at most N-1 links; for a slow or long run use 2 or 3 links and a dominoes ending with a long row.
@@ -57,7 +57,7 @@ export function validateRoute(json: unknown): Validation<RouteGraph> {
 }
 
 export function designRoute(llm: LlmBackend, mission: string, calls: Completion[]): Promise<RouteGraph> {
-  return requestValidated(llm, { system: ROUTE_PROMPT, prompt: `Mission:\n\n${mission}`, thinking: 'off', maxTokens: 800, model: MODEL() }, validateRoute, calls, 1);
+  return requestValidated(llm, { system: ROUTE_PROMPT, prompt: `Mission:\n\n${mission}`, thinking: 'off', maxTokens: 1500, model: MODEL() }, validateRoute, calls, 1);
 }
 
 const has = (text: string, re: RegExp) => re.test(text);
@@ -84,7 +84,7 @@ export function routeFromWords(mission: string, seed = 1): RouteGraphInput {
   // A fan link needs a turn of its own; a straight fan after a cannon is fine.
   if (!links.some((l) => l.turn !== 'straight')) links[0] = { ...links[0], turn };
   const end = has(m, /\b(domino|dominoes|knock|topple|bowling|strike)\b/) || slow ? 'dominoes'
-    : has(m, /\b(bell|ring|gong|alarm|chime|wake)\b/) ? 'bell'
+    : has(m, /\b(bell|ring|gong|alarm|chime|wake)\b/) && !has(m, /\b(into|inside)\b/) ? 'bell'
     : 'bucket';
   const words = mission.replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter((w) => w.length > 2 && !/^(the|and|into|with|from|past|over|ball|get|make|then|that|this|behind|across|round|around)$/i.test(w));
   const title = words.slice(0, 4).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ') || 'A Quick Level';

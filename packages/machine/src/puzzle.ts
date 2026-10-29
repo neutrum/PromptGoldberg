@@ -177,10 +177,12 @@ export function makeConnectPuzzle(solution: MachineSpec): Puzzle | null {
   const loose = removable(solution).filter((p) => !fixed.has(p.id));
   if (!loose.length) return null;
   const ids = new Set(loose.map((p) => p.id));
-  const spec: MachineSpec = { ...solution, parts: solution.parts.filter((p) => !ids.has(p.id)), spares: undefined };
+  // Only the finish counts: "reach the fan" would give the route away and rule out every other build.
+  const goal = solution.goal.filter((g) => !(g.type === 'touch' && ids.has(g.part)));
+  const spec: MachineSpec = { ...solution, goal, parts: solution.parts.filter((p) => !ids.has(p.id)), spares: undefined };
   const failedAt = fails(spec);
   if (failedAt === null) return null; // Works without them: nothing to connect.
-  return { kind: 'connect', spec, missing: chainOrder(solution, loose), start: [], solution: { ...solution, spares: undefined }, failedAt, spares: sparesOf(solution) };
+  return { kind: 'connect', spec, missing: chainOrder(solution, loose), start: [], solution: { ...solution, goal, spares: undefined }, failedAt, spares: sparesOf(solution) };
 }
 
 /** The designer's spares as hand parts (kinds only; the player picks where). */

@@ -1,6 +1,6 @@
 import {
-  DAILY_LADDER, dailySeed, dropAt, footprint, GRID, inStage, stageOf, handOf, isSupported, lockedParts, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, routeParts, ruleProblems, samePlace, supportsOf, withPlacements,
-  type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
+  DAILY_LADDER, dailySeed, HEROES, targetParts, dropAt, footprint, GRID, inStage, stageOf, handOf, isSupported, lockedParts, makeLevelPuzzle, parseMachine, partNames, PUZZLE_KINDS, routeParts, ruleProblems, samePlace, supportsOf, withPlacements,
+  landscapeFromWords, type Landscape, type MachineResult, type MachineRun, type MachineSpec, type MachineStreamEvent, type Part, type Puzzle, type PuzzleKind, type Terrain,
 } from '@og/machine';
 import { create } from 'zustand';
 import { requestedStage } from './settings';
@@ -10,6 +10,7 @@ import { clearMachine, getDailyMachine, logPlay, makePuzzle, playedMachine, publ
 import type { Level, SharedLevel } from './levels';
 import firstShot from '@og/machine/fixtures/levels/first-shot.json' with { type: 'json' };
 import { addedPart, isEditInstruction } from './commands';
+import { cellsAround, readBuildMove, yawToward } from './build';
 
 export interface MachineAiLog {
   busy: boolean;
@@ -18,7 +19,16 @@ export interface MachineAiLog {
   error: string | null;
   /** Parts (and the shape of the ground) Claude has written so far for the design in progress. */
   sketch: { attempt: number; title?: string; parts: Part[]; terrain?: Terrain[] } | null;
+  /** A new level on its way: the scene shows its world and builds up as the steps go by. */
+  creating: boolean;
+  /** The world it will stand in: the mission's keywords at once, the AI's own as soon as it arrives. */
+  world: Landscape | null;
+  /** Which build step is under way (see BUILD_STEPS). */
+  step: number;
 }
+
+/** What the player sees happen while a new level is made. */
+export const BUILD_STEPS = ['Reading your idea', 'Building the world', 'Laying out the level', 'Checking it can be solved'] as const;
 
 /** How far the machine on screen got: 0 = designed, not proven; 1 = proven by the physics; 2 = final. */
 export type MachineRank = 0 | 1 | 2;
@@ -158,7 +168,7 @@ interface MachineState {
   /** After a daily stage is solved: break the machine the next way. */
   nextDailyStage: () => Promise<void>;
   /** Break the proven machine and hand the player the parts. Resolves false when it cannot be broken that way. */
-  startFix: (kind?: PuzzleKind) => Promise<boolean>;
+  startFix: (kind?: PuzzleKind, opts?: { autoplay?: boolean }) => Promise<boolean>;
   /** A level nobody has run: the stage stays, the AI's route parts and spares go to the hand. */
   startLevel: (level: MachineSpec) => Promise<boolean>;
   pick: (index: number | null) => void;
@@ -166,6 +176,10 @@ interface MachineState {
   placeAt: (x: number, z: number) => boolean;
   /** Lift a placed part back into the hand (and whatever stood on it, if it is a shelf). */
   pickPlaced: (id: string) => void;
+  /** A building move in words during play ("put a ramp under the ball"); false when the text is not one. */
+  buildByWords: (text: string) => boolean;
+  /** Parts that just appeared on the board, with when (performance.now()), for their pop-in. */
+  appear: Record<string, number>;
   /** Raise or lower the shelf in hand by `by` cells (a placed shelf is lifted first). */
   liftBy: (by: number) => void;
   /** Turn the part in hand a quarter turn (or a placed part, which is lifted first). */
@@ -176,7 +190,10 @@ interface MachineState {
   leaveFix: () => void;
 }
 
-const idleAi: MachineAiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null };
+const idleAi: MachineAiLog = { busy: false, lines: [], progress: 0, error: null, sketch: null, creating: false, world: null, step: 0 };
+/** How long one part takes to pop in, and the gap between parts. */
+export const POP_MS = 380;
+const POP_GAP = 70;
 
 const BEST_KEY = 'pg.daily.best';
 const STARS_KEY = 'pg.level.stars';
@@ -268,11 +285,12 @@ export const useMachine = create<MachineState>((set, get) => {
   };
 
   // Only a final, verified result replaces the current build. Failed requests leave it playable.
-  const aiStream = async (path: '/machine' | '/machine/edit', body: unknown) => {
+  const aiStream = async (path: '/machine' | '/machine/edit', body: unknown, world: Landscape | null = null) => {
     aiAbort?.abort();
     const controller = new AbortController();
     aiAbort = controller;
-    set({ ai: { ...idleAi, busy: true }, working: true, notice: null, pendingPart: null });
+    const creating = path === '/machine';
+    set({ ai: { ...idleAi, busy: true, creating, world, step: creating && world ? 1 : 0 }, working: true, notice: null, pendingPart: null });
     const current = () => aiAbort === controller && !controller.signal.aborted;
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     let candidate: Extract<MachineStreamEvent, { type: 'machine' }> | null = null;
@@ -280,7 +298,11 @@ export const useMachine = create<MachineState>((set, get) => {
       await streamMachine(path, body, (e: MachineStreamEvent) => {
         if (!current()) return;
         switch (e.type) {
-          case 'stage': log(e.message || `${e.stage}…`); break;
+          case 'stage':
+            log(e.message || `${e.stage}…`);
+            if (e.stage === 'verifying' || e.stage === 'nudging') set((s) => ({ ai: { ...s.ai, step: Math.max(s.ai.step, 3) } }));
+            break;
+          case 'world': set((s) => ({ ai: { ...s.ai, world: e.landscape, step: Math.max(s.ai.step, 2) } })); break;
           case 'progress': set((s) => ({ ai: { ...s.ai, progress: e.goalLength ? e.bestScore / e.goalLength : 0 } })); break;
           case 'sketch': set((s) => ({ ai: { ...s.ai, sketch: { attempt: e.attempt, title: e.title, parts: e.parts, terrain: e.terrain } } })); break;
           case 'draft': log(e.status === 'solved' ? 'Physics check passed.' : 'Testing the design…'); break;
@@ -329,7 +351,7 @@ export const useMachine = create<MachineState>((set, get) => {
     const log = (line: string) => set((s) => ({ ai: { ...s.ai, lines: [...s.ai.lines, line].slice(-8) } }));
     if (path === '/machine/edit' && get().machine && unchanged(get().machine!, spec)) {
       log('The layout stayed the same. The ball and targets are fixed; try changing a ramp, fan, or cannon.');
-    } else log('Ready. The full route passed its physics check.');
+    } else log(path === '/machine' ? 'Level ready. The physics engine knows a way through; now it is your turn.' : 'Ready. The full route passed its physics check.');
     abandon();
     set((s) => ({
       lastEdit: path === '/machine/edit' ? (body as { machine: MachineSpec }).machine : null,
@@ -341,6 +363,21 @@ export const useMachine = create<MachineState>((set, get) => {
       builds: s.builds + (path === '/machine' ? 1 : 0), edits: s.edits + (path === '/machine/edit' ? 1 : 0),
     }));
     await get().load(spec, { rank: 2, proven: true, moved });
+    // A new level is the player's to solve: the ball, the goal and the world stay, the route goes in their hand.
+    if (path === '/machine') {
+      if (await get().startFix('connect', { autoplay: false })) {
+        // The level builds up piece by piece: the start, the goal, the centrepiece, then the obstacles.
+        const fix = get().fix!;
+        const rank = (p: Part) => (p.kind === 'ball' ? 0 : targetParts(fix.puzzle.spec).has(p.id) ? 1 : p.prop === 'landmark' || (HEROES as readonly string[]).includes(p.prop ?? '') ? 2 : p.prop ? 4 : 3);
+        const order = [...fix.puzzle.spec.parts].sort((a, b) => rank(a) - rank(b));
+        const gap = Math.min(POP_GAP, 1800 / Math.max(1, order.length));
+        const now = performance.now() + 150;
+        set({ appear: Object.fromEntries(order.map((p, i) => [p.id, now + i * gap])), notice: 'Your level is ready. Pick a part from the tray, place it on the board and press Run.' });
+        // Then the ball drops once and misses: the gap is the player's to close.
+        const run = get().run;
+        setTimeout(() => { if (get().run === run && get().phase === 'idle') set({ phase: 'playing', time: 0, celebrated: 0 }); }, 150 + order.length * gap + POP_MS);
+      } else set({ error: null });
+    }
   };
 
   return {
@@ -380,6 +417,8 @@ export const useMachine = create<MachineState>((set, get) => {
     lastEdit: null,
     async submitPrompt(text) {
       if (get().ai.busy || !text.trim()) return;
+      // During play, words build with the parts in the tray; only other wishes (looks, the world) go to the AI.
+      if (get().fix && !get().fix!.solved && get().promptMode === 'edit' && get().buildByWords(text)) return;
       const kind = addedPart(text);
       if (kind && get().machine) { get().addPart(kind); return; }
       if (get().machine && (get().promptMode === 'edit' || isEditInstruction(text))) {
@@ -559,7 +598,7 @@ export const useMachine = create<MachineState>((set, get) => {
     },
 
     create(prompt) {
-      return aiStream('/machine', { prompt, verify: true, stage: requestedStage() });
+      return aiStream('/machine', { prompt, verify: true, stage: requestedStage() }, landscapeFromWords(prompt));
     },
 
     edit(instruction) {
@@ -642,7 +681,7 @@ export const useMachine = create<MachineState>((set, get) => {
       set((s) => ({ daily: { ...s.daily, stage: DAILY_LADDER.length + 1 } }));
     },
 
-    async startFix(kind = 'missing') {
+    async startFix(kind = 'missing', opts = {}) {
       const { machine, proven, daily } = get();
       if (!machine || !proven) return false;
       set({ phase: 'simulating', error: null, puzzle: true, tutorial: false, suspendedFix: null });
@@ -661,7 +700,7 @@ export const useMachine = create<MachineState>((set, get) => {
       set({ mode: 'fix', veiled: false, fix: { puzzle, kind, hand: handOf(puzzle).map((m) => ({ ...m })), placed: puzzle.start, picking: puzzle.start.length ? null : 0, lift: 1, tries: 0, solved: false, hint: false, stars: 0 } });
       logPlay(playKey(), 'start', 0, 0);
       // Show the broken machine fail first, so the player sees what is wrong.
-      await simulate(withPlacements(puzzle, puzzle.start));
+      await simulate(withPlacements(puzzle, puzzle.start), opts.autoplay ?? true);
       return true;
     },
 
@@ -694,7 +733,7 @@ export const useMachine = create<MachineState>((set, get) => {
       const next = fix.hand.findIndex((m) => !placed.some((p) => p.id === m.id));
       // A run still being simulated (the opening replay) is stale now.
       loadSeq++;
-      set({ fix: { ...fix, placed, picking: next >= 0 ? next : null }, run: null, result: null, phase: 'idle' });
+      set((s) => ({ fix: { ...fix, placed, picking: next >= 0 ? next : null }, run: null, result: null, phase: 'idle', appear: { ...s.appear, [part.id]: performance.now() } }));
       return true;
     },
 
@@ -712,6 +751,48 @@ export const useMachine = create<MachineState>((set, get) => {
       set({ fix: { ...fix, hand, placed, picking }, run: null, result: null, phase: 'idle' });
     },
 
+    appear: {},
+    buildByWords(text) {
+      const fix = get().fix;
+      if (!fix || fix.solved) return false;
+      const board = withPlacements(fix.puzzle, fix.placed);
+      const move = readBuildMove(text, { parts: board.parts, hand: fix.hand, placed: new Set(fix.placed.map((p) => p.id)) });
+      if (!move) return false;
+      set({ draft: '' });
+      if (move.action === 'error') { set({ notice: move.message }); return true; }
+      const part = fix.hand[move.index];
+      const label = move.what[0].toUpperCase() + move.what.slice(1);
+      if (move.action === 'remove') {
+        get().pickPlaced(part.id);
+        set({ notice: `${label} back in your tray.` });
+        return true;
+      }
+      const was = fix.placed.find((p) => p.id === part.id);
+      const goal = board.parts.find((p) => targetParts(board).has(p.id) && p.kind !== 'ball');
+      const at = move.action === 'turn' ? (was ? { x: was.x, z: was.z } : undefined) : move.at;
+      // Facing: what was said, else the way it already faced, else toward the goal.
+      const yaw = move.yaw ?? (was ? was.yaw : at && goal ? yawToward(at, goal) : part.yaw);
+      const hand = fix.hand.map((h, i) => (i === move.index ? { ...h, yaw } : h));
+      set({ fix: { ...fix, hand, placed: fix.placed.filter((p) => p.id !== part.id), picking: move.index } });
+      if (!at) {
+        set({ notice: move.action === 'turn' ? `${label} turned. Click the board to put it down.` : `${label} in hand. Click the board where it goes, or say where: "under the ${board.parts.find((p) => p.kind === 'ball')?.label ?? 'ball'}".` });
+        return true;
+      }
+      const stage = stageOf(board);
+      for (const c of cellsAround(at, move.action === 'place' && !!move.near, goal)) {
+        const probe = { ...hand[move.index], x: c.x, z: c.z };
+        if (!footprint(probe).every((f) => inStage(stage, f.x, f.z))) continue;
+        if (get().placeAt(c.x, c.z)) {
+          const facing = ['east', 'south', 'west', 'north'][yaw / 90];
+          set((s) => ({ appear: { ...s.appear, [part.id]: performance.now() }, notice: `${label} ${move.action === 'turn' ? 'turned' : was ? 'moved' : 'placed'} at ${c.x},${c.z}, facing ${facing}. Press Run to try it.` }));
+          sfx.place();
+          return true;
+        }
+      }
+      // Nowhere free near there: put it back as it was.
+      set({ fix: { ...fix }, notice: `No free spot for the ${move.what} there. Try another place or click the board.` });
+      return true;
+    },
     pickPlaced(id) {
       const { fix } = get();
       if (!fix || fix.solved) return;

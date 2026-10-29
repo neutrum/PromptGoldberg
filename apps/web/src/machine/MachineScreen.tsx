@@ -6,7 +6,7 @@ import { clearShareLink, galleryAsLevel, LEVELS, readShareLink, sharedAsLevel, s
 import { getMachine, listMachines, type MachineItem, type Score } from './machineClient';
 import { MachineScene } from './MachineScene';
 import { isMuted, setMuted } from '../game/audio';
-import { DAILY_LADDER, HINT_COST, parOf, useMachine } from './machineStore';
+import { BUILD_STEPS, DAILY_LADDER, HINT_COST, parOf, useMachine } from './machineStore';
 import { addedPart, isEditInstruction } from './commands';
 import { LookWorkshop } from './LookWorkshop';
 import { PartsTray } from './PartsTray';
@@ -309,6 +309,13 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
   const [deck, setDeck] = useState(false);
   const editing = !!machine && (promptMode === 'edit' || isEditInstruction(text));
   const adding = !!machine && addedPart(text);
+  // In a puzzle, words build with the tray: the level's own names make the examples.
+  const fix = useMachine((s) => s.fix);
+  const building = editing && !!fix && !fix.solved;
+  const ballName = fix?.puzzle.spec.parts.find((p) => p.kind === 'ball')?.label ?? 'ball';
+  const goalName = fix?.puzzle.spec.parts.find((p) => p.kind === 'bucket' || p.kind === 'bell')?.label ?? 'goal';
+  const tray = [...new Set(fix?.hand.filter((h) => !fix.placed.some((p) => p.id === h.id)).map((h) => (h.kind === 'platform' ? 'shelf' : h.kind)))];
+  const buildIdeas = tray.length ? [`put a ${tray[0]} next to the ${ballName}`, `add a ${tray[1] ?? tray[0]} 3 cells east of the ${ballName}`, `turn the ${tray[0]} toward the ${goalName}`] : [`move the ${fix?.placed[0]?.kind ?? 'ramp'} 1 cell north`];
   // A part clicked on the stage lands in the draft; put the caret after it.
   useEffect(() => {
     if (!draftFocus) return;
@@ -326,9 +333,9 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
   return (
     <div className="mprompt">
       <div className="prompt-heading">
-        <span className="prompt-context">{editing ? 'Change this machine' : 'Create a different machine'}</span>
-        <span className="prompt-help">{ai.busy ? 'Working on your change…' : editing ? machine?.title : 'Describe a whole new idea.'}</span>
-        {!ai.busy && <button type="button" className="text-button new-machine" onClick={() => setPromptMode(editing ? 'create' : 'edit')}>{editing ? 'New machine…' : 'Back to this machine'}</button>}
+        <span className="prompt-context">{building ? 'Build with words' : editing ? 'Change this machine' : 'Describe a new level'}</span>
+        <span className="prompt-help">{ai.busy ? (ai.creating ? 'Building your level…' : 'Working on your change…') : building ? `Use the parts in your tray to get the ${ballName} to the ${goalName}. Looks and the world can change too.` : editing ? machine?.title : 'A place, a ball and a goal: the AI sets the stage, you solve it.'}</span>
+        {!ai.busy && <button type="button" className="text-button new-machine" onClick={() => setPromptMode(editing ? 'create' : 'edit')}>{editing ? 'New level…' : 'Back to this level'}</button>}
         {ai.busy && <button type="button" className="text-button" onClick={() => useMachine.getState().stopAi()}>Cancel</button>}
       </div>
       {deck && !ai.busy && <CardDeck onPick={() => setDeck(false)} />}
@@ -339,11 +346,11 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
           value={text}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={editing ? 300 : 500}
-          placeholder={editing ? 'Try “add a fan” or “paint the ramp pink”…' : 'e.g. Launch a marble over a river into a bucket'}
+          placeholder={building ? `Try “put a ramp under the ${ballName} facing the ${goalName}”…` : editing ? 'Try “add a fan” or “paint the ramp pink”…' : 'e.g. A snowball races down the High Tatras into a cave'}
           disabled={ai.busy}
           aria-label={editing ? 'Describe your edit' : 'Describe your machine'}
         />
-        <button className="primary" disabled={ai.busy || !text.trim()}>{ai.busy ? 'Working…' : adding ? 'Add part →' : editing ? 'Change it →' : 'Create →'}</button>
+        <button className="primary" disabled={ai.busy || !text.trim()}>{ai.busy ? 'Working…' : building ? 'Build →' : adding ? 'Add part →' : editing ? 'Change it →' : 'Create →'}</button>
       </form>
       {ai.error && <div className="error-inline" role="alert">{ai.error}</div>}
       {remix && <div className="edit-notice remix-offer" role="alertdialog" aria-label="Make it your own copy?"><span>That change reshapes the puzzle itself (it passed the physics check). Make it your own copy? The scored run ends and the full machine shows.</span><button className="primary" onClick={() => void useMachine.getState().acceptRemix()}>Make it my copy</button><button onClick={() => useMachine.getState().declineRemix()}>Keep playing</button></div>}
@@ -351,7 +358,7 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
       {!ai.busy && !editing && !deck && <div className="examples create-examples"><span>Try a little…</span>{CARDS.slice(0, 3).map((c) => <button key={c.title} onClick={() => { setDraft(c.prompt); inputRef.current?.focus(); }}>{c.emoji} {c.title}</button>)}<span className="prompt-key">Enter to create ↵</span></div>}
       {!ai.busy && editing && !deck && (
         <div className="examples">
-          {editIdeas(machine!.parts).map((ex) => <button key={ex} onClick={() => { setDraft(ex); inputRef.current?.focus(); }}>{ex}</button>)}
+          {(building ? buildIdeas : editIdeas(machine!.parts)).map((ex) => <button key={ex} onClick={() => { setDraft(ex); inputRef.current?.focus(); }}>{ex}</button>)}
         </div>
       )}
     </div>
@@ -361,6 +368,21 @@ function PromptBar({ inputRef }: { inputRef: React.RefObject<HTMLInputElement | 
 function AiLog() {
   const ai = useMachine((s) => s.ai);
   if (!ai.busy) return null;
+  // A new level: the steps tick off while the scene builds up behind them.
+  if (ai.creating) return (
+    <div className="mlog build-steps" role="status" aria-live="polite">
+      <span className="eyebrow">BUILDING YOUR LEVEL</span>
+      <ol>
+        {BUILD_STEPS.map((label, i) => (
+          <li key={label} className={i < ai.step ? 'done' : i === ai.step ? 'current' : ''}>
+            <span className="step-mark" aria-hidden="true">{i < ai.step ? '✓' : i === ai.step ? '' : String(i + 1)}</span>
+            <span>{label}{i === 1 && ai.world && i <= ai.step ? <span className="muted"> · {ai.world.name}</span> : null}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="build-detail">{ai.lines.at(-1) ?? 'Reading your idea…'}</div>
+    </div>
+  );
   return (
     <div className="mlog" role="status">
       <div className="current">◌ {ai.lines.at(-1) ?? 'Contacting the AI designer…'}</div>

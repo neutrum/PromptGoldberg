@@ -2,7 +2,7 @@
  * The parts kit: what each part is made of, as plain geometry. The simulation builds colliders
  * from these and the renderer draws them, so the two never disagree about where a part is.
  */
-import { HERO_SCALE, PROP_SIZE } from './landscape';
+import { HERO_SCALE, propSize } from './landscape';
 import { CELL, type Part, type PartKind, type Yaw } from './schema';
 
 export type Vec3 = [number, number, number];
@@ -100,7 +100,7 @@ export function yawQuat(yaw: Yaw): Quat {
 
 /** The middle of a prop that covers several cells (its origin cell is the first along and across). */
 export function propCentre(p: Part): Vec3 {
-  const [len, wide] = (p.prop && PROP_SIZE[p.prop]) || [1, 1];
+  const [len, wide] = propSize(p);
   return add(add(partOrigin(p), facing(p.yaw), (len - 1) * CELL / 2), sideways(p.yaw), (wide - 1) * CELL / 2);
 }
 
@@ -229,6 +229,16 @@ export function assemblePart(p: Part): Assembly {
               case 'teapot':
                 hero('', { kind: 'sphere', radius: 0.62 }, at(0, 0.55), tone('#5b8fd6'));
                 break;
+              case 'landmark':
+                // Composed for the place, in cells: the solid shapes collide, cones and roofs are drawn on top by the scene.
+                for (const [i, s] of (p.build ?? []).filter((s) => s.shape !== 'cone' && s.shape !== 'roof').entries()) {
+                  const [along, up, across] = s.at.map((v) => v * CELL), [a, h, b] = s.size.map((v) => v * CELL);
+                  const id = i ? `${p.id}.${i}` : p.id, extra = { ...prop, restitution: 0.3, color: s.color };
+                  if (s.shape === 'box') fixed(id, { kind: 'box', size: [a, h, b] }, at(along, up + h / 2, across), q, extra);
+                  else if (s.shape === 'cylinder') fixed(id, { kind: 'cylinder', radius: a / 2, height: h }, at(along, up + h / 2, across), q, extra);
+                  else fixed(id, { kind: 'sphere', radius: a / 2 }, at(along, up + a / 2, across), q, extra);
+                }
+                break;
               case 'hammer':
                 fixed(p.id, { kind: 'cylinder', radius: 0.06, height: 0.85 }, at(-0.08, 0.06), side, { ...prop, color: '#b5834a' });
                 fixed(`${p.id}.head`, { kind: 'box', size: [0.18, 0.2, 0.46] }, at(0.4, 0.1), q, { ...prop, color: tone('#5b6168') });
@@ -337,7 +347,7 @@ export function footprint(p: Part): { x: number; z: number }[] {
     case 'dominoes': return along(Math.ceil(((p.length ?? DOMINO_DEFAULT) - 1) * KIT.domino.spacing / CELL + 0.5));
     case 'seesaw': return [{ x: p.x - f[0], z: p.z - f[2] }, { x: p.x, z: p.z }, { x: p.x + f[0], z: p.z + f[2] }];
     case 'wall': {
-      const [len, wide] = (p.prop && PROP_SIZE[p.prop]) || [1, 1];
+      const [len, wide] = propSize(p);
       if (wide === 1) return along(len);
       const s = sideways(p.yaw);
       return along(len).flatMap((c) => Array.from({ length: wide }, (_, j) => ({ x: c.x + s[0] * j, z: c.z + s[2] * j })));

@@ -340,7 +340,7 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
   /** An id no part has yet: "wall", then "wall2", "wall3"... */
   const fresh = (base: string) => { let out = base; for (let k = 2; parts.some((p) => p.id === out); k++) out = `${base}${k}`; return out; };
   const spec = (): MachineSpec => ({ title: graph.title, caption: graph.caption, closest: graph.closest, ...(opts.stage ? { stage: opts.stage } : {}), ...(graph.landscape ? { landscape: graph.landscape } : {}), terrain: terrain.length ? [...terrain] : undefined,
-    parts: parts.map((p) => ({ ...p, label: p.kind === 'ball' ? names.ball : p.kind === 'bucket' || p.kind === 'bell' ? names.target : p.kind === 'wall' && p.fixed ? names.scenery : p.label })),
+    parts: parts.map((p) => ({ ...p, label: p.kind === 'ball' ? names.ball : p.kind === 'bucket' || p.kind === 'bell' ? names.target : p.kind === 'wall' && p.fixed && !p.prop ? names.scenery : p.prop && !p.label ? p.prop : p.label })),
     goal: [...goal], duration: 15 });
 
   let samples = track(run(spec()));
@@ -668,14 +668,17 @@ function layOut(graph: RouteGraph, links: RouteLink[], rand: () => number, run: 
     const taken = () => new Set(parts.flatMap((p) => footprint(p).map((c) => `${c.x},${c.z}`)));
     const path = [...visited].map((k) => k.split(',').map(Number));
     const toPath = (x: number, z: number) => Math.min(8, ...path.map(([a, b]) => Math.abs(a - x) + Math.abs(b - z)));
-    const hero = graph.landscape?.hero;
+    // A landmark composed for the place wins over a ready-made one.
+    const landmark = graph.landscape?.landmark;
+    const hero = landmark ? 'landmark' : graph.landscape?.hero;
     if (hero) {
       const busy = taken();
       const spots: { part: Part; score: number }[] = [];
       for (let x = 0; x < S.x; x++) for (let z = 0; z < S.z; z++) for (const yaw of [0, 90, 180, 270] as Yaw[]) {
         const y = groundAt(spec().terrain, x, z);
         if (y < 0) continue;
-        const part: Part = { id: fresh(hero), kind: 'wall', x, y, z, yaw, fixed: true, prop: hero, ...(hero === 'dragon' && graph.landscape ? { color: deepen(graph.landscape.accent) } : {}) };
+        const part: Part = { id: fresh(hero), kind: 'wall', x, y, z, yaw, fixed: true, prop: hero,
+          ...(landmark ? { build: landmark.shapes, label: landmark.name } : hero === 'dragon' && graph.landscape ? { color: deepen(graph.landscape.accent) } : {}) };
         const cells = footprint(part);
         if (!cells.every((c) => inStage(c.x, c.z) && !near.has(`${c.x},${c.z}`) && !busy.has(`${c.x},${c.z}`) && groundAt(spec().terrain, c.x, c.z) === y)) continue;
         const cx = cells.reduce((a, c) => a + c.x, 0) / cells.length, cz = cells.reduce((a, c) => a + c.z, 0) / cells.length;

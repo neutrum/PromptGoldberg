@@ -26,8 +26,8 @@ export const OBSTACLE_PROPS = [
 /** One big low-poly landmark lying on the board: the world's centrepiece, solid where the ball can reach. */
 export const HEROES = ['dragon', 'castle', 'ship', 'robot', 'rocket', 'windmill', 'teapot'] as const;
 export type Hero = (typeof HEROES)[number];
-/** Everything a fixed wall can be instead of a wall. */
-export const ObstacleProp = z.enum([...OBSTACLE_PROPS, ...HEROES]);
+/** Everything a fixed wall can be instead of a wall; "landmark" is one the AI composes from shapes. */
+export const ObstacleProp = z.enum([...OBSTACLE_PROPS, ...HEROES, 'landmark']);
 export type ObstacleProp = z.infer<typeof ObstacleProp>;
 /** How much bigger than their modelled size the landmarks stand, so they read from the default camera. */
 export const HERO_SCALE = 1.5;
@@ -40,6 +40,67 @@ export const PROP_SIZE: Partial<Record<ObstacleProp, [number, number]>> = {
 export const PROP_LENGTH: Partial<Record<ObstacleProp, number>> = { hammer: 2, wrench: 2, screwdriver: 2, pencil: 3 };
 
 const Hex = z.string().regex(/^#[0-9a-f]{6}$/i);
+
+/**
+ * A landmark for any place, composed from simple shapes: a mountain chalet in the Tatras, a
+ * lighthouse on a coast, an igloo on the ice. Units are cells round the landmark's middle; box,
+ * cylinder and sphere are solid, cone and roof are tops drawn above the ball's reach.
+ */
+export const LANDMARK_SHAPES = ['box', 'cylinder', 'sphere', 'cone', 'roof'] as const;
+export const SOLID_SHAPES: readonly string[] = ['box', 'cylinder', 'sphere'];
+export const LandmarkShape = z.object({
+  shape: z.enum(LANDMARK_SHAPES).describe('box; cylinder (size: diameter, height); sphere (diameter); cone (diameter, height) and roof (a gable ridge running along) are tops only'),
+  at: z.tuple([z.number().min(-3).max(3), z.number().min(-2).max(5), z.number().min(-3).max(3)]).describe('[along, up, across] in cells: along and across from the middle, up = height of the shape\'s bottom above the ground'),
+  size: z.tuple([z.number().min(0.1).max(6), z.number().min(0.1).max(5), z.number().min(0.1).max(6)]).describe('[along, height, across] in cells; a cylinder, sphere or cone takes the first as its diameter'),
+  color: Hex,
+});
+export type LandmarkShape = z.infer<typeof LandmarkShape>;
+export const Landmark = z.object({
+  name: z.string().max(40).describe('what it is: "mountain chalet", "lighthouse"'),
+  shapes: z.array(LandmarkShape).min(1).max(10).refine((s) => s.some((x) => SOLID_SHAPES.includes(x.shape)), 'at least one box, cylinder or sphere'),
+});
+export type Landmark = z.infer<typeof Landmark>;
+
+/** Cells a composed landmark covers, along then across: its shapes' reach, at most 6 by 6. */
+export function landmarkSize(shapes: LandmarkShape[]): [number, number] {
+  const reach = (i: 0 | 2) => Math.max(...shapes.map((s) => Math.abs(s.at[i]) + (s.shape === 'box' || s.shape === 'roof' ? s.size[i] : s.size[0]) / 2));
+  const cells = (r: number) => Math.max(1, Math.min(6, Math.ceil(r * 2 - 0.01)));
+  return [cells(reach(0)), cells(reach(2))];
+}
+/** Cells any prop covers, along its facing then across. */
+export function propSize(p: { prop?: ObstacleProp; build?: LandmarkShape[] }): [number, number] {
+  if (p.prop === 'landmark' && p.build?.length) return landmarkSize(p.build);
+  return (p.prop && PROP_SIZE[p.prop]) || [1, 1];
+}
+
+/** Landmarks for places the words name, for when no AI composed one. */
+const S = (shape: LandmarkShape['shape'], at: LandmarkShape['at'], size: LandmarkShape['size'], color: string): LandmarkShape => ({ shape, at, size, color });
+export const LANDMARK_PRESETS: Record<'chalet' | 'cabin' | 'lighthouse' | 'igloo', Landmark> = {
+  chalet: { name: 'mountain chalet', shapes: [
+    S('box', [0, 0, 0], [3, 1.6, 2.4], '#7a4a2b'), S('roof', [0, 1.6, 0], [3.6, 1.3, 3], '#8a3b2a'),
+    S('box', [0.8, 2, 0.6], [0.4, 1.1, 0.4], '#8a8f98'), S('box', [1.5, 0, 0], [0.1, 0.9, 0.6], '#3a2c22'),
+    S('box', [1.5, 0.75, 0.8], [0.1, 0.45, 0.45], '#ffd98a'), S('box', [1.5, 0.75, -0.8], [0.1, 0.45, 0.45], '#ffd98a')] },
+  cabin: { name: 'log cabin', shapes: [
+    S('box', [0, 0, 0], [3, 1.3, 2.2], '#6b4a2b'), S('roof', [0, 1.3, 0], [3.4, 1, 2.8], '#3f4a35'),
+    S('box', [-0.9, 1.6, 0.5], [0.4, 1, 0.4], '#7d7368'), S('box', [1.5, 0, 0.3], [0.1, 0.9, 0.6], '#3a2c22')] },
+  lighthouse: { name: 'lighthouse', shapes: [
+    S('cylinder', [0, 0, 0], [2.2, 0.5, 2.2], '#8a8f98'), S('cylinder', [0, 0.5, 0], [1.5, 2.6, 1.5], '#f3efe6'),
+    S('cylinder', [0, 1.5, 0], [1.56, 0.5, 1.56], '#d9452b'), S('cylinder', [0, 3.1, 0], [1.1, 0.7, 1.1], '#ffe08a'),
+    S('cone', [0, 3.8, 0], [1.4, 0.8, 1.4], '#d9452b')] },
+  igloo: { name: 'igloo', shapes: [
+    S('sphere', [0, -1.2, 0], [3, 3, 3], '#eef4f8'), S('box', [1.6, 0, 0], [1.2, 0.8, 1], '#e2ebf1'), S('box', [2.2, 0, 0], [0.1, 0.6, 0.6], '#3a4650')] },
+};
+const LANDMARK_WORDS: [RegExp, keyof typeof LANDMARK_PRESETS][] = [
+  [/\b(tatra\w*|alps?|alpine|ski\w*|chalet|swiss|austria\w*|slovak\w*|mountains?|peaks?)\b/i, 'chalet'],
+  [/\b(lighthouses?|coast\w*|harbou?r|cliffs?|seaside)\b/i, 'lighthouse'],
+  [/\b(arctic|igloo|eskimo|inuit|north pole|antarctic\w*|polar)\b/i, 'igloo'],
+  [/\b(cabin|camp\w*|lumber\w*|woods|forest\w*|british columbia|canad\w*)\b/i, 'cabin'],
+];
+/** The composed landmark the words name, or null. */
+export function landmarkFromWords(text: string): Landmark | null {
+  const hit = LANDMARK_WORDS.find(([w]) => w.test(text));
+  return hit ? LANDMARK_PRESETS[hit[1]] : null;
+}
 
 export const Landscape = z.object({
   name: z.string().max(60).describe('what the world looks like, in a few words: "British Columbia forest", "giant workshop table"'),
@@ -55,7 +116,8 @@ export const Landscape = z.object({
     kind: z.enum(LANDSCAPE_FEATURES),
     amount: z.enum(['few', 'some', 'many']).default('some'),
   })).min(1).max(8).describe('what fills the world around the board'),
-  hero: z.enum(HEROES).optional().describe('one big low-poly landmark lying on the board, the world\'s centrepiece: a dragon in its lair, a castle, a pirate ship, a robot, a rocket, a windmill, a giant teapot on a desk'),
+  hero: z.enum(HEROES).optional().describe('a ready-made centrepiece lying on the board, only where it truly belongs: a dragon in its lair, a castle, a pirate ship, a robot, a rocket, a windmill, a giant teapot on a desk'),
+  landmark: Landmark.optional().describe('otherwise a centrepiece composed for the place: a chalet in the mountains, a lighthouse on a coast'),
   obstacles: z.array(z.enum(OBSTACLE_PROPS)).min(1).max(4).optional().describe('what stands in the ball\'s way on the board, in this world\'s style: tools on a workbench, crystals in a cave, rocks outdoors'),
   snow: z.boolean().optional().describe('snow on mountain tops and conifers'),
   seed: z.number().int().min(0).max(999_999).optional(),
@@ -93,7 +155,7 @@ const WORLDS: { words: RegExp; world: LandscapeInput }[] = [
   { words: /\b(village|town|city|street|houses?|cottage\w*|hamlet)\b/i, world: {
     name: 'Little village', sky: '#b8dcf0', ground: '#a7b57a', land: '#8aa860', rock: '#9a9488', water: '#4b8fc8', foliage: '#3d7a3f', accent: '#d9583b',
     features: [{ kind: 'houses', amount: 'some' }, { kind: 'broadleaf', amount: 'some' }, { kind: 'lanterns', amount: 'some' }, { kind: 'flowers', amount: 'some' }] } },
-  { words: /\b(arctic|snow\w*|winter|alps?|alpine|glacier|tundra|frozen|ice)\b/i, world: {
+  { words: /\b(arctic|snow\w*|winter|alps?|alpine|glacier|tundra|frozen|ice|tatra\w*|ski\w*|slovak\w*|himalaya\w*|everest)\b/i, world: {
     name: 'Snowy peaks', sky: '#cfdde8', ground: '#e8eef2', land: '#dfe8ee', rock: '#8a919a', water: '#6fa7cf', foliage: '#2e4f3e', accent: '#c8d8e8',
     features: [{ kind: 'mountains', amount: 'many' }, { kind: 'ice_spikes', amount: 'some' }, { kind: 'conifers', amount: 'some' }, { kind: 'snowdrifts', amount: 'some' }], snow: true } },
   { words: /\b(desert|sahara|arizona|dune\w*|canyon|western|cowboy|mesa)\b/i, world: {
@@ -122,7 +184,9 @@ const WORLDS: { words: RegExp; world: LandscapeInput }[] = [
 /** A world named in the words, or null. The first match wins, so specific places beat general words. */
 export function landscapeFromWords(text: string): Landscape | null {
   const hit = WORLDS.find((w) => w.words.test(text));
-  return hit ? Landscape.parse({ ...hit.world, hero: heroFromWords(text) ?? hit.world.hero, seed: seedOf(text) }) : null;
+  if (!hit) return null;
+  const hero = heroFromWords(text) ?? hit.world.hero;
+  return Landscape.parse({ ...hit.world, hero, landmark: hero ? undefined : landmarkFromWords(text) ?? undefined, seed: seedOf(text) });
 }
 
 const HERO_WORDS: [RegExp, Hero][] = [

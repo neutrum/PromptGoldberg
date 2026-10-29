@@ -3,7 +3,7 @@ import { parseMachine, type MachineStreamEvent, type Puzzle } from '@og/machine'
 import firstShot from '@og/machine/fixtures/levels/first-shot.json' with { type: 'json' };
 
 vi.hoisted(() => { Object.defineProperty(globalThis, 'window', { value: {}, configurable: true }); });
-vi.mock('../src/game/audio', () => ({ sfx: { success: vi.fn(), miss: vi.fn() } }));
+vi.mock('../src/game/audio', () => ({ sfx: { success: vi.fn(), miss: vi.fn(), place: vi.fn() } }));
 vi.mock('../src/machine/machineClient', () => ({
   streamMachine: vi.fn(), simulateInWorker: vi.fn(), makePuzzle: vi.fn(), logPlay: vi.fn(), verifyOnServer: vi.fn(),
   getDailyMachine: vi.fn(), playedMachine: vi.fn(), publishMachine: vi.fn(), clearMachine: vi.fn(), submitDaily: vi.fn(),
@@ -156,11 +156,28 @@ describe('a dependable creation and editing flow', () => {
     expect(simulateInWorker).not.toHaveBeenCalled();
   });
 
-  it('always requests verification and opens the finished result for replay', async () => {
+  it('always requests verification and opens a new level as the player’s puzzle, building it up part by part', async () => {
     vi.mocked(streamMachine).mockImplementation(async (_path, _body, emit) => { emit(done); });
     await useMachine.getState().create('new mission');
     expect(vi.mocked(streamMachine).mock.calls[0].slice(0, 2)).toEqual(['/machine', { prompt: 'new mission', verify: true }]);
-    expect(useMachine.getState()).toMatchObject({ mode: 'build', puzzle: false, promptMode: 'edit', prompt: 'new mission', proven: true });
+    expect(vi.mocked(makePuzzle).mock.calls.at(-1)?.[1]).toBe('connect');
+    const s = useMachine.getState();
+    expect(s).toMatchObject({ mode: 'fix', puzzle: true, promptMode: 'edit', prompt: 'new mission', proven: true });
+    // The opening run waits for the pop-in; every part on the board has its moment.
+    expect(s.phase).toBe('idle');
+    expect(s.fix!.puzzle.spec.parts.every((p) => s.appear[p.id] > 0)).toBe(true);
+  });
+
+  it('builds with words during play: a tray part goes where the sentence says', async () => {
+    await useMachine.getState().startFix('missing');
+    const fix = useMachine.getState().fix!;
+    const kind = fix.hand[0].kind === 'platform' ? 'shelf' : fix.hand[0].kind;
+    const ball = fix.puzzle.spec.parts.find((p) => p.kind === 'ball')!;
+    expect(useMachine.getState().buildByWords(`put the ${kind} 3 cells south of the ball`)).toBe(true);
+    const placed = useMachine.getState().fix!.placed;
+    expect(placed).toHaveLength(1);
+    expect(Math.abs(placed[0].z - (ball.z + 3)) + Math.abs(placed[0].x - ball.x)).toBeLessThanOrEqual(4);
+    expect(useMachine.getState().buildByWords('make the sky purple')).toBe(false);
   });
 
   it('edits the player’s visible placements rather than the hidden solution', async () => {

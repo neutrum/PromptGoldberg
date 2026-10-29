@@ -180,3 +180,16 @@
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-right: 12px; }.toggle input { accent-color: var(--accent); }
 .settings-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 24px; }
 .remix-offer { border-color: var(--accent); }.remix-offer button { white-space: nowrap; }
+
+/* The level building up: steps that tick off while the scene fills in. */
+.build-steps ol { list-style: none; margin: 10px 0 8px; padding: 0; display: grid; gap: 8px; font-size: 13px; color: var(--muted); }
+.build-steps li { display: flex; align-items: center; gap: 10px; transition: color .3s; }
+.build-steps li.done { color: var(--text, #e9f1ef); }
+.build-steps li.current { color: #ffdc9d; }
+.build-steps .step-mark { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 11px; border: 1px solid var(--border); }
+.build-steps li.done .step-mark { background: var(--accent); border-color: var(--accent); color: #10201c; animation: step-pop .35s cubic-bezier(.3, 1.8, .5, 1); }
+.build-steps li.current .step-mark { border: 2px solid #ffdc9d; border-right-color: transparent; animation: step-spin .9s linear infinite; }
+.build-detail { font-size: 11px; color: var(--muted); opacity: .8; }
+@keyframes step-pop { from { transform: scale(.3); } to { transform: scale(1); } }
+@keyframes step-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .build-steps li .step-mark { animation: none !important; } }

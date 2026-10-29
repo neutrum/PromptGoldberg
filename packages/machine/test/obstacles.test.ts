@@ -60,7 +60,7 @@ describe('obstacles in the way', () => {
 
   it('suits the world and can be switched off', () => {
     const forest = compileRoute({ ...graphs[0], landscape: landscapeFromWords('forests in british columbia')! }, { seed: 5, clutter: 6 })!;
-    expect(forest.spec.parts.filter((p) => p.prop).every((p) => p.prop === 'tree' || p.prop === 'stump' || p.prop === 'rock')).toBe(true);
+    expect(forest.spec.parts.filter((p) => p.prop && p.prop !== 'landmark').every((p) => p.prop === 'tree' || p.prop === 'stump' || p.prop === 'rock')).toBe(true);
     expect(forest.spec.parts.some((p) => p.prop === 'tree')).toBe(true);
     const bare = compileRoute(graphs[0], { seed: 5, clutter: 0 })!;
     expect(bare.spec.parts.some((p) => p.prop)).toBe(false);
