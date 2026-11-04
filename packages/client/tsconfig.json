@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../../node_modules/.cache/tsc/client",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src", "test"],
+  "references": [{ "path": "../core" }]
+}

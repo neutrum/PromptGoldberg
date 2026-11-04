@@ -1,0 +1,9 @@
+{
+  "style": "Isolated single object. No environment. No ground plane. No pedestal. No other objects.",
+  "models": [
+    { "id": "ball-round", "title": "Round marble", "prompt": "A red glass marble. A single perfectly round red sphere, with a narrow cream swirl. Smooth glossy spherical surface. Only the sphere." },
+    { "id": "seesaw-board", "title": "Rocking board", "prompt": "A single thin rectangular oak wood plank lying horizontally. Four times longer than wide and very thin. Smooth flat top. Rounded corners. Red painted end tips. Only one plain wooden board. No legs. No support underneath." },
+    { "id": "seesaw-block", "title": "Fulcrum block", "prompt": "A single small triangular wooden prism. Honey oak wood with two brass bolt heads on its triangular end faces. A simple solid triangular block, pointed ridge upwards, flat bottom. No plank. No mechanism." },
+    { "id": "fan-propeller", "title": "Fan propeller", "prompt": "A single detached red three blade propeller. Three equally spaced rounded red blades extend from a small brass circular center hub. Thin, flat, symmetric propeller only. No frame. No mounting base. No motor. No stand." }
+  ]
+}

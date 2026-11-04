@@ -1,0 +1,126 @@
+{
+  "title": "Wake The Cat",
+  "caption": "The ball tumbles down, flies over the river, and sets the dominoes off to ring the bell that wakes the cat.",
+  "terrain": [
+    {
+      "name": "river",
+      "x": 0,
+      "z": 6,
+      "w": 24,
+      "d": 2,
+      "h": -1
+    },
+    {
+      "name": "cat hill",
+      "x": 5,
+      "z": 10,
+      "w": 6,
+      "d": 7,
+      "h": 1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 3,
+      "y": 5,
+      "z": 3,
+      "yaw": 0,
+      "dx": -0.15456321078818291,
+      "dz": -0.22863514500204474
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 3,
+      "y": 4,
+      "z": 3,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 3,
+      "y": 4,
+      "z": 3,
+      "yaw": 0,
+      "length": 5
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 8,
+      "y": 0,
+      "z": 3,
+      "yaw": 90
+    },
+    {
+      "id": "wall",
+      "kind": "wall",
+      "x": 10,
+      "y": 0,
+      "z": 3,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 8,
+      "y": 1,
+      "z": 11,
+      "yaw": 90,
+      "length": 5
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 8,
+      "y": 1,
+      "z": 14,
+      "yaw": 0,
+      "label": "cat bell"
+    },
+    {
+      "id": "catshelf",
+      "kind": "platform",
+      "x": 9,
+      "y": 1,
+      "z": 14,
+      "yaw": 90,
+      "length": 2,
+      "fixed": true
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "topple",
+      "part": "row"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 14,
+  "spares": [
+    {
+      "kind": "fan"
+    },
+    {
+      "kind": "trampoline"
+    }
+  ],
+  "level": {
+    "emoji": "🐱",
+    "name": "Wake the cat",
+    "mission": "Wake the cat on the top shelf by ringing the bell next to it",
+    "order": 10
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "title": "Moat Gust Alarm",
+  "caption": "Fire the ball over the moat, let the wind carry it round the castle, and ring the alarm bell.",
+  "terrain": [
+    {
+      "name": "moat",
+      "x": 14,
+      "z": 0,
+      "w": 2,
+      "d": 24,
+      "h": -1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 3,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 2,
+      "y": 3,
+      "z": 5,
+      "yaw": 0,
+      "length": 6,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 12,
+      "y": 0,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "fan",
+      "kind": "fan",
+      "x": 20,
+      "y": 0,
+      "z": 4,
+      "yaw": 90
+    },
+    {
+      "id": "castlewall",
+      "kind": "wall",
+      "x": 21,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "fixed": true,
+      "label": "castle wall"
+    },
+    {
+      "id": "alarmbell",
+      "kind": "bell",
+      "x": 19,
+      "y": 0,
+      "z": 10,
+      "yaw": 0,
+      "dx": 0.07617950439453125,
+      "dz": 0.39113712310791016
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "touch",
+      "part": "fan"
+    },
+    {
+      "type": "bell",
+      "part": "alarmbell",
+      "times": 1
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "ramp"
+    },
+    {
+      "kind": "platform",
+      "length": 3
+    }
+  ],
+  "level": {
+    "emoji": "🏰",
+    "name": "Castle Siege",
+    "mission": "A hard one: fire over the moat, then a gust of wind carries the ball round the castle to ring the alarm bell",
+    "order": 6
+  }
+}

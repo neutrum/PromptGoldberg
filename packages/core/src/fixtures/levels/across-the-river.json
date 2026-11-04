@@ -1,0 +1,114 @@
+{
+  "title": "Church Bell Across the River",
+  "caption": "The ball rolls off its high ledge, gets flung across the river, and tips the pews into the church bell.",
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 3,
+      "y": 5,
+      "z": 3,
+      "yaw": 0,
+      "dx": 0.2446887439582497,
+      "dz": 0.1091525616357103
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 3,
+      "y": 4,
+      "z": 3,
+      "yaw": 0,
+      "dx": -0.07461067021358758,
+      "dz": 0.19712397130206227
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 3,
+      "y": 4,
+      "z": 3,
+      "yaw": 0,
+      "length": 5,
+      "dx": -0.1805332083022222,
+      "dz": -0.04812761745415628
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 9,
+      "y": 0,
+      "z": 3,
+      "yaw": 90,
+      "dx": 0.04519124666694552,
+      "dz": 0.14934210781939328
+    },
+    {
+      "id": "river",
+      "kind": "wall",
+      "x": 9,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "churchwall",
+      "kind": "wall",
+      "x": 12,
+      "y": 0,
+      "z": 9,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "pews",
+      "kind": "dominoes",
+      "x": 9,
+      "y": 0,
+      "z": 10,
+      "yaw": 90,
+      "length": 5,
+      "dx": 0.1921172367874533,
+      "dz": 0.061211905209347606
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 9,
+      "y": 0,
+      "z": 13,
+      "yaw": 0
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "topple",
+      "part": "pews"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 16,
+  "spares": [
+    {
+      "kind": "ramp"
+    },
+    {
+      "kind": "fan"
+    }
+  ],
+  "level": {
+    "emoji": "⛪",
+    "name": "Across the river",
+    "mission": "Ring the church bell from across the river",
+    "order": 11
+  }
+}

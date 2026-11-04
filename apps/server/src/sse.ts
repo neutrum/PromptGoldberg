@@ -1,5 +1,6 @@
 import type { FastifyReply } from 'fastify';
-import type { LevelStreamEvent } from '@og/shared';
+
+type AnyEvent = { type: string; [key: string]: unknown };
 
 /** One SSE frame: `event:` + `data:` lines and a blank line. Multi-line data gets one `data:` per line. */
 export function sseFrame<T extends { type: string }>(event: T): string {
@@ -7,8 +8,8 @@ export function sseFrame<T extends { type: string }>(event: T): string {
   return `event: ${event.type}\n${data}\n\n`;
 }
 
-export interface SseStream {
-  send(event: LevelStreamEvent): void;
+export interface SseStream<T extends { type: string } = AnyEvent> {
+  send(event: T): void;
   close(): void;
   /** Aborted when the client disconnects before the stream ends. */
   signal: AbortSignal;
@@ -16,7 +17,7 @@ export interface SseStream {
 }
 
 /** Take over the reply and stream Server-Sent Events. */
-export function openSse(reply: FastifyReply, status = 200, heartbeatMs = 15_000): SseStream {
+export function openSse<T extends { type: string } = AnyEvent>(reply: FastifyReply, status = 200, heartbeatMs = 15_000): SseStream<T> {
   reply.hijack();
   const res = reply.raw;
   const controller = new AbortController();
@@ -55,10 +56,10 @@ export function openSse(reply: FastifyReply, status = 200, heartbeatMs = 15_000)
 }
 
 /** Parse an SSE body back into events (tests and the smoke script). */
-export function parseSse(body: string): LevelStreamEvent[] {
+export function parseSse<T = AnyEvent>(body: string): T[] {
   return body
     .split(/\n\n/)
     .map((block) => block.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('\n'))
     .filter(Boolean)
-    .map((data) => JSON.parse(data) as LevelStreamEvent);
+    .map((data) => JSON.parse(data) as T);
 }

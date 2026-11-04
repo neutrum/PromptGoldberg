@@ -1,0 +1,94 @@
+{
+  "title": "Over the Garden Wall",
+  "caption": "Roll down the ramp, get fired round the corner, and drop the ball into the bucket past the garden wall.",
+  "terrain": [
+    {
+      "name": "river",
+      "x": 0,
+      "z": 7,
+      "w": 24,
+      "d": 2,
+      "h": -1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 3,
+      "y": 5,
+      "z": 3,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 4,
+      "z": 3,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 3,
+      "y": 4,
+      "z": 3,
+      "yaw": 0,
+      "length": 7,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 11,
+      "y": 0,
+      "z": 3,
+      "yaw": 90
+    },
+    {
+      "id": "gardenwall",
+      "kind": "wall",
+      "x": 13,
+      "y": 0,
+      "z": 3,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "bucket",
+      "kind": "bucket",
+      "x": 11,
+      "y": 0,
+      "z": 10,
+      "yaw": 0,
+      "dx": 0.14934210781939328,
+      "dz": -0.10256506456062198
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "bucket",
+      "part": "bucket"
+    }
+  ],
+  "duration": 12,
+  "spares": [
+    {
+      "kind": "trampoline"
+    },
+    {
+      "kind": "fan"
+    }
+  ],
+  "level": {
+    "emoji": "🧱",
+    "name": "Over the wall",
+    "mission": "Get the ball over the garden wall and into the bucket on the other side",
+    "order": 7
+  }
+}

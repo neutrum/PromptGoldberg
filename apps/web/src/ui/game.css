@@ -1,0 +1,160 @@
+/* ───────────── Game ───────────── */
+button.icon { border: none; background: none; font-size: 18px; padding: 2px 6px; }
+button.active { border-color: var(--gold); color: var(--gold); }
+kbd { font-size: 10px; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 6px; opacity: 0.7; font-family: inherit; }
+
+@keyframes pop { from { transform: translate(-50%, -8px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+/* Menus */
+.menu { overflow-y: auto; }
+.backdrop {
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(122, 168, 255, 0.18), transparent 50%),
+    radial-gradient(ellipse at 85% 80%, rgba(240, 142, 224, 0.14), transparent 50%),
+    radial-gradient(circle at 50% 120%, rgba(255, 210, 122, 0.18), transparent 45%),
+    var(--bg);
+}
+.backdrop::after {
+  content: ""; position: absolute; inset: 0; opacity: 0.6;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, #fff, transparent), radial-gradient(1px 1px at 70% 30%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 40% 80%, #fff, transparent), radial-gradient(1px 1px at 90% 60%, #fff, transparent),
+    radial-gradient(1px 1px at 25% 55%, #cfe, transparent), radial-gradient(1.5px 1.5px at 60% 10%, #ffd, transparent);
+  background-size: 300px 300px;
+}
+
+ .stars .on { color: var(--gold); text-shadow: 0 0 10px rgba(255, 210, 122, 0.6); }
+ .stars .off { color: rgba(255, 255, 255, 0.18); }
+
+.author input { width: 180px; }
+.menu .examples { display: flex; gap: 6px; flex-wrap: wrap; }
+.menu .examples button { font-size: 12px; color: var(--muted); background: var(--panel); text-align: left; }
+
+.menu textarea { width: 100%; font-size: 16px; padding: 12px; background: var(--panel); resize: vertical; }
+
+/* Play HUD */
+.play .loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 5; background: rgba(4, 5, 12, 0.6); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.hud-top { position: absolute; top: 10px; left: 10px; right: 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: start; pointer-events: none; }
+.hud-top > * { pointer-events: auto; }
+.hud-left { display: flex; gap: 8px; align-items: flex-start; }
+
+.hud-right { justify-self: end; display: flex; gap: 10px; align-items: flex-start; text-align: right; }
+
+.stars { font-size: 16px; letter-spacing: 2px; }
+.result .stars { font-size: 44px; }
+
+@keyframes star-in { from { transform: scale(0) rotate(-90deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+
+.chain { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; align-items: center; max-width: 560px; }
+
+.chain-num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.1); font-size: 12px; }
+
+@keyframes pulse-ok { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+.assist { display: flex; flex-direction: column; gap: 6px; }
+.assist button { text-align: left; }
+.machine { display: flex; flex-direction: column; gap: 4px; }
+.machine-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.machine-bar > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--gold)); transition: width 0.2s; }
+
+.pieces { display: flex; flex-direction: column; gap: 6px; }
+
+.hud-bottom { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); width: min(760px, calc(100% - 20px)); display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 14px; }
+.control { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; flex: 1; min-width: 150px; }
+
+.control input { grid-column: 1 / -1; padding: 0; accent-color: var(--gold); }
+.launch {
+  font-size: 18px; font-weight: 800; letter-spacing: 0.08em; padding: 12px 26px; border-radius: 12px; border: none;
+  background: linear-gradient(135deg, #ffd27a, #ff9d6b); color: #2a1400; box-shadow: 0 0 24px rgba(255, 170, 100, 0.45);
+}
+.launch:hover:not(:disabled) { background: linear-gradient(135deg, #ffe0a0, #ffb48a); transform: scale(1.03); }
+.keys { text-align: center; font-size: 11px; }
+.skip { text-align: center; }
+
+.result { display: flex; flex-direction: column; gap: 6px; animation: rise 0.3s ease-out; }
+@keyframes rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.result.fail { border-color: rgba(255, 122, 107, 0.45); }
+.result.win { border-color: rgba(95, 211, 154, 0.6); text-align: center; align-items: center; box-shadow: 0 0 60px rgba(95, 211, 154, 0.18); }
+.result.big h2 { margin: 0; font-size: 30px; }
+.result.win h2 { color: var(--ok); }
+.result p { margin: 0; }
+
+@keyframes bob { 50% { transform: translateY(30px); } }
+
+@media (max-width: 900px) {
+  .hud-top { grid-template-columns: 1fr; }
+  .chain { justify-content: flex-start; }
+  .hud-right { position: absolute; right: 0; top: 0; }
+  
+  
+}
+@media (max-width: 600px) {
+  .keys { display: none; }
+  /* Header: title and briefing keep clear of the shot counter and icons on the right. */
+  .hud-top { top: 6px; left: 6px; right: 6px; gap: 6px; }
+  .hud-left { padding-right: 104px; gap: 4px; }
+  
+  
+  .hud-right { flex-direction: column-reverse; align-items: flex-end; gap: 0; }
+  
+  
+  .hud-right .stars { font-size: 12px; }
+  
+  
+  /* Side panels live in the bottom stack, above the controls. */
+  .hud-bottom { bottom: 6px; width: calc(100% - 12px); }
+  
+  
+  
+  
+  .controls { gap: 6px 10px; padding: 8px 10px; }
+  .control { min-width: 90px; }
+  
+  
+  .launch { width: 100%; padding: 10px; }
+  .result.big h2 { font-size: 24px; }
+  .result .stars { font-size: 34px; }
+}
+
+@media (pointer: coarse) {
+  kbd { display: none; }
+  /* Finger-sized targets. */
+   .pieces button, .assist button { min-height: 36px; }
+  .control input { height: 28px; }
+}
+
+/* Tutorial */
+
+@keyframes tut-in { from { opacity: 0; } to { opacity: 1; } }
+
+button.link { border: none; background: none; color: var(--muted); padding: 0; font-size: 12px; text-decoration: underline; }
+button.link:hover:not(:disabled) { background: none; color: var(--text); }
+
+@keyframes tut-pulse { 50% { outline-color: rgba(255, 210, 122, 0.25); } }
+
+/* Pure build levels: no sliders, just the launch button. */
+.controls:has(> .launch:only-child) { justify-content: center; }
+
+/* AI level status while better versions arrive */
+
+@keyframes blink { 50% { opacity: 0.3; } }
+
+/* AI-first start screen */
+
+/* Live sketch of the system Claude is writing */
+.sketch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sketch svg { width: 100%; max-width: 300px; aspect-ratio: 1; overflow: visible; }
+
+@keyframes sketch-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* View buttons */
+
+/* Start screen: live engine backdrop */
+
+/* Prompt idea chips */
+.menu .examples { align-items: center; }
+

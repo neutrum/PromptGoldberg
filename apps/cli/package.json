@@ -1,0 +1,16 @@
+{
+  "name": "@pg/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "pg": "src/index.ts" },
+  "scripts": {
+    "pg": "tsx --env-file-if-exists=../../.env src/index.ts"
+  },
+  "dependencies": {
+    "@pg/ai": "*",
+    "@pg/client": "*",
+    "@pg/core": "*",
+    "@pg/game": "*"
+  }
+}

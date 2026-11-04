@@ -1,8 +1,26 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/shared" },
-    { "path": "apps/web" },
-    { "path": "apps/server" }
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/client"
+    },
+    {
+      "path": "packages/game"
+    },
+    {
+      "path": "packages/ai"
+    },
+    {
+      "path": "apps/web"
+    },
+    {
+      "path": "apps/server"
+    },
+    {
+      "path": "apps/cli"
+    }
   ]
 }

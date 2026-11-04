@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { writeFileAtomic } from './files';
+
 /** Fixed-window counters per key: a per-minute and a per-day window. In memory; resets on restart. */
 export class RateLimiter {
   private minute = new Map<string, { start: number; count: number }>();
@@ -41,12 +44,19 @@ function window(map: Map<string, { start: number; count: number }>, key: string,
   return w;
 }
 
-/** Global cap on LLM calls per UTC day. */
+/** Global cap on LLM calls per UTC day; with a file, the count outlives a restart (every push redeploys). */
 export class DailyCap {
   private dayKey = '';
   private count = 0;
+  private chain: Promise<void> = Promise.resolve();
 
-  constructor(readonly cap: number, private now: () => number = Date.now) {}
+  constructor(readonly cap: number, private now: () => number = Date.now, private file?: string) {
+    if (!file) return;
+    try {
+      const saved = JSON.parse(readFileSync(file, 'utf8')) as { day?: unknown; count?: unknown };
+      if (typeof saved.day === 'string' && typeof saved.count === 'number') { this.dayKey = saved.day; this.count = saved.count; }
+    } catch { /* no file yet */ }
+  }
 
   private roll() {
     const key = new Date(this.now()).toISOString().slice(0, 10);
@@ -66,6 +76,10 @@ export class DailyCap {
     this.roll();
     if (this.count >= this.cap) return false;
     this.count++;
+    if (this.file) {
+      const file = this.file, snapshot = JSON.stringify({ day: this.dayKey, count: this.count });
+      this.chain = this.chain.then(() => writeFileAtomic(file, snapshot)).catch(() => {});
+    }
     return true;
   }
 }

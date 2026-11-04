@@ -1,12 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { checkShot, type Level } from '@og/shared';
-import { cacheKey, LevelCache, normalizePrompt } from '../src/cache';
-import { chooseStartValues, nudgeCandidates, roundForControl } from '../src/game/startValues';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import { DailyCap, RateLimiter } from '../src/rateLimit';
 import { parseSse, sseFrame } from '../src/sse';
-import { slingshotLevel, tempDir } from './helpers';
-
-const check = (l: Level, v: number[]) => checkShot(l, v).goal;
+import { tempDir } from './helpers';
 
 describe('sse', () => {
   it('frames an event with event and data lines and a blank line', () => {
@@ -43,54 +40,21 @@ describe('rate limiter', () => {
     expect(cap.used).toBe(0);
     expect(cap.take()).toBe(true);
   });
-});
 
-describe('level cache', () => {
-  it('normalizes prompts before hashing', () => {
-    expect(normalizePrompt('  A Comet   hits the MOON!! ')).toBe('a comet hits the moon');
-    expect(cacheKey('A comet hits the moon.')).toBe(cacheKey('a  comet hits the moon'));
-    expect(cacheKey('a comet hits the moon')).not.toBe(cacheKey('a comet hits the sun'));
-  });
-
-  it('round-trips a level event', async () => {
-    const { dir, cleanup } = tempDir();
+  it('daily cap keeps its count through a restart when given a file', async () => {
+    const tmp = tempDir();
     try {
-      const cache = new LevelCache(dir);
-      expect(await cache.get('x')).toBeUndefined();
-      const level = slingshotLevel();
-      await cache.put('Hello there', { type: 'level', level, solved: true, attempts: 1, notes: [] });
-      expect((await cache.get('hello there!'))?.level.id).toBe(level.id);
-    } finally {
-      cleanup();
-    }
+      const file = join(tmp.dir, 'llm-calls.json'), t = Date.UTC(2026, 0, 1, 12);
+      const first = new DailyCap(2, () => t, file);
+      expect(first.take()).toBe(true);
+      await vi.waitFor(() => expect(existsSync(file)).toBe(true));
+      const second = new DailyCap(2, () => t, file);
+      expect(second.used).toBe(1);
+      expect(second.take()).toBe(true);
+      expect(second.take()).toBe(false);
+      // The next day starts from zero.
+      expect(new DailyCap(2, () => t + 86_400_000, file).used).toBe(0);
+    } finally { tmp.cleanup(); }
   });
 });
 
-describe('start values', () => {
-  it('rounds to about a thousandth of the range', () => {
-    expect(roundForControl({ path: 'x', label: 'x', min: 1.5, max: 3.5 }, 2.123456)).toBe(2.123);
-    expect(roundForControl({ path: 'x', label: 'x', min: -40, max: 40 }, 20.0333)).toBe(20.03);
-    expect(roundForControl({ path: 'x', label: 'x', min: 0, max: 1 }, 5)).toBe(1);
-  });
-
-  it('nudges away from the solution until the shot misses', async () => {
-    const level = slingshotLevel();
-    const solution = level.solution!.values;
-    expect(check(level, solution).success).toBe(true);
-    // The guess equals the solution, so it has to nudge.
-    const start = await chooseStartValues(level, solution, solution, check);
-    expect(start.source).toBe('nudge');
-    expect(check(level, start.values).success).toBe(false);
-    start.values.forEach((v, i) => {
-      expect(v).toBeGreaterThanOrEqual(level.controls[i].min);
-      expect(v).toBeLessThanOrEqual(level.controls[i].max);
-    });
-  });
-
-  it('keeps a guess that misses', async () => {
-    const level = slingshotLevel();
-    const guess = [2, 0, 0.5];
-    expect(await chooseStartValues(level, level.solution!.values, guess, check)).toEqual({ values: guess, source: 'guess' });
-    expect(nudgeCandidates(level.controls, level.solution!.values).length).toBeGreaterThan(4);
-  });
-});

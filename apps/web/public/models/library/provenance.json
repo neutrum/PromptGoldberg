@@ -1,0 +1,769 @@
+{
+  "provider": "Tripo",
+  "model": "v3.1-20260211",
+  "options": {
+    "face_limit": 4000,
+    "texture": true,
+    "pbr": false,
+    "texture_quality": "standard"
+  },
+  "note": "Textures redrawn at 512 px after download.",
+  "assets": [
+    {
+      "id": "pirate-ship",
+      "prompt": "Low-poly stylized toy model of a wooden pirate ship with black sails and a skull flag. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "a73a9a95-2fb7-444f-9198-6c94d117cda3",
+      "credits": 20,
+      "at": "2026-10-31T09:55:09.638Z"
+    },
+    {
+      "id": "train",
+      "prompt": "Low-poly stylized toy model of a red and black steam locomotive. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "31f058db-5ded-4c83-8962-a13bcf396d4b",
+      "credits": 20,
+      "at": "2026-10-31T09:57:08.570Z"
+    },
+    {
+      "id": "airplane",
+      "prompt": "Low-poly stylized toy model of a small propeller airplane. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "82df9453-c1e5-4202-ad6f-f2267aad1633",
+      "credits": 20,
+      "at": "2026-10-31T09:59:58.933Z"
+    },
+    {
+      "id": "helicopter",
+      "prompt": "Low-poly stylized toy model of a yellow helicopter. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "0e7a46c3-ed71-4e1c-a234-be2017f1d538",
+      "credits": 20,
+      "at": "2026-10-31T09:59:58.935Z"
+    },
+    {
+      "id": "hot-air-balloon",
+      "prompt": "Low-poly stylized toy model of a striped hot air balloon with a wicker basket. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "e6052ec7-dfe6-400e-8d9c-32d52bd0dfce",
+      "credits": 20,
+      "at": "2026-10-31T09:59:58.935Z"
+    },
+    {
+      "id": "sailboat",
+      "prompt": "Low-poly stylized toy model of a small white sailboat. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "c7724102-51a8-4f21-9176-bb1784d96381",
+      "credits": 20,
+      "at": "2026-10-31T10:01:30.169Z"
+    },
+    {
+      "id": "submarine",
+      "prompt": "Low-poly stylized toy model of a yellow cartoon submarine lying level, long and rounded, with a periscope, round portholes along its side and a propeller at the back. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "325ea5a8-2aed-41e3-9786-a00573a85cab",
+      "credits": 20,
+      "at": "2026-10-31T10:28:41.403Z"
+    },
+    {
+      "id": "space-shuttle",
+      "prompt": "Low-poly stylized toy model of a space shuttle standing upright on its tail. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "2c406aa5-4224-4a60-9a77-8aff38467113",
+      "credits": 20,
+      "at": "2026-10-31T10:02:01.870Z"
+    },
+    {
+      "id": "flying-saucer",
+      "prompt": "Low-poly stylized toy model of a silver flying saucer with a glass dome. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "dac09f38-d4ca-49b6-b727-6d18fbc14d98",
+      "credits": 20,
+      "at": "2026-10-31T10:03:38.703Z"
+    },
+    {
+      "id": "fire-truck",
+      "prompt": "Low-poly stylized toy model of a red fire truck with a ladder. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "7b908277-8315-4eb9-8313-58b6ac558825",
+      "credits": 20,
+      "at": "2026-10-31T10:03:48.692Z"
+    },
+    {
+      "id": "tractor",
+      "prompt": "Low-poly stylized toy model of a green farm tractor. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "c742134b-d89f-4b85-8058-45bf0a045b0f",
+      "credits": 20,
+      "at": "2026-10-31T10:03:49.028Z"
+    },
+    {
+      "id": "car",
+      "prompt": "Low-poly stylized toy model of a small blue car. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f63ac0fc-9cdc-4a10-a3b0-b381de5551e0",
+      "credits": 20,
+      "at": "2026-10-31T10:05:30.867Z"
+    },
+    {
+      "id": "bus",
+      "prompt": "Low-poly stylized toy model of a red double-decker bus. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "a1f2d151-b34a-481f-9660-0926d516464d",
+      "credits": 20,
+      "at": "2026-10-31T10:05:36.696Z"
+    },
+    {
+      "id": "house",
+      "prompt": "Low-poly stylized toy model of a cosy cottage with a red roof. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "502d3d37-6c47-428b-81e8-8f70ca757d5b",
+      "credits": 20,
+      "at": "2026-10-31T09:57:02.926Z"
+    },
+    {
+      "id": "barn",
+      "prompt": "Low-poly stylized toy model of a red wooden barn. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "c06382bc-6a78-4d0a-a0ae-fa6c3506e734",
+      "credits": 20,
+      "at": "2026-10-31T10:06:07.400Z"
+    },
+    {
+      "id": "church",
+      "prompt": "Low-poly stylized toy model of a small white church with a steeple. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "ce1a4840-8b20-406d-b967-fbf3343ed768",
+      "credits": 20,
+      "at": "2026-10-31T10:07:21.787Z"
+    },
+    {
+      "id": "tent",
+      "prompt": "Low-poly stylized toy model of a camping tent. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "0e335623-5cbd-4e56-bb8a-f9f5989d4432",
+      "credits": 20,
+      "at": "2026-10-31T10:07:48.184Z"
+    },
+    {
+      "id": "fountain",
+      "prompt": "Low-poly stylized toy model of a stone fountain with water. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "61ae6f9f-60be-4e77-928e-f870170e4221",
+      "credits": 20,
+      "at": "2026-10-31T10:08:29.475Z"
+    },
+    {
+      "id": "wishing-well",
+      "prompt": "Low-poly stylized toy model of a stone wishing well with a little wooden roof. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "2c721e6c-5fdc-4626-ada0-17602b721cba",
+      "credits": 20,
+      "at": "2026-10-31T10:09:00.147Z"
+    },
+    {
+      "id": "ferris-wheel",
+      "prompt": "Low-poly stylized toy model of a colourful ferris wheel. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f6adff0e-390b-433a-ac6b-78149e284dcc",
+      "credits": 20,
+      "at": "2026-10-31T10:09:47.005Z"
+    },
+    {
+      "id": "carousel",
+      "prompt": "Low-poly stylized toy model of a carousel with horses. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "c90e2b89-be99-4237-8f71-7477a196ad06",
+      "credits": 20,
+      "at": "2026-10-31T10:10:17.994Z"
+    },
+    {
+      "id": "circus-tent",
+      "prompt": "Low-poly stylized toy model of a red and white striped circus tent. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "9f819015-212a-42bf-b533-5dd58ed1bba5",
+      "credits": 20,
+      "at": "2026-10-31T10:10:59.450Z"
+    },
+    {
+      "id": "wind-turbine",
+      "prompt": "Low-poly stylized toy model of a tall white wind turbine: a slender tower standing on the ground with three long blades at its top. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "3813d58b-707c-456b-85ab-15bc9e7e30b5",
+      "credits": 20,
+      "at": "2026-10-31T10:28:41.402Z"
+    },
+    {
+      "id": "bridge",
+      "prompt": "Low-poly stylized toy model of a stone arch bridge. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "ac5384b6-7cfc-4b10-a596-e218877beefc",
+      "credits": 20,
+      "at": "2026-10-31T10:12:22.700Z"
+    },
+    {
+      "id": "skyscraper",
+      "prompt": "Low-poly stylized toy model of a glass skyscraper. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "70615dff-3458-4bcc-9957-417d99a3eae8",
+      "credits": 20,
+      "at": "2026-10-31T10:12:47.992Z"
+    },
+    {
+      "id": "lookout-tower",
+      "prompt": "Low-poly stylized toy model of a wooden lookout tower. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "cfee109c-075e-4522-b435-d87392d16ecf",
+      "credits": 20,
+      "at": "2026-10-31T10:13:03.650Z"
+    },
+    {
+      "id": "treasure-chest",
+      "prompt": "Low-poly stylized toy model of an open treasure chest full of gold coins. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "2dfe2fe4-6a91-4e3f-b43b-32c675883093",
+      "credits": 20,
+      "at": "2026-10-31T09:55:09.638Z"
+    },
+    {
+      "id": "tombstone",
+      "prompt": "Low-poly stylized toy model of a rounded grey tombstone. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "c069572d-8ca7-4a8e-a1c8-4a0e09f108d4",
+      "credits": 20,
+      "at": "2026-10-31T10:14:21.105Z"
+    },
+    {
+      "id": "throne",
+      "prompt": "Low-poly stylized toy model of a golden royal throne with red cushions. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "41af7c1f-a6a5-4871-9bc3-0aecc01b53a1",
+      "credits": 20,
+      "at": "2026-10-31T10:14:40.656Z"
+    },
+    {
+      "id": "catapult",
+      "prompt": "Low-poly stylized toy model of a wooden medieval catapult. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "c4f74049-5639-4154-8872-610ca0e5409a",
+      "credits": 20,
+      "at": "2026-10-31T10:14:45.955Z"
+    },
+    {
+      "id": "giant-mushroom",
+      "prompt": "Low-poly stylized toy model of a big red mushroom with white spots. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "9ba38119-721f-4bd6-a5c0-3e52b6c29807",
+      "credits": 20,
+      "at": "2026-10-31T10:16:08.729Z"
+    },
+    {
+      "id": "gingerbread-house",
+      "prompt": "Low-poly stylized toy model of a gingerbread house with icing. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "3404b4ec-4467-451a-9e1d-a648b9615be0",
+      "credits": 20,
+      "at": "2026-10-31T10:16:45.101Z"
+    },
+    {
+      "id": "christmas-tree",
+      "prompt": "Low-poly stylized toy model of a decorated christmas tree with a star. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "d3b5540a-d7ea-49f9-a943-f43a370f74c4",
+      "credits": 20,
+      "at": "2026-10-31T10:16:45.245Z"
+    },
+    {
+      "id": "snowman",
+      "prompt": "Low-poly stylized toy model of a snowman with a carrot nose and a top hat. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "8ce08c43-d8fa-4315-8036-4a7ac0aedc61",
+      "credits": 20,
+      "at": "2026-10-31T10:17:57.956Z"
+    },
+    {
+      "id": "dinosaur",
+      "prompt": "Low-poly stylized toy model of a green t-rex dinosaur. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "051e4993-7001-40ed-9ce6-e6d2615059a2",
+      "credits": 20,
+      "at": "2026-10-31T10:18:22.912Z"
+    },
+    {
+      "id": "elephant",
+      "prompt": "Low-poly stylized toy model of a grey elephant. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f17a0c17-5e84-4b1c-a51e-8f1ad8328b09",
+      "credits": 20,
+      "at": "2026-10-31T10:19:04.448Z"
+    },
+    {
+      "id": "unicorn",
+      "prompt": "Low-poly stylized toy model of a white unicorn with a rainbow mane. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f850640a-8534-4039-b43c-6ab16a527797",
+      "credits": 20,
+      "at": "2026-10-31T10:20:32.405Z"
+    },
+    {
+      "id": "great-pyramid",
+      "prompt": "Low-poly stylized toy model of the Great Pyramid of Giza. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "ec960376-d495-497e-bb67-49bf39a29f06",
+      "credits": 20,
+      "at": "2026-10-31T10:20:52.408Z"
+    },
+    {
+      "id": "taj-mahal",
+      "prompt": "Low-poly stylized toy model of the Taj Mahal. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "ec1756e3-ed58-443c-8139-116a3b02e6e3",
+      "credits": 20,
+      "at": "2026-10-31T10:21:23.753Z"
+    },
+    {
+      "id": "colosseum",
+      "prompt": "Low-poly stylized toy model of the Roman Colosseum. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "d4239087-5c47-4133-a5ab-670e3261ddf1",
+      "credits": 20,
+      "at": "2026-10-31T10:22:15.778Z"
+    },
+    {
+      "id": "big-ben",
+      "prompt": "Low-poly stylized toy model of the Big Ben clock tower in London. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "1faeedfc-f7c6-48c1-929b-482db8579a4e",
+      "credits": 20,
+      "at": "2026-10-31T09:55:09.638Z"
+    },
+    {
+      "id": "leaning-tower-of-pisa",
+      "prompt": "Low-poly stylized toy model of the Leaning Tower of Pisa. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "62078ca3-e4ed-4773-948e-97733fae7e83",
+      "credits": 20,
+      "at": "2026-10-31T10:22:57.421Z"
+    },
+    {
+      "id": "moai",
+      "prompt": "Low-poly stylized toy model of an Easter Island moai stone head. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "b4b9ead7-8184-41bb-9033-0dbb7945f6ba",
+      "credits": 20,
+      "at": "2026-10-31T10:23:23.831Z"
+    },
+    {
+      "id": "neuschwanstein-castle",
+      "prompt": "Low-poly stylized toy model of Neuschwanstein castle. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "03adc02c-0090-4b14-a843-f9f4b21d040d",
+      "credits": 20,
+      "at": "2026-10-31T10:24:12.056Z"
+    },
+    {
+      "id": "bratislava-castle",
+      "prompt": "Low-poly stylized toy model of Bratislava Castle, a white square castle with four corner towers and red roofs. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "3686d8ba-e729-4033-aa26-af008d646113",
+      "credits": 20,
+      "at": "2026-10-31T10:24:46.882Z"
+    },
+    {
+      "id": "golden-gate-bridge",
+      "prompt": "Low-poly stylized toy model of the whole Golden Gate Bridge seen from the side: a long red suspension bridge with a flat road deck, two tall towers and cables between them. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "b9ff300f-6990-4827-8241-7fb976f1d5dd",
+      "credits": 20,
+      "at": "2026-10-31T10:28:41.403Z"
+    },
+    {
+      "id": "lighthouse",
+      "prompt": "Low-poly stylized toy model of a red and white striped lighthouse with a lamp room on top, standing on a small rocky base. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "2e013a3e-7493-4ab1-893b-fbb58a0951dc",
+      "credits": 20,
+      "at": "2026-10-31T15:28:38.878Z"
+    },
+    {
+      "id": "igloo",
+      "prompt": "Low-poly stylized toy model of a round snow igloo made of ice blocks with a small arched entrance tunnel. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "78316386-a3c1-463f-8607-a4c64c9f70f3",
+      "credits": 20,
+      "at": "2026-10-31T15:28:38.879Z"
+    },
+    {
+      "id": "volcano",
+      "prompt": "Low-poly stylized toy model of a small cone volcano with glowing orange lava at its crater and lava streams down its sides. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "0403b60f-500f-44aa-93dd-54a827d8e661",
+      "credits": 20,
+      "at": "2026-10-31T15:28:38.879Z"
+    },
+    {
+      "id": "cave-entrance",
+      "prompt": "Low-poly stylized toy model of a rocky hillside with a big dark cave entrance arch in its front. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "aaf3c31f-2863-45c1-854c-0a105d5a20c4",
+      "credits": 20,
+      "at": "2026-10-31T15:30:26.971Z"
+    },
+    {
+      "id": "eiffel-tower",
+      "prompt": "Low-poly stylized toy model of the Eiffel Tower in Paris, perfectly straight and symmetrical: four wide arched legs joined by a platform, a straight tapering tower above, a small top. Solid simple shapes with a cross-hatch lattice pattern painted on, dark bronze colour, no see-through holes. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f09f1bd5-0c90-45a6-9400-ae75288343e3",
+      "credits": 20,
+      "at": "2026-11-03T12:15:38.082Z"
+    },
+    {
+      "id": "statue-of-liberty",
+      "prompt": "Low-poly stylized toy model of the Statue of Liberty: a green copper woman in a robe holding a torch up high, standing on a stone pedestal. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "06c33f6f-3a57-4e2a-8e3c-ca50e2f3863b",
+      "credits": 20,
+      "at": "2026-11-03T11:51:12.445Z"
+    },
+    {
+      "id": "sphinx",
+      "prompt": "Low-poly stylized toy model of the Great Sphinx of Giza lying down. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "3761f80c-0fb4-411d-ab6e-dd166630e5fe",
+      "credits": 20,
+      "at": "2026-11-03T11:51:12.445Z"
+    },
+    {
+      "id": "sydney-opera-house",
+      "prompt": "Low-poly stylized toy model of the Sydney Opera House with its white sail shaped roofs. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "eb3f5fe8-4a43-473e-a29f-78af6c8fa427",
+      "credits": 20,
+      "at": "2026-11-03T11:52:27.784Z"
+    },
+    {
+      "id": "tower-bridge",
+      "prompt": "Low-poly stylized toy model of Tower Bridge in London: two stone towers joined by a blue bridge. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "d8533588-469b-4513-a540-57928523e223",
+      "credits": 20,
+      "at": "2026-11-03T11:52:33.265Z"
+    },
+    {
+      "id": "christ-the-redeemer",
+      "prompt": "Low-poly stylized toy model of the Christ the Redeemer statue in Rio: a big white stone figure in a long robe with both arms stretched straight out sideways, standing on a tall square pedestal. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "3816330b-a706-453b-86fb-376df212b86d",
+      "credits": 20,
+      "at": "2026-11-03T12:30:33.432Z"
+    },
+    {
+      "id": "arc-de-triomphe",
+      "prompt": "Low-poly stylized toy model of the Arc de Triomphe in Paris. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "cd6f0a0a-5fd8-41c2-b20e-09c23360e6f4",
+      "credits": 20,
+      "at": "2026-11-03T11:54:19.503Z"
+    },
+    {
+      "id": "empire-state-building",
+      "prompt": "Low-poly stylized toy model of the Empire State Building. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "895800ed-1b67-4313-923b-5046eac56db1",
+      "credits": 20,
+      "at": "2026-11-03T11:54:24.248Z"
+    },
+    {
+      "id": "burj-khalifa",
+      "prompt": "Low-poly stylized toy model of the Burj Khalifa in Dubai: a very tall slim silver-grey glass skyscraper made of stepped setbacks around a central core, ending in a long thin spire. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "0edb5345-8301-4b49-a319-fa34c83664ce",
+      "credits": 20,
+      "at": "2026-11-03T12:15:38.083Z"
+    },
+    {
+      "id": "saint-basil-s-cathedral",
+      "prompt": "Low-poly stylized toy model of Saint Basil's Cathedral in Moscow with colourful onion domes. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "696ad39d-bf89-42eb-b1e9-8520775efa10",
+      "credits": 20,
+      "at": "2026-11-03T11:55:33.743Z"
+    },
+    {
+      "id": "stonehenge",
+      "prompt": "Low-poly stylized toy model of Stonehenge, a ring of standing stones. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "1c7773cc-f7a7-4560-879a-fc18f75f77f2",
+      "credits": 20,
+      "at": "2026-11-03T11:55:37.681Z"
+    },
+    {
+      "id": "sagrada-familia",
+      "prompt": "Low-poly stylized toy model of the Sagrada Familia church in Barcelona with its tall spires. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "052a76e2-3fe3-4448-b7a0-9826e5a400d9",
+      "credits": 20,
+      "at": "2026-11-03T11:56:30.937Z"
+    },
+    {
+      "id": "parthenon",
+      "prompt": "Low-poly stylized toy model of the Parthenon temple in Athens with white columns. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "59f3622a-4cf0-4588-85f8-52330e2073bf",
+      "credits": 20,
+      "at": "2026-11-03T11:57:26.701Z"
+    },
+    {
+      "id": "torii-gate",
+      "prompt": "Low-poly stylized toy model of a red Japanese torii gate. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "130218a2-f17b-46e2-8cec-b500be27d85f",
+      "credits": 20,
+      "at": "2026-11-03T11:57:40.646Z"
+    },
+    {
+      "id": "great-wall-of-china",
+      "prompt": "Low-poly stylized toy model of a short grey stone section of the Great Wall of China: a crenellated wall walk on a stone wall running along, with one square grey stone watchtower in the middle, on a small green hill. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "df17d799-a9fc-4694-a744-36f8cc5a9760",
+      "credits": 20,
+      "at": "2026-11-03T12:15:38.083Z"
+    },
+    {
+      "id": "vr-headset",
+      "prompt": "Low-poly stylized toy model of a virtual reality headset with a strap. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "1dcf8e38-416a-4aec-912d-46a741438c10",
+      "credits": 20,
+      "at": "2026-11-03T11:59:07.145Z"
+    },
+    {
+      "id": "cauldron",
+      "prompt": "Low-poly stylized toy model of a black witch cauldron with green bubbling potion. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "531473ab-1a68-4ebf-a1ff-def77fc8a96b",
+      "credits": 20,
+      "at": "2026-11-03T11:59:36.482Z"
+    },
+    {
+      "id": "mountain-chalet",
+      "prompt": "Low-poly stylized toy model of a wooden alpine mountain chalet with a snowy roof. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "eaf54647-e81b-4152-ac17-1638d7cb6d3c",
+      "credits": 20,
+      "at": "2026-11-03T12:00:23.221Z"
+    },
+    {
+      "id": "kremlin",
+      "prompt": "Low-poly stylized toy model of the Moscow Kremlin: red brick walls with pointed towers topped by red stars. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "dc6a9e57-b0ae-4760-b921-d1728e448e42",
+      "credits": 20,
+      "at": "2026-11-03T12:30:33.433Z"
+    },
+    {
+      "id": "mount-rushmore",
+      "prompt": "Low-poly stylized toy model of Mount Rushmore: a grey granite mountain with four carved presidential faces. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "b2343e62-4b8c-453a-a257-8d96f81212ab",
+      "credits": 20,
+      "at": "2026-11-03T12:30:33.433Z"
+    },
+    {
+      "id": "brandenburg-gate",
+      "prompt": "Low-poly stylized toy model of the Brandenburg Gate in Berlin with its columns and a chariot on top. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "d5b10210-85e2-4bba-a67f-add57062556d",
+      "credits": 20,
+      "at": "2026-11-03T12:31:54.730Z"
+    },
+    {
+      "id": "petronas-towers",
+      "prompt": "Low-poly stylized toy model of the Petronas Twin Towers in Kuala Lumpur joined by a sky bridge. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "2ce5e9a0-8f91-4282-a786-a24090a79f6f",
+      "credits": 20,
+      "at": "2026-11-03T12:32:10.788Z"
+    },
+    {
+      "id": "space-needle",
+      "prompt": "Low-poly stylized toy model of the Space Needle tower in Seattle with its flying saucer top. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "8a773b91-6a03-491e-a598-a29e7ffd7905",
+      "credits": 20,
+      "at": "2026-11-03T12:32:33.484Z"
+    },
+    {
+      "id": "notre-dame",
+      "prompt": "Low-poly stylized toy model of Notre-Dame cathedral in Paris with two square front towers and a rose window. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "8443bc10-f489-4735-8042-fea5bb71263b",
+      "credits": 20,
+      "at": "2026-11-03T12:32:36.896Z"
+    },
+    {
+      "id": "cn-tower",
+      "prompt": "Low-poly stylized toy model of the CN Tower in Toronto: a very tall slim concrete tower with a round pod and a spire. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "1b1087f0-4731-41ed-9642-5af7827a056b",
+      "credits": 20,
+      "at": "2026-11-03T12:33:39.027Z"
+    },
+    {
+      "id": "angkor-wat",
+      "prompt": "Low-poly stylized toy model of the Angkor Wat temple with its lotus bud shaped stone towers. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "5c535153-5de3-453d-b2aa-5a15d1a3ea3f",
+      "credits": 20,
+      "at": "2026-11-03T12:33:42.895Z"
+    },
+    {
+      "id": "hagia-sophia",
+      "prompt": "Low-poly stylized toy model of the Hagia Sophia with its big central dome and four minarets. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "55ee6ca3-8467-49df-bcc7-3e370c437385",
+      "credits": 20,
+      "at": "2026-11-03T12:34:44.428Z"
+    },
+    {
+      "id": "machu-picchu",
+      "prompt": "Low-poly stylized toy model of Machu Picchu: stone terraces and ruins on a green mountain top. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "093078dc-e1f5-4e35-8d54-2d1c12a3e0a1",
+      "credits": 20,
+      "at": "2026-11-03T12:34:44.878Z"
+    },
+    {
+      "id": "kinkaku-ji",
+      "prompt": "Low-poly stylized toy model of the Golden Pavilion Kinkaku-ji: a three storey golden Japanese temple. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "e5bf3b46-a397-472f-92ea-fd25b8e714a7",
+      "credits": 20,
+      "at": "2026-11-03T12:35:46.096Z"
+    },
+    {
+      "id": "rialto-bridge",
+      "prompt": "Low-poly stylized toy model of the Rialto Bridge in Venice: a white stone arch bridge with a covered arcade on top. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "785d386f-14a6-468a-b933-857da901b5cb",
+      "credits": 20,
+      "at": "2026-11-03T12:36:32.471Z"
+    },
+    {
+      "id": "st-mark-s-basilica",
+      "prompt": "Low-poly stylized toy model of St Mark's Basilica in Venice with its round domes and golden front. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "b5736952-eacb-494c-9c25-212d876a4c4d",
+      "credits": 20,
+      "at": "2026-11-03T12:36:41.838Z"
+    },
+    {
+      "id": "statue",
+      "prompt": "Low-poly stylized toy model of a classical white marble statue of a standing figure on a square plinth. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "a9c26eef-b833-448b-9575-898fee070cc6",
+      "credits": 20,
+      "at": "2026-11-03T12:38:09.801Z"
+    },
+    {
+      "id": "toolbox",
+      "prompt": "Low-poly stylized toy model of a red metal toolbox with an open lid and tools inside. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "68d685e8-1c39-4cb3-9b47-7bc3632f808d",
+      "credits": 20,
+      "at": "2026-11-03T12:38:24.564Z"
+    },
+    {
+      "id": "frying-pan",
+      "prompt": "Low-poly stylized toy model of a black frying pan with a fried egg in it. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "04fba579-114e-4d46-93ed-ac846ced0bbe",
+      "credits": 20,
+      "at": "2026-11-03T12:39:00.374Z"
+    },
+    {
+      "id": "trash-can",
+      "prompt": "Low-poly stylized toy model of a grey metal trash can with a lid. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f4b1e3bd-dc4e-47ef-a68f-f3b9036c0228",
+      "credits": 20,
+      "at": "2026-11-03T12:39:41.633Z"
+    },
+    {
+      "id": "doghouse",
+      "prompt": "Low-poly stylized toy model of a red wooden doghouse with a pointed roof and a round door. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "b04c099f-51be-486f-9b52-2ef30d1ef857",
+      "credits": 20,
+      "at": "2026-11-03T12:40:26.664Z"
+    },
+    {
+      "id": "xylophone",
+      "prompt": "Low-poly stylized toy model of a colourful toy xylophone with rainbow bars and two mallets. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "86350661-7ed4-40f3-9db6-1dcc0039c1ad",
+      "credits": 20,
+      "at": "2026-11-03T12:40:43.431Z"
+    },
+    {
+      "id": "drum",
+      "prompt": "Low-poly stylized toy model of a red marching drum with white rims and two drumsticks. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "1e56e4f4-9552-4976-b61e-f98f88a61d6e",
+      "credits": 20,
+      "at": "2026-11-03T12:41:39.195Z"
+    },
+    {
+      "id": "cup",
+      "prompt": "Low-poly stylized toy model of a white coffee cup on a saucer. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "30987900-428c-4eb9-9150-b7f0709da168",
+      "credits": 20,
+      "at": "2026-11-03T12:42:39.404Z"
+    },
+    {
+      "id": "bowling-pin",
+      "prompt": "Low-poly stylized toy model of a white bowling pin with two red stripes. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "91449e65-2cbc-4730-bcea-206a1384f255",
+      "credits": 20,
+      "at": "2026-11-03T12:43:32.187Z"
+    },
+    {
+      "id": "gondola",
+      "prompt": "Low-poly stylized toy model of a black Venetian gondola with a curled bow. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "be41c1a9-b037-47e7-8b99-9f0cd343b222",
+      "credits": 20,
+      "at": "2026-11-03T12:43:41.605Z"
+    },
+    {
+      "id": "totem-pole",
+      "prompt": "Low-poly stylized toy model of a carved and painted wooden totem pole with spread wings on top. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "7275d8eb-54c8-4a22-8f7d-ffff5c28e389",
+      "credits": 20,
+      "at": "2026-11-03T12:45:07.806Z"
+    },
+    {
+      "id": "wizard-tower",
+      "prompt": "Low-poly stylized toy model of a tall purple wizard tower with a pointed blue roof and stars. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "171f928c-b52f-4e77-bcbe-0d00421ed644",
+      "credits": 20,
+      "at": "2026-11-03T12:45:23.137Z"
+    },
+    {
+      "id": "factory",
+      "prompt": "Low-poly stylized toy model of an old brick factory with two tall smoking chimneys. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "77632a1e-68fc-4ac0-a49f-bfc832eb652c",
+      "credits": 20,
+      "at": "2026-11-03T12:45:44.547Z"
+    },
+    {
+      "id": "lollipop",
+      "prompt": "Low-poly stylized toy model of a giant swirly rainbow lollipop on a stick. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "70f60c7f-8d33-4952-ab3f-7fb3f359909d",
+      "credits": 20,
+      "at": "2026-11-03T12:46:52.804Z"
+    },
+    {
+      "id": "toy-box",
+      "prompt": "Low-poly stylized toy model of an open wooden toy box with toys peeking out. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "04b0e1d2-4c61-40c2-ab7c-21ef8ad15a80",
+      "credits": 20,
+      "at": "2026-11-03T12:47:39.494Z"
+    },
+    {
+      "id": "nest",
+      "prompt": "Low-poly stylized toy model of a round bird nest of twigs with three speckled eggs. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "f9faf047-4f8b-4973-9b03-77551ca60357",
+      "credits": 20,
+      "at": "2026-11-03T12:48:36.294Z"
+    },
+    {
+      "id": "giant-clam",
+      "prompt": "Low-poly stylized toy model of a giant open clam shell with a white pearl inside. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "681fe99b-0bf2-49d3-b7a7-7f7d00a812d7",
+      "credits": 20,
+      "at": "2026-11-03T12:49:07.298Z"
+    },
+    {
+      "id": "ramen-shop",
+      "prompt": "Low-poly stylized toy model of a small Japanese ramen shop with a red lantern and a noren curtain. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "8add365a-22a0-43da-be60-0d985eed4e84",
+      "credits": 20,
+      "at": "2026-11-03T12:50:46.343Z"
+    },
+    {
+      "id": "oasis",
+      "prompt": "Low-poly stylized toy model of a desert oasis: a small blue pool with two palm trees and green grass. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "29c14694-eafe-4b21-af1e-445ab1d5c9d1",
+      "credits": 20,
+      "at": "2026-11-03T12:51:17.219Z"
+    },
+    {
+      "id": "haunted-mansion",
+      "prompt": "Low-poly stylized toy model of a spooky purple haunted mansion with a crooked tower and glowing windows. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "4f9b2bae-b47f-49e6-8312-7a14af5b4b26",
+      "credits": 20,
+      "at": "2026-11-03T12:51:37.024Z"
+    },
+    {
+      "id": "mothership",
+      "prompt": "Low-poly stylized toy model of a big round alien mothership with glowing lights underneath. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "031d4993-919d-4a9e-9468-6cd74d814862",
+      "credits": 20,
+      "at": "2026-11-03T12:53:05.997Z"
+    },
+    {
+      "id": "hero-dragon",
+      "prompt": "Low-poly stylized toy model of a friendly green dragon standing on four legs with folded wings and a long tail. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "29c7e9b1-0888-4820-8ab9-bc4127147d6b",
+      "credits": 20,
+      "at": "2026-10-31T10:54:49.093Z"
+    },
+    {
+      "id": "hero-castle",
+      "prompt": "Low-poly stylized toy model of a small stone castle with four round corner towers, red pointed roofs and a gate. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "24c6a79c-b83d-40d0-aad7-8c9419838665",
+      "credits": 20,
+      "at": "2026-10-31T10:54:49.093Z"
+    },
+    {
+      "id": "hero-robot",
+      "prompt": "Low-poly stylized toy model of a friendly boxy toy robot standing upright with antenna and round eyes. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "4b66bae2-be55-4dbd-840f-c578f39992d6",
+      "credits": 20,
+      "at": "2026-10-31T10:54:49.093Z"
+    },
+    {
+      "id": "hero-rocket",
+      "prompt": "Low-poly stylized toy model of a red and white retro space rocket standing upright on three fins. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "44a80003-d759-4f0f-a7e7-ef427e2da6fc",
+      "credits": 20,
+      "at": "2026-10-31T10:56:25.976Z"
+    },
+    {
+      "id": "hero-windmill",
+      "prompt": "Low-poly stylized toy model of a Dutch windmill with a brick tower, a pointed cap and four big sails. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "e2de5cd7-7da3-44f2-a222-dd871f72b514",
+      "credits": 20,
+      "at": "2026-10-31T10:56:25.988Z"
+    },
+    {
+      "id": "hero-teapot",
+      "prompt": "Low-poly stylized toy model of a big blue porcelain teapot with a spout and a handle. Chunky simple silhouette, large flat faces, clean bright colours, like a painted tabletop diorama miniature. One isolated object, no ground plane, no base, no pedestal, no text, no people. Upright, front facing the viewer.",
+      "taskId": "6565427c-eff2-4f23-9491-1e5dc38b86ed",
+      "credits": 20,
+      "at": "2026-10-31T10:56:51.778Z"
+    }
+  ]
+}

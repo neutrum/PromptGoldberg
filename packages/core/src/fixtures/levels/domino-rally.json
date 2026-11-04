@@ -1,0 +1,75 @@
+{
+  "title": "Domino Rally",
+  "caption": "Put the ramp under the ball and watch the whole row fall, all the way to the bell.",
+  "goal": [
+    {
+      "type": "topple",
+      "part": "row"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "fan"
+    },
+    {
+      "kind": "trampoline"
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 5,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0,
+      "length": 4,
+      "fixed": true
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 8,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "length": 12
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 20,
+      "y": 0,
+      "z": 5,
+      "yaw": 0
+    }
+  ],
+  "level": {
+    "emoji": "🁢",
+    "name": "Domino Rally",
+    "mission": "Start a chain reaction: get the ball rolling into twelve dominoes that ring the bell",
+    "order": 1
+  }
+}

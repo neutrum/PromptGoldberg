@@ -1,0 +1,1013 @@
+import { Grid, Html, OrbitControls } from '@react-three/drei';
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { assemble, assemblePart, CELL, dropAt, facing, footprint, FRAME_HZ, groundAt, groundRuns, isGadget, stageOf, type Stage, KIT, lockedParts, lowestGround, onPosts, readableSkin, withPlacements, partCentre, partNames, partOrigin, propCentre, restingHeight, TARGET_KINDS, WATER_WORDS, yawQuat, type Body, type MachineRun, type Part, type Skin, type Terrain } from '@pg/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import { sfx } from '../platform/audio';
+import { POP_MS, useMachine } from '../app/game';
+import { requestedStage } from '../ui/settings';
+import { shapeSize, useModel } from './ModelVisual';
+import { kitUrl, kitVisual } from './kitVisuals';
+import { useSettings } from '../ui/settings';
+import { isNightSky, Landscape3D, useWorld, worldMotion } from './Landscape3D';
+import { HeroDecor, isHero, LandmarkDecor } from './Heroes3D';
+import { goalBox, LibraryModel, libraryLook, useLookReady } from './LibraryModel';
+import { Recipe } from './Recipe3D';
+
+/** Right-angled wedge: tall at -x, flat at +x, base on y = 0 (matches the physics collider). */
+function wedgeGeometry(l: number, h: number, w: number): THREE.BufferGeometry {
+  const a = [-l / 2, 0, -w / 2], b = [-l / 2, 0, w / 2], c = [l / 2, 0, w / 2], d = [l / 2, 0, -w / 2];
+  const e = [-l / 2, h, -w / 2], f = [-l / 2, h, w / 2];
+  const tri = (...p: number[][]) => p.flat();
+  const verts = [
+    ...tri(a, c, b), ...tri(a, d, c), // bottom
+    ...tri(e, f, c), ...tri(e, c, d), // slope
+    ...tri(a, b, f), ...tri(a, f, e), // back
+    ...tri(b, c, f), // right side
+    ...tri(a, e, d), // left side
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+function BodyMesh({ body, meshRef, ghost, onClick, onGrab, onHover, glow, cursor = 'grab', tint, skin, look }: {
+  body: Body; meshRef?: (m: THREE.Object3D | null) => void; ghost?: string; onClick?: () => void; onHover?: (over: boolean) => void; glow?: boolean; cursor?: string;
+  /** Pressed on: start dragging it. */
+  onGrab?: () => void;
+  tint?: string;
+  /** The world's look for this kind of part, drawn instead of the kit's; the collider is unchanged. */
+  skin?: Skin;
+  /** A library model drawn for the landmark this body belongs to: once it shows, the body is only a handle. */
+  look?: string;
+}) {
+  const visual = kitVisual(body);
+  const skinned = !!skin && !ghost && !body.sensor;
+  const { object: custom, ready } = useModel(!ghost && !body.sensor && !skinned && visual ? kitUrl(visual.asset) : undefined,
+    visual?.size ?? shapeSize(body.shape), visual?.rotation, tint, visual?.hidden);
+  const lookReady = useLookReady(look);
+  const modelVisible = skinned || !!custom || (!!visual?.hidden && ready) || lookReady;
+  const geometry = useMemo(() => {
+    const s = body.shape;
+    switch (s.kind) {
+      case 'box': return new THREE.BoxGeometry(...s.size);
+      // A rock is a low-poly boulder; its faces stay within a few millimetres of the sphere the ball hits.
+      case 'sphere': return body.prop === 'rock' ? new THREE.IcosahedronGeometry(s.radius, 1) : new THREE.SphereGeometry(s.radius, 24, 16);
+      case 'cylinder': return body.prop ? new THREE.CylinderGeometry(s.radius, s.radius, s.height, body.prop === 'nut' || body.prop === 'crystal' ? 6 : 20) : new THREE.CylinderGeometry(s.radius, s.radius * 1.15, s.height, 24);
+      case 'wedge': return wedgeGeometry(s.length, s.height, s.width);
+    }
+  }, [body.shape, body.prop]);
+  const edges = useMemo(() => (ghost ? new THREE.EdgesGeometry(geometry, 30) : null), [ghost, geometry]);
+  useEffect(() => () => { geometry.dispose(); edges?.dispose(); }, [geometry, edges]);
+  const sensor = !!body.sensor;
+  const air = body.kind === 'fan' && sensor;
+  // The cannon's barrel is drawn by Decor, tilted the way it fires; its sensor stays as an invisible handle to click and drag.
+  const barrel = body.kind === 'cannon' && sensor && body.id.endsWith('.barrel');
+  if (sensor && !air && !barrel) return null;
+  if (ghost) {
+    // Bright enough to read on a pale board, outlined so it shows through whatever stands in front.
+    return (
+      <mesh geometry={geometry} position={body.position} quaternion={body.rotation}>
+        <meshStandardMaterial color={ghost} transparent opacity={air ? 0.05 : 0.6} depthWrite={false} emissive={ghost} emissiveIntensity={0.6} />
+        {!air && <lineSegments geometry={edges!} renderOrder={3}><lineBasicMaterial color="#1d2a33" transparent opacity={0.85} depthTest={false} /></lineSegments>}
+      </mesh>
+    );
+  }
+  return (
+    <mesh
+      ref={meshRef}
+      geometry={geometry}
+      position={body.position}
+      quaternion={body.rotation}
+      castShadow={!sensor && !modelVisible}
+      receiveShadow
+      onClick={onClick ? (e) => { e.stopPropagation(); if (!onGrab || e.shiftKey) onClick(); } : undefined}
+      onPointerDown={onGrab ? (e) => { if (e.button !== 0 || e.shiftKey) return; e.stopPropagation(); onGrab(); } : undefined}
+      onPointerOver={onClick || onGrab ? (e) => { e.stopPropagation(); document.body.style.cursor = cursor; onHover?.(true); } : undefined}
+      onPointerOut={onClick || onGrab ? () => { document.body.style.cursor = ''; onHover?.(false); } : undefined}
+    >
+      {modelVisible
+        ? <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        : air
+        ? <meshBasicMaterial color="#7de0a7" transparent opacity={0.1} depthWrite={false} />
+        : barrel
+          ? <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          : <meshStandardMaterial color={body.color} flatShading={body.prop === 'rock'} roughness={body.kind === 'ball' ? 0.35 : 0.75} metalness={body.kind === 'bell' ? 0.6 : 0.05} emissive={glow ? '#ffd27a' : body.color} emissiveIntensity={glow ? 0.5 : body.kind === 'ball' ? 0.15 : 0.03} />}
+      {custom && !lookReady && <group position={visual?.offset}><primitive object={custom} dispose={null} /></group>}
+      {skinned && <Recipe shapes={skin!.shapes} unit={shapeSize(body.shape)} base={body.shape.kind === 'wedge' ? 0 : -shapeSize(body.shape)[1] / 2} />}
+      {body.kind === 'ball' && !custom && !skinned && <group>
+        {[-1, 1].map((side) => <group key={side} position={[side * 0.045, 0.04, 0.147]}><mesh><sphereGeometry args={[0.034, 12, 8]} /><meshStandardMaterial color="#fff7e4" /></mesh><mesh position={[0, 0, 0.026]}><sphereGeometry args={[0.015, 10, 8]} /><meshStandardMaterial color="#24323e" /></mesh></group>)}
+        <mesh position={[0, -0.025, 0.158]} rotation={[0, 0, Math.PI]}><torusGeometry args={[0.035, 0.006, 6, 16, Math.PI]} /><meshStandardMaterial color="#602b35" /></mesh>
+      </group>}
+    </mesh>
+  );
+}
+
+// ---- Juice: bursts on goal steps, confetti on a finished chain.
+
+interface Particle { pos: THREE.Vector3; vel: THREE.Vector3; spin: number; born: number; color: THREE.Color }
+const particles: Particle[] = [];
+const PALETTE = ['#ffd166', '#ff5a4e', '#7de0a7', '#58c4ff', '#ff8fd1', '#ffffff'];
+
+/** A puff of confetti at a point; `count` sets how big a deal it is. */
+export function confettiAt(pos: THREE.Vector3, count = 30, up = 3) {
+  const now = performance.now();
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, r = 0.6 + Math.random() * 1.6;
+    particles.push({
+      pos: pos.clone(), born: now, spin: (Math.random() - 0.5) * 12,
+      vel: new THREE.Vector3(Math.cos(a) * r, up + Math.random() * up, Math.sin(a) * r),
+      color: new THREE.Color(PALETTE[i % PALETTE.length]),
+    });
+  }
+  if (particles.length > 400) particles.splice(0, particles.length - 400);
+}
+
+const PARTICLE_MS = 2600;
+
+function Confetti() {
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  useFrame((_, delta) => {
+    const m = mesh.current;
+    if (!m) return;
+    const now = performance.now();
+    for (let i = particles.length - 1; i >= 0; i--) if (now - particles[i].born > PARTICLE_MS) particles.splice(i, 1);
+    const dt = Math.min(delta, 0.05);
+    particles.forEach((p, i) => {
+      p.vel.y -= 9 * dt;
+      p.vel.multiplyScalar(1 - 1.2 * dt);
+      p.pos.addScaledVector(p.vel, dt);
+      if (p.pos.y < 0.02) { p.pos.y = 0.02; p.vel.set(0, 0, 0); }
+      const age = (now - p.born) / PARTICLE_MS;
+      dummy.position.copy(p.pos);
+      dummy.rotation.set(p.spin * age * 2, p.spin * age, 0);
+      dummy.scale.setScalar(age > 0.8 ? (1 - age) * 5 : 1);
+      dummy.updateMatrix();
+      m.setMatrixAt(i, dummy.matrix);
+      m.setColorAt(i, p.color);
+    });
+    m.count = particles.length;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  });
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, 400]} frustumCulled={false}>
+      <boxGeometry args={[0.06, 0.012, 0.09]} />
+      <meshBasicMaterial toneMapped={false} />
+    </instancedMesh>
+  );
+}
+
+// ---- Decor: what makes a part read as itself (fan blades, a bell's dome, a cannon's barrel). Drawn only, never simulated.
+
+const spinning = new Set<THREE.Object3D>();
+
+function FanBlades({ part }: { part: Part }) {
+  const { object } = useModel(kitUrl('fan-propeller'), [0.035, 0.34, 0.34]);
+  const ref = useRef<THREE.Group>(null);
+  useEffect(() => {
+    const g = ref.current;
+    if (!g) return;
+    spinning.add(g);
+    return () => { spinning.delete(g); };
+  }, []);
+  const o = partOrigin(part);
+  const f = facing(part.yaw);
+  const front = KIT.fan.body[0] / 2 + 0.012;
+  return (
+    <group position={[o[0] + f[0] * front, o[1] + KIT.fan.body[1] / 2, o[2] + f[2] * front]} quaternion={yawQuat(part.yaw)}>
+      <group ref={ref}>
+        {object ? <primitive object={object} dispose={null} /> : <>{[0, 1, 2].map((k) => (
+          <mesh key={k} rotation={[(k * 2 * Math.PI) / 3, 0, 0]} position={[0, 0, 0]}>
+            <boxGeometry args={[0.012, 0.3, 0.07]} />
+            <meshStandardMaterial color="#e8fff1" roughness={0.4} />
+          </mesh>
+        ))}
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.035, 0.035, 0.03, 12]} />
+          <meshStandardMaterial color="#2b3140" />
+        </mesh></>}
+      </group>
+    </group>
+  );
+}
+
+/**
+ * A goal named after a library thing, drawn as its model round the goal; the bucket or bell still does
+ * the catching. A goal sunk in a pit has its model standing on the board over the hole, so it shows.
+ */
+function GoalModel({ part, id, ghost }: { part: Part; id: string; ghost?: string }) {
+  const [x, y, z] = partOrigin(part);
+  const box = useMemo(() => goalBox(part.kind === 'bell' ? 'bell' : 'bucket'), [part.kind]);
+  return <group position={[x, Math.max(0, y), z]} rotation={[0, (-part.yaw * Math.PI) / 180, 0]}><LibraryModel id={id} box={box} ghost={ghost} /></group>;
+}
+
+/** A ring round the top of a goal sunk in a pit, in the goal label's colour: the hole is the target. */
+function PitRing({ part }: { part: Part }) {
+  const [x, , z] = partOrigin(part);
+  return <mesh position={[x, 0.012, z]} rotation={[-Math.PI / 2, 0, 0]}>
+    {/* A square ring: radii are corner distances, so half-widths times √2. */}
+    <ringGeometry args={[CELL * 0.5 * Math.SQRT2, CELL * 0.62 * Math.SQRT2, 4, 1, Math.PI / 4]} />
+    <meshBasicMaterial color="#7de0b4" />
+  </mesh>;
+}
+
+function BellDome({ part }: { part: Part }) {
+  const { ready } = useModel(kitUrl('bell'), [1, 1, 1], undefined, undefined, true);
+  if (ready) return null;
+  const o = partOrigin(part);
+  const { radius, height } = KIT.bell;
+  return (
+    <group position={[o[0], o[1] + height, o[2]]}>
+      <mesh castShadow>
+        <sphereGeometry args={[radius * 1.02, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color="#ffcc33" metalness={0.7} roughness={0.25} />
+      </mesh>
+      <mesh position={[0, radius + 0.02, 0]}>
+        <sphereGeometry args={[0.03, 12, 8]} />
+        <meshStandardMaterial color="#c99a1a" metalness={0.6} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function CannonBarrel({ part }: { part: Part }) {
+  const { ready } = useModel(kitUrl('cannon'), [1, 1, 1], undefined, undefined, true);
+  if (ready) return null;
+  const o = partOrigin(part);
+  const tilt = (KIT.cannon.elevation * Math.PI) / 180;
+  const r = KIT.cannon.body[1] / 2;
+  return (
+    <group position={[o[0], o[1] + 0.16, o[2]]} quaternion={yawQuat(part.yaw)}>
+      {/* Local +x is the facing; tilt up about local z. */}
+      <mesh rotation={[0, 0, -Math.PI / 2 + tilt]} position={[0.06, 0.04, 0]} castShadow>
+        <cylinderGeometry args={[r * 0.8, r, 0.42, 20]} />
+        <meshStandardMaterial color="#3a4256" metalness={0.5} roughness={0.45} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} rotation={[Math.PI / 2, 0, 0]} position={[-0.04, -0.06, s * 0.15]} castShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.035, 18]} />
+          <meshStandardMaterial color="#8a5a2b" roughness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ---- Pop-in: a new level builds up part by part, each growing out of the board with a little overshoot.
+
+/** Until when something is still popping in, so the frame loop keeps drawing. */
+let popUntil = 0;
+const overshoot = (t: number) => { const c = 1.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+
+function Pop({ at = 0, pivot, flash, children }: { at?: number; pivot: [number, number, number]; flash?: string; children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  const fired = useRef(false);
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    const t = (performance.now() - at) / POP_MS;
+    if (t >= 1) { if (g.scale.x !== 1) g.scale.setScalar(1); return; }
+    if (t > 0 && flash && !fired.current) {
+      fired.current = true;
+      flashAt(new THREE.Vector3(pivot[0], pivot[1] + 0.15, pivot[2]), flash);
+    }
+    g.scale.setScalar(t <= 0 ? 0.0001 : Math.max(0.0001, overshoot(t)));
+  });
+  const waiting = performance.now() < at + POP_MS;
+  return <group ref={ref} position={pivot} scale={waiting ? 0.0001 : 1}><group position={[-pivot[0], -pivot[1], -pivot[2]]}>{children}</group></group>;
+}
+
+const POP_FLASH: Partial<Record<string, string>> = { ball: '#ff8f6b', bucket: '#7de0a7', bell: '#ffe066' };
+
+function Decor({ parts, appear }: { parts: Part[]; appear: Record<string, number> }) {
+  useFrame((_, delta) => { if (useMachine.getState().phase === 'playing') for (const g of spinning) g.rotation.x += Math.min(delta, 0.05) * 14; });
+  return (
+    <>
+      {parts.map((p) => <Pop key={`decor-${p.id}`} at={appear[p.id]} pivot={partOrigin(p)}><DecorOf part={p} parts={parts} /></Pop>)}
+    </>
+  );
+}
+
+function DecorOf({ part: p, parts }: { part: Part; parts: Part[] }) {
+  return (
+    <>
+      {p.kind === 'fan' ? <FanBlades key={`decor-${p.id}`} part={p} />
+        : (p.kind === 'bucket' || p.kind === 'bell') && libraryLook(p, parts) ? <GoalModel key={`decor-${p.id}`} part={p} id={libraryLook(p, parts)!} />
+        : p.kind === 'bucket' && p.y < 0 ? <PitRing key={`decor-${p.id}`} part={p} />
+        : p.kind === 'bell' ? <BellDome key={`decor-${p.id}`} part={p} />
+        : p.kind === 'cannon' ? <CannonBarrel key={`decor-${p.id}`} part={p} />
+        : isHero(p) ? <HeroDecor key={`decor-${p.id}`} part={p} />
+        : p.prop === 'landmark' ? <LandmarkDecor key={`decor-${p.id}`} part={p} />
+        : p.prop === 'crystal' || p.prop === 'column' ? <PropTop key={`decor-${p.id}`} part={p} />
+        : p.prop === 'fence' ? <FencePosts key={`decor-${p.id}`} part={p} />
+        : null}
+    </>
+  );
+}
+
+/** A fence panel's posts at its two ends, turned with it. */
+function FencePosts({ part }: { part: Part }) {
+  const [x, y, z] = partOrigin(part);
+  return (
+    <group position={[x, y, z]} rotation={[0, (-part.yaw * Math.PI) / 180, 0]}>
+      {[-0.23, 0.23].map((s) => <mesh key={s} position={[0, 0.2, s]} castShadow><boxGeometry args={[0.08, 0.4, 0.08]} /><meshStandardMaterial color={part.color ?? '#6f5236'} flatShading /></mesh>)}
+    </group>
+  );
+}
+
+/** Above an obstacle's solid part, where no ball reaches: a crystal's point, a column's capital. */
+function PropTop({ part }: { part: Part }) {
+  const [x, y, z] = partOrigin(part);
+  return part.prop === 'crystal'
+    ? <mesh position={[x, y + 0.88, z]} castShadow><coneGeometry args={[0.14, 0.36, 6]} /><meshStandardMaterial color={part.color ?? '#b57bff'} emissive={part.color ?? '#b57bff'} emissiveIntensity={0.5} flatShading /></mesh>
+    : <mesh position={[x, y + 1.0, z]} castShadow><boxGeometry args={[0.44, 0.1, 0.44]} /><meshStandardMaterial color={part.color ?? '#d8ccb0'} flatShading /></mesh>;
+}
+
+// ---- Flashes: a ring that grows and fades where a part fires, bounces, rings or catches.
+
+interface Flash { pos: THREE.Vector3; color: THREE.Color; born: number }
+const flashes: Flash[] = [];
+const FLASH_MS = 550;
+const FLASH_COLOR: Partial<Record<string, string>> = { fired: '#ffb15a', bounce: '#ff8fd1', bell: '#ffe066', bucket: '#7de0a7', topple: '#ffd166' };
+
+export function flashAt(pos: THREE.Vector3, color: string) {
+  flashes.push({ pos: pos.clone(), color: new THREE.Color(color), born: performance.now() });
+  if (flashes.length > 24) flashes.shift();
+}
+
+/** What each recorded event sounds like. */
+function partSound(type: string, kind?: string) {
+  switch (type) {
+    case 'fired': sfx.cannon(); break;
+    case 'bounce': sfx.boing(); break;
+    case 'bell': sfx.ding(); break;
+    case 'bucket': sfx.plop(); break;
+    case 'topple': sfx.clack(); break;
+    case 'touch': if (kind === 'fan') sfx.whoosh(); else if (kind === 'dominoes') sfx.clack(); break;
+  }
+}
+
+function Flashes() {
+  const group = useRef<THREE.Group>(null);
+  const rings = useMemo(() => Array.from({ length: 24 }, () => new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 32), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }))), []);
+  useEffect(() => () => rings.forEach((r) => { r.geometry.dispose(); (r.material as THREE.Material).dispose(); }), [rings]);
+  useFrame(({ camera }) => {
+    const now = performance.now();
+    for (let i = flashes.length - 1; i >= 0; i--) if (now - flashes[i].born > FLASH_MS) flashes.splice(i, 1);
+    rings.forEach((r, i) => {
+      const f = flashes[i];
+      r.visible = !!f;
+      if (!f) return;
+      const age = (now - f.born) / FLASH_MS;
+      r.position.copy(f.pos);
+      r.quaternion.copy(camera.quaternion);
+      r.scale.setScalar(0.1 + age * 0.5);
+      const m = r.material as THREE.MeshBasicMaterial;
+      m.color.copy(f.color);
+      m.opacity = 0.9 * (1 - age);
+    });
+  });
+  return <group ref={group}>{rings.map((r, i) => <primitive key={i} object={r} />)}</group>;
+}
+
+const tmpQ = new THREE.Quaternion();
+const tmpQ2 = new THREE.Quaternion();
+const ballPos = new THREE.Vector3(NaN, 0, 0);
+
+/** Moves the dynamic bodies along the recorded trace and drives the playback clock. */
+function Playback({ run, dynamic }: { run: MachineRun; dynamic: Map<string, THREE.Object3D> }) {
+  const ballIdx = run.dynamicIds.indexOf(run.spec.parts.find((p) => p.kind === 'ball')!.id);
+  const keys = useMemo(() => (useMachine.getState().result?.steps ?? []).flatMap((s) => (s.satisfied && s.t !== undefined ? [s.t] : [])), [run]);
+  const finished = useRef(false);
+  // Every event the physics recorded gets its sound and a flash as playback passes it.
+  const heard = useRef({ next: 0, t: 0 });
+  useFrame((_, delta) => {
+    const s = useMachine.getState();
+    let t = s.time;
+    if (t === 0) finished.current = false;
+    if (t < heard.current.t) heard.current.next = 0;
+    heard.current.t = t;
+    if (s.phase === 'playing') {
+      while (heard.current.next < run.events.length && run.events[heard.current.next].t <= t) {
+        const e = run.events[heard.current.next++];
+        const part = 'part' in e ? run.spec.parts.find((p) => p.id === e.part) : undefined;
+        if (e.type === 'touch' && part && part.kind !== 'fan' && part.kind !== 'dominoes') continue;
+        partSound(e.type, part?.kind);
+        if (part && e.type !== 'touch') flashAt(new THREE.Vector3(...partCentre(part)), FLASH_COLOR[e.type] ?? '#ffffff');
+      }
+      // Slow motion around each goal event, so the payoff is readable.
+      let slow = 1;
+      for (const k of keys) slow = Math.min(slow, 1 - 0.75 * Math.exp(-(((t - k) / 0.22) ** 2)));
+      t = Math.min(s.endTime, t + Math.min(delta, 0.05) * slow);
+      s.result?.steps.forEach((step, i) => {
+        if (step.satisfied && step.t !== undefined && t >= step.t && i >= s.celebrated) {
+          s.celebrate(i);
+          sfx.checkpoint(i);
+          const part = run.spec.parts.find((p) => p.id === run.spec.goal[i]?.part);
+          const at = part ? new THREE.Vector3(...partCentre(part)) : ballPos.clone();
+          const last = i === run.spec.goal.length - 1 && s.result?.success;
+          confettiAt(at, last ? 120 : 18, last ? 4 : 2.2);
+        }
+      });
+      s.setTime(t);
+      if (t >= s.endTime && !finished.current) {
+        finished.current = true;
+        s.finish();
+      }
+    }
+    const f = Math.min(run.frameCount - 1, t * FRAME_HZ);
+    const f0 = Math.floor(f), f1 = Math.min(run.frameCount - 1, f0 + 1), k = f - f0;
+    run.dynamicIds.forEach((id, i) => {
+      const obj = dynamic.get(id);
+      if (!obj) return;
+      const o0 = f0 * run.frameStride + 1 + i * 7, o1 = f1 * run.frameStride + 1 + i * 7;
+      const fr = run.frames;
+      obj.position.set(fr[o0] + (fr[o1] - fr[o0]) * k, fr[o0 + 1] + (fr[o1 + 1] - fr[o0 + 1]) * k, fr[o0 + 2] + (fr[o1 + 2] - fr[o0 + 2]) * k);
+      tmpQ.set(fr[o0 + 3], fr[o0 + 4], fr[o0 + 5], fr[o0 + 6]);
+      tmpQ2.set(fr[o1 + 3], fr[o1 + 4], fr[o1 + 5], fr[o1 + 6]);
+      obj.quaternion.copy(tmpQ.slerp(tmpQ2, k));
+      if (i === ballIdx) ballPos.copy(obj.position);
+    });
+  });
+  return null;
+}
+
+/** A number per level object, so the camera frames each level once. */
+const levelNo = new WeakMap<object, number>();
+let levels = 0;
+
+/** Fit the whole route at any aspect ratio; leave subsequent orbiting to the player. */
+function MachineCamera({ parts, level, resetView, stage }: { parts: Part[]; level: object; resetView: number; stage: Stage }) {
+  const camera = useThree((s) => s.camera);
+  const viewport = useThree((s) => s.size);
+  const controls = useRef<OrbitControlsImpl>(null);
+  const bounds = useMemo(() => {
+    const box = new THREE.Box3();
+    // Frame the route: the ball, the goal and the moving parts between them. The scenery (rocks,
+    // landmarks, fences) may run off the edges; the player orbits or zooms out to see it.
+    const route = parts.filter((p) => !p.fixed);
+    const framed = route.length >= 2 ? route : parts;
+    if (!framed.length) box.setFromCenterAndSize(new THREE.Vector3((stage.x * CELL) / 2, 0.5, (stage.z * CELL) / 2), new THREE.Vector3(6, 2, 6));
+    for (const p of framed) box.expandByPoint(new THREE.Vector3((p.x + 0.5) * CELL, p.y * CELL + 0.3, (p.z + 0.5) * CELL));
+    for (const p of framed) for (const c of footprint(p)) box.expandByPoint(new THREE.Vector3((c.x + 0.5) * CELL, p.y * CELL, (c.z + 0.5) * CELL));
+    box.expandByScalar(CELL * 0.75);
+    const centre = box.getCenter(new THREE.Vector3());
+    // A route a few cells long still shows its neighbourhood.
+    const size = box.getSize(new THREE.Vector3()), least = CELL * 5;
+    box.setFromCenterAndSize(centre, new THREE.Vector3(Math.max(size.x, least), size.y, Math.max(size.z, least)));
+    return { centre, box };
+  }, [parts, stage]);
+  const framedFor = useRef<string>('');
+  useEffect(() => {
+    // Frame each machine once; later changes to the same machine (a thing the designer moves) keep the player's view.
+    if (!levelNo.has(level)) levelNo.set(level, ++levels);
+    const key = `${levelNo.get(level)}:` + parts.map((p) => p.id).join(',') + `|${viewport.width},${viewport.height}|${resetView}`;
+    if (framedFor.current === key || !controls.current) return;
+    framedFor.current = key;
+    controls.current.target.copy(bounds.centre);
+    const aspect = viewport.width / Math.max(1, viewport.height);
+    const direction = new THREE.Vector3(0.6, 0.7, 0.85).normalize();
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
+    const up = new THREE.Vector3().crossVectors(direction, right);
+    const tanY = Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov / 2));
+    let distance = 3;
+    // Fit each bounding-box corner in camera space, with room for labels and the airborne marble.
+    for (const x of [bounds.box.min.x, bounds.box.max.x]) for (const y of [bounds.box.min.y, bounds.box.max.y]) for (const z of [bounds.box.min.z, bounds.box.max.z]) {
+      const offset = new THREE.Vector3(x, y, z).sub(bounds.centre);
+      const depth = offset.dot(direction);
+      distance = Math.max(distance, depth + Math.abs(offset.dot(right)) / (tanY * aspect * 0.92), depth + Math.abs(offset.dot(up)) / (tanY * 0.85));
+    }
+    camera.position.copy(bounds.centre).add(direction.multiplyScalar(distance));
+    controls.current.update();
+  }, [bounds, camera, parts, viewport, resetView]);
+  // During a run the camera leans toward the ball and closes in a little, then eases back to the
+  // player's own view. Orbiting or zooming mid-run hands the camera back to the player at once.
+  const follow = useRef<{ target: THREE.Vector3; offset: THREE.Vector3; back: number; free: boolean } | null>(null);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    const c = controls.current;
+    if (!c) return;
+    const letGo = () => { if (follow.current) follow.current.free = true; };
+    c.addEventListener('start', letGo);
+    return () => c.removeEventListener('start', letGo);
+  });
+  useFrame((_, delta) => {
+    const c = controls.current;
+    if (!c) return;
+    const { phase } = useMachine.getState();
+    const running = phase === 'playing' || phase === 'paused';
+    if (running && !follow.current) follow.current = { target: c.target.clone(), offset: camera.position.clone().sub(c.target), back: 0, free: false };
+    const f = follow.current;
+    if (!f || f.free) { if (f && !running) follow.current = null; return; }
+    let target: THREE.Vector3, offset: THREE.Vector3;
+    if (running && Number.isFinite(ballPos.x)) {
+      target = f.target.clone().lerp(ballPos, 0.6);
+      offset = f.offset.clone().multiplyScalar(0.8);
+    } else if (running) return;
+    else {
+      // The run is over: a beat to see where the ball ended, then back to the view the player had.
+      f.back += delta;
+      if (f.back < 1.5) { invalidate(); return; }
+      target = f.target; offset = f.offset;
+      if (c.target.distanceTo(target) < 0.01 && camera.position.distanceTo(target.clone().add(offset)) < 0.01) { follow.current = null; return; }
+      invalidate();
+    }
+    const k = 1 - Math.exp(-Math.min(delta, 0.1) * (running ? 2.5 : 4));
+    c.target.lerp(target, k);
+    camera.position.lerp(target.clone().add(offset), k);
+    c.update();
+  });
+  const dragging = useMachine((s) => s.dragging);
+  return <OrbitControls ref={controls} enabled={!dragging} makeDefault enableDamping dampingFactor={0.12} maxPolarAngle={Math.PI * 0.49} minDistance={2} maxDistance={40} />;
+}
+
+/** When the last drag ended, so its trailing click does not drop the next part too. */
+let droppedAt = 0;
+
+/**
+ * Fix mode: hover the stage to see where the part in hand would land (the floor, or the platform
+ * under the cursor), click to drop it there. A cell something else stands in shows red.
+ */
+function Placement({ part, parts, lift, terrain, stage }: { part: Part; parts: Part[]; lift: number; terrain?: Terrain[]; stage: Stage }) {
+  const [cell, setCell] = useState<{ x: number; z: number } | null>(null);
+  // Shelves and track show a height line down to the ground.
+  const shelf = onPosts(part.kind);
+  const w = stage.x * CELL, d = stage.z * CELL;
+  const toCell = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    const x = Math.floor(e.point.x / CELL), z = Math.floor(e.point.z / CELL);
+    if (x < 0 || z < 0 || x >= stage.x || z >= stage.z) return null;
+    return { x, z };
+  };
+  const landing = useMemo(() => (cell ? dropAt(parts, part, cell.x, cell.z, { y: lift, terrain }) : null), [parts, part, cell, lift, terrain]);
+  const y = cell ? (landing?.y ?? restingHeight(parts, cell.x, cell.z, part.id, terrain)) : 0;
+  const base = lowestGround(terrain);
+  const ground = useMemo(() => groundRuns(terrain, base, stage), [terrain, base, stage]);
+  const ghost = useMemo(() => (landing ? assemblePart(landing).bodies : []), [landing]);
+  const look = libraryLook(part), lookReady = useLookReady(look);
+  // The player's arrows raise or lower a shelf in hand; the designer's move the selected thing instead.
+  const raise = useMachine((s) => s.role) !== 'design';
+  const cells = useMemo(() => (cell ? footprint({ ...part, x: cell.x, y, z: cell.z }) : []), [part, cell, y]);
+  const platforms = useMemo(() => parts.filter((p) => p.kind === 'platform' && p.id !== part.id), [parts, part.id]);
+  const drop = (c: { x: number; z: number } | null) => {
+    if (!c) return;
+    const s = useMachine.getState();
+    if (s.placeAt(c.x, c.z)) sfx.place();
+    else sfx.miss();
+  };
+  const handlers = {
+    onPointerMove: (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setCell(toCell(e)); },
+    onPointerOut: () => setCell(null),
+    // A dragged part drops where the pointer is let go; the click that follows is the same gesture.
+    onPointerUp: (e: ThreeEvent<PointerEvent>) => {
+      if (!useMachine.getState().dragging) return;
+      e.stopPropagation();
+      useMachine.setState({ dragging: false });
+      droppedAt = performance.now();
+      // A tap picks the part up; a drag has a preview cell and drops on release.
+      if (cell) drop(toCell(e));
+    },
+    onClick: (e: ThreeEvent<MouseEvent>) => {
+      e.stopPropagation();
+      if (performance.now() - droppedAt < 300) return;
+      drop(toCell(e));
+    },
+  };
+  // Blue stands out on every board colour; red where it cannot go.
+  const color = landing ? '#2f9bff' : '#ff3b30';
+  return (
+    <>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL + 0.005, d / 2]} {...handlers}>
+        <planeGeometry args={[w, d]} />
+        <meshBasicMaterial color="#ffd27a" transparent opacity={0.03} depthWrite={false} />
+      </mesh>
+      {ground.map((g) => (
+        <mesh key={`g${g.x0},${g.z0},${g.w},${g.d}`} rotation={[-Math.PI / 2, 0, 0]} position={[(g.x0 + g.w / 2) * CELL, g.h * CELL + 0.005, (g.z0 + g.d / 2) * CELL]} {...handlers}>
+          <planeGeometry args={[g.w * CELL, g.d * CELL]} />
+          <meshBasicMaterial color="#ffd27a" transparent opacity={0.03} depthWrite={false} />
+        </mesh>
+      ))}
+      {platforms.map((p) => {
+        const cs = footprint(p);
+        const xs = cs.map((c) => c.x), zs = cs.map((c) => c.z);
+        const x0 = Math.min(...xs), x1 = Math.max(...xs) + 1, z0 = Math.min(...zs), z1 = Math.max(...zs) + 1;
+        return (
+          <mesh key={p.id} rotation={[-Math.PI / 2, 0, 0]} position={[((x0 + x1) / 2) * CELL, p.y * CELL + 0.006, ((z0 + z1) / 2) * CELL]} {...handlers}>
+            <planeGeometry args={[(x1 - x0) * CELL, (z1 - z0) * CELL]} />
+            <meshBasicMaterial color="#ffd27a" transparent opacity={0.12} depthWrite={false} />
+          </mesh>
+        );
+      })}
+      {cells.map((c) => (
+        <mesh key={`${c.x},${c.z}`} rotation={[-Math.PI / 2, 0, 0]} position={[(c.x + 0.5) * CELL, y * CELL + 0.02, (c.z + 0.5) * CELL]}>
+          <planeGeometry args={[CELL, CELL]} />
+          <meshBasicMaterial color={color} transparent opacity={0.45} depthWrite={false} />
+        </mesh>
+      ))}
+      {/* How high it would sit: an orange post down to the ground, a tick at every level, seen through anything. */}
+      {cell && shelf && y > 0 && (
+        <group position={[(cell.x + 0.5) * CELL, 0, (cell.z + 0.5) * CELL]}>
+          <mesh position={[0, (y * CELL) / 2, 0]} renderOrder={4}>
+            <cylinderGeometry args={[0.025, 0.025, y * CELL, 8]} />
+            <meshBasicMaterial color="#ff7a1a" depthTest={false} />
+          </mesh>
+          {Array.from({ length: y }, (_, i) => (
+            <mesh key={i} position={[0, (i + 1) * CELL, 0]} renderOrder={4}>
+              <boxGeometry args={[0.16, 0.02, 0.16]} />
+              <meshBasicMaterial color="#1d2a33" depthTest={false} />
+            </mesh>
+          ))}
+        </group>
+      )}
+      {/* A thing drawn as a model shows its model where it would land; the rest show their shapes. */}
+      {landing && lookReady
+        ? (isHero(landing) ? <HeroDecor part={landing} ghost={color} /> : landing.prop === 'landmark' ? <LandmarkDecor part={landing} ghost={color} /> : <GoalModel part={landing} id={look!} ghost={color} />)
+        : ghost.map((b) => <BodyMesh key={`ghost-${b.id}`} body={b} ghost={color} />)}
+      {landing && pointed(part) && <FacingArrow part={landing} color="#ff7a1a" />}
+      {landing && (
+        <Below part={landing} clear={pointed(part) ? 1.4 : 0.3} gap={64}>
+          <div className="name-tag">{part.label ?? PART_NAME[part.kind] ?? part.kind}
+            {shelf && raise && <b className="height-tip"> height {y} · ↑ ↓ keys raise or lower it</b>}
+            <span> · {pointed(part) ? 'R turns · ' : ''}click to place</span></div>
+        </Below>
+      )}
+    </>
+  );
+}
+
+/** Parts that point somewhere: they launch, blow, roll or carry the ball one way. */
+const POINTED = new Set<Part['kind']>(['ramp', 'cannon', 'fan', 'dominoes', 'seesaw', 'track', 'curve', 'descent', 'ascent']);
+/** Workbench parts point too: their slopes run down toward their facing. */
+const pointed = (p: Part) => POINTED.has(p.kind) || isGadget(p);
+const PART_NAME: Partial<Record<Part['kind'], string>> = { ramp: 'Ramp', cannon: 'Cannon', fan: 'Fan', dominoes: 'Dominoes', seesaw: 'Seesaw', track: 'Track', curve: 'Curve', descent: 'Descent', ascent: 'Ascent', platform: 'Shelf', trampoline: 'Trampoline', wall: 'Wall' };
+
+const ARROW = (() => {
+  // Flat, pointing along +x, in the xz plane: a shaft and a head.
+  const s = new THREE.Shape();
+  s.moveTo(0, -0.08); s.lineTo(0.4, -0.08); s.lineTo(0.4, -0.22); s.lineTo(0.75, 0); s.lineTo(0.4, 0.22); s.lineTo(0.4, 0.08); s.lineTo(0, 0.08); s.closePath();
+  const g = new THREE.ShapeGeometry(s);
+  g.rotateX(Math.PI / 2);
+  return g;
+})();
+const ARROW_EDGE = new THREE.EdgesGeometry(ARROW);
+
+/** A flat arrow on the floor just past a part's front: which way it points, so turning it shows. */
+function FacingArrow({ part, color }: { part: Part; color: string }) {
+  const o = partOrigin(part), f = facing(part.yaw);
+  // The front of its footprint, measured along where it faces.
+  const front = Math.max(...footprint(part).map((c) => ((c.x + 0.5) * CELL - o[0]) * f[0] + ((c.z + 0.5) * CELL - o[2]) * f[2])) + CELL / 2;
+  return (
+    <group position={[o[0] + f[0] * (front + 0.03), o[1] + 0.04, o[2] + f[2] * (front + 0.03)]} quaternion={yawQuat(part.yaw)}>
+      <mesh geometry={ARROW} renderOrder={2}><meshBasicMaterial color={color} depthTest={false} side={THREE.DoubleSide} /></mesh>
+      {/* A dark rim so it reads on pale boards and water alike. */}
+      <lineSegments geometry={ARROW_EDGE} renderOrder={3}><lineBasicMaterial color="#1d2a33" depthTest={false} /></lineSegments>
+    </group>
+  );
+}
+
+/**
+ * A tooltip under a thing, never over it: hung from its base on the footprint's edge nearest the
+ * camera, so it clears big things too and follows as the player orbits.
+ */
+function Below({ part, layer = 10, clear = 0, gap = 34, children }: { part: Part; layer?: number; /** Metres more to keep clear, past a facing arrow. */ clear?: number; /** Screen pixels between the thing and its tooltip. */ gap?: number; children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  const { centre, reach } = useMemo(() => {
+    const cells = footprint(part);
+    const cx = (cells.reduce((n, c) => n + c.x, 0) / cells.length + 0.5) * CELL, cz = (cells.reduce((n, c) => n + c.z, 0) / cells.length + 0.5) * CELL;
+    const reach = Math.max(...cells.map((c) => Math.hypot((c.x + 0.5) * CELL - cx, (c.z + 0.5) * CELL - cz))) + CELL * 0.9 + clear;
+    // A goal sunk in a pit is drawn standing on the board; a shelf or track hangs its tooltip at its posts' foot.
+    const base = onPosts(part.kind) ? 0 : part.kind === 'bucket' || part.kind === 'bell' ? Math.max(0, part.y * CELL) : part.y * CELL;
+    return { centre: new THREE.Vector3(cx, base, cz), reach };
+  }, [part, clear]);
+  const toward = useMemo(() => new THREE.Vector3(), []);
+  useFrame(({ camera }) => {
+    if (!ref.current) return;
+    toward.set(camera.position.x - centre.x, 0, camera.position.z - centre.z).normalize().multiplyScalar(reach);
+    ref.current.position.copy(centre).add(toward);
+  });
+  return <group ref={ref} position={centre}><Html zIndexRange={[layer, 0]} style={{ pointerEvents: 'none', transform: `translate(-50%, ${gap}px)` }}>{children}</Html></group>;
+}
+
+/** The name a clicked part puts in the prompt, floating over it while the pointer is there. */
+function NameTag({ part, name, locked, movable }: { part: Part; name: string; locked: boolean; movable: boolean }) {
+  return (
+    <Below part={part} gap={56}>
+      <div className={`name-tag ${locked ? 'locked' : ''}`}>{locked ? '🔒 ' : ''}{name}{locked ? <span> · stays put · click to name</span> : <span> · {movable ? `drag to move${pointed(part) ? ' · click it, then R turns it' : ''} · Shift-click to name` : 'click to name it in the prompt'}</span>}</div>
+    </Below>
+  );
+}
+
+/** A surface's cells as rows of one ground height each, so it lies on hills and banks too. */
+function surfaceRows(terrain: Terrain[] | undefined, t: Terrain) {
+  const rows: { x0: number; z: number; w: number; h: number }[] = [];
+  for (let z = t.z; z < t.z + t.d; z++) {
+    for (let x = t.x; x < t.x + t.w;) {
+      const h = groundAt(terrain, x, z);
+      let x1 = x + 1;
+      while (x1 < t.x + t.w && groundAt(terrain, x1, z) === h) x1++;
+      rows.push({ x0: x, z, w: x1 - x, h });
+      x = x1;
+    }
+  }
+  return rows;
+}
+
+/**
+ * The stage floor, shaped by the level's terrain: a slab at the lowest level with the higher
+ * ground stacked on it as blocks, exactly as the physics builds it. Sunken blocks with a watery
+ * name get a water surface; flat things on the ground (a road, a carpet) are drawn in their colour.
+ */
+function Ground({ terrain, stage }: { terrain?: Terrain[]; stage: Stage }) {
+  const { theme, landscape } = useWorld();
+  const w = stage.x * CELL, d = stage.z * CELL;
+  const base = lowestGround(terrain);
+  const runs = useMemo(() => groundRuns(terrain, base, stage), [terrain, base, stage]);
+  const water = (terrain ?? []).filter((t) => t.h < 0 && t.name && WATER_WORDS.test(t.name));
+  // Flat things on the ground (a road, a carpet, a lawn): drawn in their colour on whatever ground is there.
+  const surfaces = useMemo(() => (terrain ?? []).flatMap((t) => (t.color ? surfaceRows(terrain, t).map((r) => ({ ...r, color: t.color! })) : [])), [terrain]);
+  // A wooden workbench on a stone plinth: raised ground is stone, dug ground is darker earth.
+  const tone = (h: number) => (h > 0 ? theme.raised : h === 0 ? theme.board : theme.dug);
+  const plinthTop = base * CELL - 0.02;
+  return (
+    <>
+      <mesh position={[w / 2, plinthTop - 0.3, d / 2]} receiveShadow>
+        <boxGeometry args={[w + 3, 0.6, d + 3]} />
+        <meshStandardMaterial color={theme.plinth} roughness={1} />
+      </mesh>
+      {landscape ? <Landscape3D landscape={landscape} w={w} d={d} y={plinthTop} /> : theme.scenery && <Scenery y={plinthTop} w={w} d={d} foliage={theme.foliage} />}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[w / 2, base * CELL - 0.001, d / 2]} receiveShadow>
+        <planeGeometry args={[w, d]} />
+        <meshStandardMaterial color={tone(base)} roughness={0.9} />
+      </mesh>
+      {theme.showGrid && <Grid position={[w / 2, base * CELL + 0.002, d / 2]} args={[w, d]} cellSize={CELL} cellColor={theme.grid} sectionSize={CELL * 4} sectionColor={theme.grid} fadeDistance={40} infiniteGrid={false} />}
+      {theme.showGrid && base < 0 && <Grid position={[w / 2, 0.008, d / 2]} args={[w, d]} cellSize={CELL} cellColor={theme.grid} sectionSize={CELL * 4} sectionColor={theme.grid} fadeDistance={30} infiniteGrid={false} />}
+      {runs.map((g) => {
+        const top = g.h * CELL, bottom = base * CELL - 0.02;
+        return (
+          <mesh key={`${g.x0},${g.z0},${g.w},${g.d}`} position={[(g.x0 + g.w / 2) * CELL, (top + bottom) / 2, (g.z0 + g.d / 2) * CELL]} castShadow receiveShadow>
+            <boxGeometry args={[g.w * CELL, top - bottom, g.d * CELL]} />
+            <meshStandardMaterial color={tone(g.h)} roughness={0.95} />
+          </mesh>
+        );
+      })}
+      {water.map((t, i) => (
+        <mesh key={`water-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[(t.x + t.w / 2) * CELL, -0.05, (t.z + t.d / 2) * CELL]}>
+          <planeGeometry args={[t.w * CELL, t.d * CELL]} />
+          <meshStandardMaterial color={theme.water} transparent opacity={0.7} roughness={0.25} depthWrite={false} />
+        </mesh>
+      ))}
+      {surfaces.map((r, i) => (
+        <mesh key={`surface-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[(r.x0 + r.w / 2) * CELL, r.h * CELL + 0.004, (r.z + 0.5) * CELL]} receiveShadow>
+          <planeGeometry args={[r.w * CELL, CELL]} />
+          <meshStandardMaterial color={r.color} roughness={0.95} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Wooden posts under raised parts, down to the ground or shelf beneath. Visual only: no collider, and
+ * thin enough that a marble passing under a shelf rarely clips one.
+ */
+function Supports({ parts, terrain }: { parts: Part[]; terrain?: Terrain[] }) {
+  const post = useSettings((s) => s.theme.post);
+  const posts = useMemo(() => {
+    const out: { x: number; z: number; bottom: number; top: number }[] = [];
+    for (const p of parts) {
+      if (p.kind === 'ball') continue;
+      for (const c of footprint(p)) {
+        let below = groundAt(terrain, c.x, c.z);
+        for (const q of parts) if (q.kind === 'platform' && q.id !== p.id && q.y < p.y && q.y > below && footprint(q).some((f) => f.x === c.x && f.z === c.z)) below = q.y;
+        if (p.y - below < 1) continue;
+        // Shelves and track stand on a thin deck; a slope's deck is higher at its high end. Everything else on its own base.
+        const deck = p.kind === 'platform' ? KIT.platformThickness : onPosts(p.kind) ? KIT.track.floor : 0;
+        const first = c.x === p.x && c.z === p.z, rise = p.kind === 'descent' ? (first ? 0.75 : 0.25) : p.kind === 'ascent' ? (first ? 0.25 : 0.75) : 0;
+        out.push({ x: (c.x + 0.5) * CELL, z: (c.z + 0.5) * CELL, bottom: below * CELL, top: (p.y + rise) * CELL - deck });
+      }
+    }
+    return out;
+  }, [parts, terrain]);
+  return (
+    <>
+      {posts.map((s, i) => (
+        <group key={i} position={[s.x, 0, s.z]}>
+          <mesh position={[0, (s.bottom + s.top) / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.07, s.top - s.bottom, 0.07]} />
+            <meshStandardMaterial color={post} roughness={0.85} />
+          </mesh>
+          <mesh position={[0, s.bottom + 0.03, 0]} receiveShadow>
+            <boxGeometry args={[0.15, 0.06, 0.15]} />
+            <meshStandardMaterial color="#7c7f85" roughness={1} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
+// Scenery on the apron round the board: [along the edge (fraction of it), out from it (m), size].
+const TREES: [number, number, number][] = [[0.1, 0.55, 1], [0.38, 0.7, 0.8], [0.7, 0.5, 1.15], [0.93, 0.65, 0.9]];
+const BACK_TREES: [number, number, number][] = [[0.2, 0.6, 0.95], [0.51, 0.7, 1.1], [0.82, 0.55, 0.85]];
+const ROCKS: [number, number, number][] = [[0.24, 0.45, 0.22], [0.83, 0.5, 0.16], [0.36, 0.45, 0.2], [0.29, 0.45, 0.14], [0.67, 0.45, 0.12], [0.97, 0.4, 0.18]];
+function Scenery({ y, w, d, foliage }: { y: number; w: number; d: number; foliage: string }) {
+  // Trees along the west and north (back) edges, away from the camera; rocks on every edge.
+  const trees = [...TREES.map(([a, o, k]) => [-o, a * d, k]), ...BACK_TREES.map(([a, o, k]) => [a * w, -o, k])];
+  const rocks = ROCKS.map(([a, o, r], i) => (i < 2 ? [-o, a * d, r] : i < 4 ? [a * w, -o, r] : i === 4 ? [w + o, a * d, r] : [a * w, d + o, r]));
+  return (
+    <>
+      {trees.map(([x, z, s], i) => (
+        <group key={`tree-${i}`} position={[x, y, z]} scale={s}>
+          <mesh position={[0, 0.2, 0]} castShadow><cylinderGeometry args={[0.05, 0.07, 0.4, 6]} /><meshStandardMaterial color="#5c3d24" roughness={0.9} /></mesh>
+          <mesh position={[0, 0.6, 0]} castShadow><coneGeometry args={[0.36, 0.6, 7]} /><meshStandardMaterial color={foliage} roughness={0.9} flatShading /></mesh>
+          <mesh position={[0, 0.95, 0]} castShadow><coneGeometry args={[0.26, 0.5, 7]} /><meshStandardMaterial color={foliage} roughness={0.9} flatShading /></mesh>
+        </group>
+      ))}
+      {rocks.map(([x, z, r], i) => (
+        <mesh key={`rock-${i}`} position={[x, y + r * 0.5, z]} rotation={[i, i * 2, 0]} castShadow receiveShadow>
+          <dodecahedronGeometry args={[r, 0]} /><meshStandardMaterial color="#8a8d90" roughness={1} flatShading />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+function Machine3D({ resetView }: { resetView: number }) {
+  const machine = useMachine((s) => s.machine);
+  const sketch = useMachine((s) => s.ai.sketch);
+  const run = useMachine((s) => s.run);
+  const fix = useMachine((s) => s.fix);
+  const phase = useMachine((s) => s.phase);
+  const busy = useMachine((s) => s.ai.busy);
+  const role = useMachine((s) => s.role);
+  const typing = useMachine((s) => s.draft.trim().length > 0);
+  const veiled = useMachine((s) => s.veiled);
+  const creating = useMachine((s) => s.ai.busy && s.ai.creating);
+  // The world's looks for kinds of part (dominoes as wagons): obstacles and landmarks keep their own.
+  const { landscape } = useWorld();
+  const skins = useMemo(() => new Map((landscape?.skins ?? []).map(readableSkin).filter((s): s is Skin => !!s).map((s) => [s.part as string, s])), [landscape]);
+  const appear = useMachine((s) => s.appear);
+  useMemo(() => { popUntil = Math.max(0, ...Object.values(appear)) + POP_MS; }, [appear]);
+  // Puzzle play never draws the solution: while the AI writes it, only the targets take shape; once it is
+  // proven, nothing shows until the puzzle has the connecting parts out.
+  const parts = useMemo(() => {
+    // A new level on its way: its world is up, its board fills in once the level is laid out.
+    if (creating) return [];
+    if (fix) return [...fix.puzzle.spec.parts, ...fix.placed];
+    if (veiled) return [];
+    if (run?.spec.parts) return run.spec.parts;
+    if (machine?.parts) return machine.parts;
+    return (sketch?.parts ?? []).filter((p) => TARGET_KINDS.includes(p.kind));
+  }, [fix, run, machine, sketch, veiled, creating]);
+  // The ground is scenery: it shows from the first streamed block on, veil or not.
+  const terrain = creating ? undefined : fix ? fix.puzzle.spec.terrain : run?.spec.terrain ?? machine?.terrain ?? sketch?.terrain;
+  const stage = useMemo(() => (creating ? requestedStage() ?? stageOf(undefined) : stageOf(fix ? fix.puzzle.spec : run?.spec ?? machine)), [fix, run, machine, creating]);
+  // Clicking a thing names it in the prompt box last used ("build a fence around " + click = "… train station #2"),
+  // numbered as the board stands now, the player's parts too.
+  const spec = fix ? (fix.solved ? fix.puzzle.solution : withPlacements(fix.puzzle, fix.placed)) : machine;
+  const naming = !!spec && !busy;
+  const names = useMemo(() => (naming && spec ? partNames(spec.parts) : null), [naming, spec]);
+  const locked = useMemo(() => (naming && spec ? lockedParts(spec) : null), [naming, spec]);
+  const [hover, setHover] = useState<string | null>(null);
+  const hovered = hover && names?.has(hover) ? parts.find((p) => p.id === hover) : null;
+  const bodies = useMemo(() => (run && !creating ? run.bodies : assemble(parts).bodies), [run, parts, creating]);
+  const dynamic = useMemo(() => new Map<string, THREE.Object3D>(), []);
+  const picking = fix && fix.picking !== null && !fix.solved ? fix.hand[fix.picking] : null;
+  const hints = useMemo(() => (fix?.hint && !fix.solved ? assemble(fix.puzzle.missing.filter((p) => !fix.placed.some((q) => q.id === p.id))).bodies : []), [fix]);
+  const framed = fix ? [...fix.puzzle.spec.parts, ...fix.puzzle.missing] : parts;
+  // Let go off the stage: the drag ends and the part stays in hand, to drop with a click.
+  useEffect(() => {
+    const end = () => setTimeout(() => { if (useMachine.getState().dragging) useMachine.setState({ dragging: false }); }, 0);
+    window.addEventListener('pointerup', end);
+    return () => window.removeEventListener('pointerup', end);
+  }, []);
+  // Parts the player put down (or found moved) can be picked up again by clicking them.
+  // The opening replay (the stage before any try) never blocks building; the player's own run is theirs to watch.
+  const building = !!fix && !fix.solved && (phase !== 'playing' || fix.tries === 0);
+  // The designer moves the level's own things: drag or click one to carry it, arrows nudge it, R turns it.
+  // With words in the prompt box ("remove "), a click names the thing instead.
+  const designing = building && role === 'design';
+  const liftable = building ? new Set(designing ? (typing ? [] : fix!.puzzle.spec.parts.map((p) => p.id)) : fix!.placed.map((p) => p.id)) : null;
+  const carried = designing && fix!.carrying ? fix!.puzzle.spec.parts.find((p) => p.id === fix!.selected) : undefined;
+  const grab = (id: string) => {
+    const s = useMachine.getState();
+    if (designing) s.grabLevelPart(id); else s.pickPlaced(id);
+    useMachine.setState({ dragging: true });
+    sfx.place();
+  };
+  return (
+    <>
+      <MachineCamera parts={framed} level={fix?.puzzle.missing ?? machine ?? sketch ?? framed} resetView={resetView} stage={stage} />
+      <Ground terrain={terrain} stage={stage} />
+      <Supports parts={parts} terrain={terrain} />
+      {run && !creating && <Playback key={run.stats.ms + run.frames.length} run={run} dynamic={dynamic} />}
+      {bodies.map((b) => (
+        <Pop key={b.id} at={appear[b.part]} pivot={partOrigin(parts.find((p) => p.id === b.part) ?? { id: '', kind: 'wall', x: 0, y: 0, z: 0, yaw: 0 })} flash={b.id === b.part ? POP_FLASH[b.kind] ?? '#ffffff' : undefined}>
+        <BodyMesh
+          key={b.id}
+          body={b}
+          tint={parts.find(p => p.id === b.part)?.color}
+          skin={b.prop ? undefined : skins.get(b.kind)}
+          look={!b.spin && (b.prop || b.kind === 'bucket' || b.kind === 'bell') ? libraryLook(parts.find((p) => p.id === b.part), parts) : undefined}
+          meshRef={b.dynamic || b.spin ? (m) => { if (m) dynamic.set(b.id, m); else dynamic.delete(b.id); } : undefined}
+          glow={(!designing && !!liftable?.has(b.part)) || hover === b.part || (designing && fix!.selected === b.part)}
+          cursor={liftable?.has(b.part) ? 'grab' : 'copy'}
+          onHover={names?.has(b.part) ? (over) => setHover(over ? b.part : (h) => (h === b.part ? null : h)) : undefined}
+          onGrab={liftable?.has(b.part) ? () => grab(b.part) : undefined}
+          onClick={names?.has(b.part) ? () => { useMachine.getState().insertPart(b.part); sfx.place(); } : undefined}
+        />
+        </Pop>
+      ))}
+      {hovered && names && <NameTag part={hovered} name={names.get(hovered.id)!} locked={!!locked?.has(hovered.id)} movable={!!liftable?.has(hovered.id)} />}
+      {spec && phase !== 'playing' && parts.filter((p) => p.kind === 'ball' || spec.goal.some((g) => g.part === p.id && g.type !== 'touch')).map((p) => {
+        const goal = p.kind !== 'ball';
+        return <Below key={`label-${p.id}`} part={p} layer={5}><span className={`scene-label ${goal ? 'target' : 'start'}`}>{goal ? 'Goal · ' : 'Start · '}{p.label ?? p.kind}</span></Below>;
+      })}
+      {/* Which way a part points shows only while it is being edited: in hand (see Placement), or selected in the designer. */}
+      {designing && parts.filter((p) => p.id === fix!.selected && pointed(p) && !carried).map((p) => <FacingArrow key={`arrow-${p.id}`} part={p} color="#ff7a1a" />)}
+      {hints.map((b) => <BodyMesh key={`hint-${b.id}`} body={b} ghost="#7dffb0" />)}
+      {carried && <Placement part={carried} parts={parts} lift={carried.y} terrain={terrain} stage={stage} />}
+      {picking && building && !designing && <Placement part={picking} parts={parts} lift={fix!.lift} terrain={terrain} stage={stage} />}
+      <Decor parts={parts} appear={appear} />
+      <PartLights parts={parts} />
+      <Confetti />
+      <Flashes />
+    </>
+  );
+}
+
+/** Dev only: lets headless browser checks turn a world point into a screen point (drag tests). */
+function DevHook() {
+  const { camera, size, gl, scene } = useThree();
+  useEffect(() => {
+    (window as unknown as { __project: (p: [number, number, number]) => [number, number] }).__project = (p) => {
+      const v = new THREE.Vector3(...p).project(camera);
+      return [((v.x + 1) / 2) * size.width, ((1 - v.y) / 2) * size.height];
+    };
+    Object.assign(window, { __game: useMachine, __centre: partCentre, __scene: scene, __THREE: THREE });
+    (window as unknown as { __sceneStats: () => unknown }).__sceneStats = () => {
+      const models: string[] = [];
+      scene.traverse(o => { if (o.name.startsWith('/models/') || o.name.startsWith('/api/looks/')) models.push(o.name); });
+      return { frame: gl.info.render.frame, calls: gl.info.render.calls, triangles: gl.info.render.triangles, textures: gl.info.memory.textures, dpr: gl.getPixelRatio(), models };
+    };
+  }, [camera, size, gl, scene]);
+  return null;
+}
+
+/** Demand rendering at rest; animation is capped at 30 fps even on high-refresh displays. */
+function AnimationFrames() {
+  const invalidate = useThree(s => s.invalidate);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useFrame(() => {
+    if (!timer.current && !document.hidden && (useMachine.getState().phase === 'playing' || performance.now() < popUntil || worldMotion.active || particles.length || flashes.length)) {
+      timer.current = setTimeout(() => { timer.current = null; invalidate(); }, 1000 / 30);
+    }
+  });
+  useEffect(() => {
+    const visible = () => { if (!document.hidden) invalidate(); };
+    document.addEventListener('visibilitychange', visible);
+    return () => { if (timer.current) clearTimeout(timer.current); document.removeEventListener('visibilitychange', visible); };
+  }, [invalidate]);
+  return null;
+}
+
+/** Things on the board that give light: their names, or a glowing shape in what they are built from. */
+const LIGHT_WORDS = /\b(torch|lamp|lantern|candle|fire|campfire|bonfire|beacon|lighthouse|lava|neon|light|glow|star|moon|sun)\b/i;
+const PART_LIGHTS = 4;
+
+/** At night, a warm light at each light-giving thing on the board (the first few); always this many lights, so nothing recompiles. */
+function PartLights({ parts }: { parts: Part[] }) {
+  const night = isNightSky(useWorld().theme.sky);
+  const lights = useMemo(() => parts.flatMap((p) => {
+    const glow = (p.build ?? []).filter((s) => s.glow);
+    if (!glow.length && !(p.label && LIGHT_WORDS.test(p.label))) return [];
+    const c = propCentre(p);
+    // Above the top of the glowing shape, or of the whole thing when only its name says it shines.
+    const top = Math.max(1.4, ...(glow.length ? glow : p.build ?? []).map((s) => s.at[1] + s.size[1]));
+    const color = glow[0]?.color ?? '#ffb060';
+    return [{ at: [c[0], c[1] + top * CELL + 0.1, c[2]] as [number, number, number], color: '#' + new THREE.Color(color).lerp(new THREE.Color('#ffb060'), 0.5).getHexString() }];
+  }).slice(0, PART_LIGHTS), [parts]);
+  return <>{Array.from({ length: PART_LIGHTS }, (_, i) => <pointLight key={i} position={lights[i]?.at ?? [0, -50, 0]} color={lights[i]?.color ?? '#000000'} intensity={night && lights[i] ? 4 : 0} distance={5} decay={2} />)}</>;
+}
+
+export function MachineScene({ resetView = 0 }: { resetView?: number }) {
+  const { sky } = useWorld().theme;
+  // Night: the sun becomes a low blue moon, so the lamps carry the scene.
+  const night = isNightSky(sky);
+  return (
+    <Canvas className="scene" frameloop="demand" dpr={[1, 1.25]} shadows camera={{ fov: 45, position: [8, 6, 12], near: 0.05, far: 200 }} gl={{ antialias: true, powerPreference: 'low-power' }}>
+      <color attach="background" args={[sky]} />
+      <fog attach="fog" args={[sky, 28, 60]} />
+      <hemisphereLight args={night ? ['#8a9ed4', '#232a3d', 0.85] : ['#fff4dd', '#718fa0', 2.2]} />
+      <directionalLight position={[6, 12, 4]} intensity={night ? 0.7 : 2.5} color={night ? '#a9bcff' : '#ffffff'} castShadow shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12} shadow-camera-top={12} shadow-camera-bottom={-12} shadow-bias={-0.0005} />
+      <Machine3D resetView={resetView} />
+      <AnimationFrames />
+      {import.meta.env.DEV && <DevHook />}
+    </Canvas>
+  );
+}
+
+export const BALL_RADIUS = KIT.ballRadius;

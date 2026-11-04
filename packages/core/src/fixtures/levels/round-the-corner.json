@@ -1,0 +1,115 @@
+{
+  "title": "Castle Wall Bell Run",
+  "caption": "Roll down from the tower, get fired over the moat, and topple the dominoes to ring the bell hidden round the corner of the castle wall.",
+  "terrain": [
+    {
+      "name": "moat",
+      "x": 0,
+      "z": 7,
+      "w": 24,
+      "d": 2,
+      "h": -1
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 5,
+      "z": 4,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 4,
+      "z": 4,
+      "yaw": 0
+    },
+    {
+      "id": "shelf",
+      "kind": "platform",
+      "x": 2,
+      "y": 4,
+      "z": 4,
+      "yaw": 0,
+      "length": 6
+    },
+    {
+      "id": "castle",
+      "kind": "wall",
+      "x": 13,
+      "y": 0,
+      "z": 4,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "tower",
+      "kind": "wall",
+      "x": 7,
+      "y": 0,
+      "z": 9,
+      "yaw": 90,
+      "fixed": true
+    },
+    {
+      "id": "cannon",
+      "kind": "cannon",
+      "x": 10,
+      "y": 0,
+      "z": 4,
+      "yaw": 90
+    },
+    {
+      "id": "row",
+      "kind": "dominoes",
+      "x": 10,
+      "y": 0,
+      "z": 11,
+      "yaw": 90,
+      "length": 5
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 10,
+      "y": 0,
+      "z": 14,
+      "yaw": 0
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "cannon"
+    },
+    {
+      "type": "topple",
+      "part": "row"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "fan"
+    },
+    {
+      "kind": "platform",
+      "length": 3
+    }
+  ],
+  "level": {
+    "emoji": "↪️",
+    "name": "Round the corner",
+    "mission": "Ring the bell that hides round the corner of the castle wall",
+    "order": 8
+  }
+}

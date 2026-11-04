@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A tribute to Rube Goldberg</title>
+<meta name="description" content="Prompt Goldberg's tribute to Rube Goldberg (1883–1970), the engineer who drew the most complicated ways to do the simplest things.">
+<style>
+  :root { --bg: #102225; --panel: #18302f; --line: #335457; --text: #e6efe9; --muted: #9fbab3; --gold: #f0b33e; --cream: #f3e3bf; --coral: #e2603f; --mint: #8fd18a; --sky: #6fc3df; --paper: #f3e3bf; --ink: #1d2a2e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.65 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  a { color: var(--gold); }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; flex-wrap: wrap; }
+  .top a { text-decoration: none; }
+  .top .play { padding: 7px 14px; border-radius: 10px; background: var(--gold); color: var(--ink); font-weight: 700; }
+  .eyebrow { margin: 40px 0 6px; color: var(--gold); font-size: 13px; font-weight: 700; letter-spacing: .18em; }
+  h1 { margin: 0 0 10px; font-size: 52px; line-height: 1.05; color: var(--cream); letter-spacing: -1px; }
+  .lede { font-size: 21px; color: var(--cream); margin: 0 0 28px; }
+  h2 { font-size: 28px; color: var(--cream); margin: 56px 0 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .poster { background: var(--paper); color: var(--ink); border: 4px solid var(--ink); border-radius: 8px; box-shadow: 6px 6px 0 #0007; overflow: hidden; }
+  .poster header { background: var(--coral); color: #fff4dc; padding: 10px 16px; border-bottom: 4px solid var(--ink); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .poster header b { font-size: 18px; letter-spacing: .06em; text-transform: uppercase; }
+  .poster header span { font-size: 13px; opacity: .9; }
+  .poster svg { display: block; width: 100%; height: auto; background: #f6ead0; border-bottom: 4px solid var(--ink); }
+  .poster ol { margin: 0; padding: 14px 18px 16px 40px; columns: 2; column-gap: 34px; font-size: 15px; line-height: 1.5; }
+  .poster li { break-inside: avoid; margin-bottom: 6px; }
+  .poster li::marker { font-weight: 800; color: var(--coral); }
+  .poster .replay { margin: 0 16px 14px; font: 600 13px/1 "Segoe UI", sans-serif; padding: 8px 12px; border-radius: 8px; border: 2px solid var(--ink); background: #fff; cursor: pointer; }
+  .timeline { list-style: none; padding: 0; margin: 18px 0; border-left: 3px solid var(--line); }
+  .timeline li { position: relative; padding: 0 0 16px 22px; }
+  .timeline li::before { content: ''; position: absolute; left: -9px; top: 6px; width: 14px; height: 14px; border-radius: 50%; background: var(--gold); border: 3px solid var(--bg); }
+  .timeline b { color: var(--gold); margin-right: 8px; }
+  blockquote { margin: 20px 0; padding: 14px 18px; border-left: 4px solid var(--gold); background: var(--panel); border-radius: 0 12px 12px 0; font-size: 19px; color: var(--cream); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; color: var(--cream); font-size: 18px; }
+  .card p { margin: 0; color: var(--text); font-size: 15.5px; }
+  .note { margin-top: 56px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); font-size: 14px; }
+  @media (max-width: 640px) { h1 { font-size: 38px; } .poster ol { columns: 1; } }
+</style>
+<script src="/shell.js"></script>
+</head>
+<body>
+<main>
+<div class="top"><a href="/">← Prompt Goldberg</a><span><a href="/docs">Docs &amp; API</a> &nbsp; <a class="play" href="/">▶ Play</a></span></div>
+
+<p class="eyebrow">A TRIBUTE</p>
+<h1>Rube Goldberg<br><span style="color:var(--gold)">1883–1970</span></h1>
+<p class="lede">The engineer who drew the most complicated ways to do the simplest things, and gave the world a name for them. This game carries his name in its own, as thanks.</p>
+
+<div class="poster" role="figure" aria-labelledby="inv-title">
+  <header><b id="inv-title">The Self-Ringing Dinner Bell</b><span>an invention in his spirit, drawn for this page</span></header>
+  <svg id="machine" viewBox="0 0 900 360" role="img" aria-label="A chain reaction: a hungry cat pulls a string, a shelf tips, a marble rolls down a ramp, knocks over dominoes, the last one tips a cup into a funnel, the water fills a bucket that pulls a rope and rings a bell.">
+    <g font-family="Segoe UI, system-ui, sans-serif" font-weight="800" font-size="20" fill="#e2603f">
+      <!-- A: cat on the left pulling a string -->
+      <g id="cat" transform="translate(60,250)">
+        <ellipse cx="0" cy="30" rx="34" ry="24" fill="#1d2a2e"/><circle cx="26" cy="6" r="18" fill="#1d2a2e"/>
+        <path d="M14 -8 L18 -24 L26 -10 Z M30 -10 L38 -24 L40 -6 Z" fill="#1d2a2e"/>
+        <circle cx="32" cy="4" r="3" fill="#f0b33e"/><path d="M-30 34 Q-56 10 -40 -6" stroke="#1d2a2e" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <text x="-26" y="-28">A</text>
+      </g>
+      <!-- B: a shelf hinged at its left end, its right end resting on a peg the string pulls away -->
+      <g id="shelf"><rect x="100" y="112" width="120" height="10" rx="3" fill="#a0612b"/></g>
+      <circle cx="104" cy="117" r="5" fill="#1d2a2e"/>
+      <rect id="peg" x="208" y="122" width="14" height="10" rx="2" fill="#1d2a2e"/>
+      <path id="string" d="M86 252 L208 127" stroke="#7a5a2c" stroke-width="3" fill="none"/>
+      <text x="128" y="100">B</text>
+      <!-- C: the ramp -->
+      <line x1="225" y1="140" x2="420" y2="250" stroke="#c98a4b" stroke-width="12" stroke-linecap="round"/>
+      <line x1="420" y1="250" x2="640" y2="250" stroke="#1d2a2e" stroke-width="4"/>
+      <text x="320" y="176">C</text>
+      <!-- D: dominoes -->
+      <g id="dominoes"></g>
+      <text x="500" y="196">D</text>
+      <!-- E: a cup on a table -->
+      <rect x="640" y="250" width="70" height="8" fill="#1d2a2e"/><rect x="660" y="258" width="8" height="70" fill="#1d2a2e"/>
+      <g id="cup"><path d="M648 250 L652 222 L672 222 L676 250 Z" fill="#6fc3df" stroke="#1d2a2e" stroke-width="3"/></g>
+      <text x="645" y="205">E</text>
+      <!-- F: water into a bucket on a rope over a pulley -->
+      <g id="drops"></g>
+      <circle cx="780" cy="40" r="12" fill="none" stroke="#1d2a2e" stroke-width="4"/>
+      <path id="rope" d="M768 40 L768 268 M792 40 L792 100" stroke="#7a5a2c" stroke-width="3" fill="none"/>
+      <g id="bucket"><path d="M748 268 L788 268 L782 310 L754 310 Z" fill="#8fd18a" stroke="#1d2a2e" stroke-width="3"/><rect id="water" x="756" y="306" width="24" height="0" fill="#6fc3df"/></g>
+      <text x="720" y="300">F</text>
+      <!-- G: the bell -->
+      <g id="bell" transform="translate(792,112)"><path d="M-24 0 Q-24 -36 0 -38 Q24 -36 24 0 Z" fill="#d9a441" stroke="#1d2a2e" stroke-width="3"/><circle cx="0" cy="4" r="5" fill="#1d2a2e"/></g>
+      <g id="rings" fill="none" stroke="#e2603f" stroke-width="3"></g>
+      <text x="826" y="96">G</text>
+      <circle id="ball" r="13" fill="#e2603f" stroke="#1d2a2e" stroke-width="3"/>
+    </g>
+  </svg>
+  <ol type="A">
+    <li>A hungry cat pulls the string tied to its supper dish,</li>
+    <li>which tips the shelf and lets the marble go.</li>
+    <li>The marble rolls down the ramp</li>
+    <li>and knocks over a row of dominoes.</li>
+    <li>The last domino tips a cup of water</li>
+    <li>into a bucket, which gets heavy, sinks and pulls the rope</li>
+    <li>that rings the dinner bell. The cat, of course, was already in the kitchen.</li>
+  </ol>
+  <button class="replay" type="button" id="replay">↻ Run it again</button>
+</div>
+
+<h2>The engineer who drew instead</h2>
+<ul class="timeline">
+  <li><b>1883</b>Reuben Garrett Lucius Goldberg is born on the Fourth of July in San Francisco. His father wants him to be an engineer.</li>
+  <li><b>1904</b>He graduates in engineering from the University of California, Berkeley, and goes to work mapping water mains and sewer pipes for the city of San Francisco.</li>
+  <li><b>Six months later</b>He quits to draw sports cartoons for the San Francisco Chronicle, then the Bulletin.</li>
+  <li><b>1907</b>He moves to New York to cartoon for the Evening Mail, and becomes one of the best-known cartoonists in America.</li>
+  <li><b>1912 on</b>His “invention” cartoons begin: enormous, deadpan contraptions that perform a trivial task in a dozen steps, each lettered and explained.</li>
+  <li><b>1929–1931</b>The inventions of Professor Lucifer Gorgonzola Butts run in Collier's Weekly. The professor's machines come with a straight face and a captioned list.</li>
+  <li><b>1946</b>He helps found the National Cartoonists Society and becomes its first president. Its top prize, the Reuben, is named after him; he wins it in 1967.</li>
+  <li><b>1948</b>He wins the Pulitzer Prize for editorial cartooning, for “Peace Today”, a warning about the atomic age.</li>
+  <li><b>1949</b>Students at Purdue University hold the first Rube Goldberg Machine Contest. Revived in 1983, it still runs today.</li>
+  <li><b>1966</b>His name enters the dictionary as an adjective, for anything fantastically complicated.</li>
+  <li><b>1970</b>He dies in New York on December 7, aged 87. In 1995 his Self-Operating Napkin appears on a U.S. postage stamp.</li>
+</ul>
+
+<h2>Why his machines still make us grin</h2>
+<div class="cards">
+  <div class="card"><h3>A joke about engineering, by an engineer</h3><p>He knew how machines worked, so the absurdity is precise: every step really would cause the next. The gag is the gap between all that ingenuity and the tiny job it does.</p></div>
+  <div class="card"><h3>Cause and effect you can follow</h3><p>Each step is lettered and explained. You trace the chain with your finger, and the last step lands like a punchline.</p></div>
+  <div class="card"><h3>A mirror for modern life</h3><p>He drew them as satire: we build complicated ways to do simple things. A hundred years on, that has not stopped being funny.</p></div>
+  <div class="card"><h3>An invitation to build</h3><p>Classrooms, contests, music videos and kitchen tables are full of real chain reactions built in his name. People don't only look at his machines; they want to make one.</p></div>
+</div>
+
+<h2>From his drawings to Prompt Goldberg</h2>
+<p>Prompt Goldberg is our small way of saying thank you. You describe a place in one sentence, and the AI sets up a stage where a ball has to reach a goal. Then a person builds the chain: ramps, fans, cannons, dominoes, each step causing the next, run with real physics. The fun is his fun: watching a plan you made go off one step at a time, and laughing when it almost works.</p>
+<blockquote>The best chain reactions are the ones you build yourself, and watch go wrong, and fix, and run again.</blockquote>
+<p>To learn more about the man and his work, visit the official <a href="https://www.rubegoldberg.org" rel="noopener">Rube Goldberg website</a>, which also runs the Rube Goldberg Machine Contest.</p>
+
+<p class="note">Prompt Goldberg is an independent tribute made for the Victoria VR AI Builder Hackathon 2026. It is not affiliated with, endorsed by or sponsored by Rube Goldberg Inc. or his estate. “Rube Goldberg” is a trademark of Rube Goldberg Inc. The illustration and all text on this page are our own; none of his cartoons are reproduced here. Sources: Wikipedia and the Encyclopedia.com biography of Rube Goldberg.</p>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const ease = (p) => (p = clamp(p), p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+  const DOM = [470, 510, 550, 590];
+  $('dominoes').innerHTML = DOM.map((x, i) => `<rect id="d${i}" x="${x - 6}" y="200" width="12" height="50" rx="2" fill="${['#e2603f', '#f0b33e', '#8fd18a', '#6fc3df'][i]}" stroke="#1d2a2e" stroke-width="2"/>`).join('');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let t0 = performance.now();
+  function frame(now) {
+    const t = still ? 9 : (now - t0) / 1000;
+    // A: the cat pulls (0–0.6 s); B: the shelf tips (0.5–1 s).
+    $('cat').setAttribute('transform', `translate(${60 - 10 * ease(t / .6)},250)`);
+    const pull = ease(t / .6);
+    $('peg').setAttribute('x', 208 - 40 * pull); $('peg').setAttribute('y', 122 + 12 * pull);
+    $('string').setAttribute('d', `M${86 - 10 * pull} 252 L${208 - 40 * pull} ${127 + 12 * pull}`);
+    const tip = ease((t - .5) / .4);
+    $('shelf').setAttribute('transform', `rotate(${14 * tip} 104 117)`);
+    // C: the marble falls off the shelf, rolls the ramp, runs to the dominoes.
+    let x, y;
+    if (t < .9) { const a = 14 * tip * Math.PI / 180; x = 104 + 80 * Math.cos(a) + 13 * Math.sin(a); y = 117 + 80 * Math.sin(a) - 18 * Math.cos(a); }
+    else if (t < 1.3) { const p = ease((t - .9) / .4); x = 186 + 40 * p; y = 118 + 10 * p; }
+    else if (t < 2.4) { const p = ease((t - 1.3) / 1.1); x = 226 + 194 * p; y = 128 + 109 * p; }
+    else { const p = clamp((t - 2.4) / .4); x = 420 + (DOM[0] - 30 - 420) * p; y = 237; }
+    $('ball').setAttribute('cx', x); $('ball').setAttribute('cy', y);
+    // D: the dominoes fall in turn; E: the last tips the cup.
+    DOM.forEach((d, i) => $('d' + i).setAttribute('transform', `rotate(${80 * ease((t - 2.8 - i * .2) / .3)} ${d + 6} 250)`));
+    const cup = ease((t - 3.7) / .4);
+    $('cup').setAttribute('transform', `rotate(${100 * cup} 676 250)`);
+    // F: water falls into the bucket, which sinks and pulls the rope.
+    const pour = clamp((t - 4.0) / .9);
+    $('drops').innerHTML = pour > 0 && pour < 1 ? [0, .33, .66].map((o) => { const q = (pour * 3 + o) % 1; return `<circle cx="${700 + q * 60}" cy="${232 + q * q * 40}" r="4" fill="#6fc3df"/>`; }).join('') : '';
+    $('water').setAttribute('height', 26 * pour); $('water').setAttribute('y', 306 - 26 * pour);
+    const sink = 18 * ease((t - 4.7) / .5);
+    $('bucket').setAttribute('transform', `translate(0,${sink})`);
+    $('rope').setAttribute('d', `M768 40 L768 ${268 + sink} M792 40 L792 ${100 - sink}`);
+    // G: the bell rings.
+    const r = t - 5.2;
+    $('bell').setAttribute('transform', `translate(792,${112 - sink}) rotate(${r > 0 ? Math.sin(r * 30) * 16 * Math.exp(-r * 2) : 0} 0 -38)`);
+    $('rings').innerHTML = r > 0 ? [0, .25, .5].map((d) => { const q = clamp((r - d) / 1); return q > 0 && q < 1 ? `<circle cx="792" cy="${92 - sink}" r="${30 + 70 * q}" opacity="${1 - q}"/>` : ''; }).join('') : '';
+    if (!still && t < 7.5) requestAnimationFrame(frame);
+  }
+  $('replay').addEventListener('click', () => { t0 = performance.now(); requestAnimationFrame(frame); });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

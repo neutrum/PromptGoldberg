@@ -5,3 +5,8 @@ dist
 cache/
 data/
 .claude/
+packages/machine/scratch/
+docs/*.zip
+
+# Organiser-style reference brief and concept art, kept locally only
+docs/VictoriaVR_Goldberg_Hackathon_Reference_FIXED/

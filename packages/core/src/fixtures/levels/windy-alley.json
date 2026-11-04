@@ -1,0 +1,86 @@
+{
+  "title": "Windy Alley Bell",
+  "caption": "Let the rolling ball hit the fence, let the fan blow it round the corner, and ring the bell.",
+  "terrain": [
+    {
+      "name": "alley",
+      "x": 1,
+      "z": 4,
+      "w": 5,
+      "d": 3,
+      "h": 3
+    }
+  ],
+  "parts": [
+    {
+      "id": "ball",
+      "kind": "ball",
+      "x": 2,
+      "y": 4,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "ramp",
+      "kind": "ramp",
+      "x": 2,
+      "y": 3,
+      "z": 5,
+      "yaw": 0
+    },
+    {
+      "id": "fan",
+      "kind": "fan",
+      "x": 10,
+      "y": 0,
+      "z": 4,
+      "yaw": 90
+    },
+    {
+      "id": "fence",
+      "kind": "wall",
+      "x": 11,
+      "y": 0,
+      "z": 5,
+      "yaw": 0,
+      "fixed": true
+    },
+    {
+      "id": "bell",
+      "kind": "bell",
+      "x": 12,
+      "y": 0,
+      "z": 10,
+      "yaw": 0,
+      "dx": 0.4,
+      "dz": 0.4
+    }
+  ],
+  "goal": [
+    {
+      "type": "touch",
+      "part": "fan"
+    },
+    {
+      "type": "bell",
+      "part": "bell",
+      "times": 1
+    }
+  ],
+  "duration": 15,
+  "spares": [
+    {
+      "kind": "ramp"
+    },
+    {
+      "kind": "platform",
+      "length": 3
+    }
+  ],
+  "level": {
+    "emoji": "🌬️",
+    "name": "Windy Alley",
+    "mission": "A windy alley: the ball hits the fence and a fan blows it round the corner to ring the bell",
+    "order": 3
+  }
+}

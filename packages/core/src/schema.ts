@@ -1,0 +1,242 @@
+import { z } from 'zod';
+import { collides, isGadget, Landscape, LandmarkShape, ObstacleProp } from './landscape';
+
+/** Side of one grid cell in metres. Parts snap to cells; the optimizer nudges within them. */
+export const CELL = 0.5;
+/** The default stage in cells (x and z are horizontal, y is up). A machine may carry its own `stage`. */
+export const GRID = { x: 24, y: 16, z: 24 } as const;
+/** Smallest and largest stage side a machine may choose, in cells. */
+export const STAGE_MIN = 12;
+export const STAGE_MAX = 32;
+export interface Stage { x: number; z: number }
+export const Stage = z.object({
+  x: z.number().int().min(STAGE_MIN).max(STAGE_MAX).describe('cells along x'),
+  z: z.number().int().min(STAGE_MIN).max(STAGE_MAX).describe('cells along z'),
+});
+/** The stage a machine stands on (the default when it names none). */
+export function stageOf(spec?: { stage?: Stage } | null): Stage {
+  return spec?.stage ?? { x: GRID.x, z: GRID.z };
+}
+export const inStage = (stage: Stage, x: number, z: number) => x >= 0 && x < stage.x && z >= 0 && z < stage.z;
+/** How far the ground can be dug below the floor and raised above it, in cells. */
+export const TERRAIN_MIN = -2;
+export const TERRAIN_MAX = 3;
+
+/** A rectangle of ground at another height: a ditch or river (negative), a bank or hill (positive). */
+export const Terrain = z.object({
+  name: z.string().optional().describe('what it is, in the player\'s words: "river", "moat", "pit", "hill", "bank"'),
+  x: z.number().int().min(0).max(STAGE_MAX - 1).describe('west-most cell'),
+  z: z.number().int().min(0).max(STAGE_MAX - 1).describe('north-most cell'),
+  w: z.number().int().min(1).max(STAGE_MAX).describe('cells along x'),
+  d: z.number().int().min(1).max(STAGE_MAX).describe('cells along z'),
+  h: z.number().int().min(TERRAIN_MIN).max(TERRAIN_MAX).describe('ground height in cells: negative digs a ditch, river or pit below the floor; positive raises a bank or hill'),
+  color: z.string().regex(/^#?[0-9a-f]{6}$/i).transform((c) => (c.startsWith('#') ? c : `#${c}`)).optional()
+    .describe('makes it a flat surface drawn on the ground in this colour (a road, red carpet, lawn, beach, rug, parking lot): looks only, it never shapes the ground and h is ignored; leave it out for a hill or a ditch'),
+});
+export type Terrain = z.infer<typeof Terrain>;
+
+export const PartKind = z.enum([
+  'ball', 'ramp', 'platform', 'wall', 'dominoes', 'seesaw', 'fan', 'trampoline', 'cannon', 'bucket', 'bell',
+  // Coaster track: one flat cell, a quarter turn, and two cells down or (chain lift) up.
+  'track', 'curve', 'descent', 'ascent',
+]);
+export type PartKind = z.infer<typeof PartKind>;
+
+
+/** Which way a part faces, degrees clockwise seen from above: 0 = +x, 90 = +z, 180 = -x, 270 = -z. */
+export const Yaw = z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]);
+/** Only models this server keeps: a shared level never makes its players fetch from elsewhere. */
+export const MeshUrl = z.string().regex(/^\/api\/meshes\/[a-f0-9]{32}\.glb$/);
+/** A part's id in the workbench library (12 hex characters). */
+export const LibraryId = z.string().regex(/^[a-f0-9]{12}$/);
+export type Yaw = z.infer<typeof Yaw>;
+
+export const Part = z.object({
+  id: z.string().regex(/^[a-z0-9_-]+$/i).describe('short unique id'),
+  kind: PartKind,
+  label: z.string().max(40).optional().describe('player-facing name, e.g. pizza, oven, castle wall; the kind still defines its physics'),
+  x: z.number().int().min(0).max(STAGE_MAX - 1).describe('cell along x (0 = west edge)'),
+  y: z.number().int().min(TERRAIN_MIN).max(GRID.y - 1).describe('height of the part\'s base in cells (0 = flat floor; on raised ground the ground\'s h, in a ditch its negative h)'),
+  z: z.number().int().min(0).max(STAGE_MAX - 1).describe('cell along z (0 = north edge)'),
+  yaw: Yaw.default(0).describe('facing: 0 = +x, 90 = +z, 180 = -x, 270 = -z. A ramp slopes DOWN toward its facing; fans blow and cannons fire toward it; dominoes and platforms extend toward it'),
+  length: z.number().int().min(1).max(8).optional().describe('platforms: cells long (default 3); dominoes: how many (default 5)'),
+  color: z.string().optional().describe('hex colour'),
+  /** Scenery: part of the level (an obstacle wall, a ledge), never handed to the player. Walls and platforms only. */
+  fixed: z.boolean().optional().describe('scenery: a wall or shelf that is part of the level and stays on the stage; the player has to get past or use it'),
+  prop: ObstacleProp.optional().describe('fixed walls only: stand an obstacle in the way instead of a wall: rock, crate, tree, cactus, stump, crystal, column, nut, bolt, tape, spool, or a hammer, wrench, screwdriver or pencil lying along its facing (2, 2, 2 and 3 cells)'),
+  /** A composed landmark's shapes (prop "landmark" only), in cells round its middle. */
+  build: z.array(LandmarkShape).max(14).optional(),
+  /** A workbench part's 3D look, kept on this server; its shapes stay what the ball meets. */
+  model: MeshUrl.optional(),
+  /** A workbench part's id in this server's workbench library, so a fix in the test lab can reach the shared part. */
+  library: LibraryId.optional(),
+  /** Fine offsets within the cell, set by the optimizer (fractions of a cell). */
+  dx: z.number().min(-0.5).max(0.5).optional(),
+  dz: z.number().min(-0.5).max(0.5).optional(),
+});
+export type Part = z.infer<typeof Part>;
+
+/** An extra part for the player's bin that the designer's own route does not use: a red herring, or another way. */
+export const Spare = z.object({
+  kind: PartKind.exclude(['ball']),
+  length: z.number().int().min(1).max(8).optional().describe('platforms: cells long; dominoes: how many'),
+  /** A part made on the workbench (a wall only): its name and shapes. */
+  label: z.string().max(40).optional(),
+  build: z.array(LandmarkShape).max(14).optional(),
+  model: MeshUrl.optional(),
+  library: LibraryId.optional(),
+});
+export type Spare = z.infer<typeof Spare>;
+
+export const BucketGoal = z.object({ type: z.literal('bucket'), part: z.string().describe('id of the bucket the ball must land in') });
+export const BellGoal = z.object({
+  type: z.literal('bell'), part: z.string().describe('id of the bell'),
+  times: z.number().int().min(1).max(3).default(1).describe('how many rings'),
+});
+export const ToppleGoal = z.object({ type: z.literal('topple'), part: z.string().describe('id of a dominoes row that must fall over completely') });
+export const TouchGoal = z.object({ type: z.literal('touch'), part: z.string().describe('id of any part the ball must touch or pass through (fan, cannon, trampoline, seesaw, ramp)') });
+
+export const MachineGoal = z.discriminatedUnion('type', [BucketGoal, BellGoal, ToppleGoal, TouchGoal]);
+export type MachineGoal = z.infer<typeof MachineGoal>;
+
+/** A challenge on top of the goal: build it with few parts, or make the run last. */
+export const Rules = z.object({
+  maxParts: z.number().int().min(1).max(8).optional().describe('the player may place at most this many parts'),
+  minSeconds: z.number().min(1).max(14).optional().describe('the last goal step must happen this many seconds in or later'),
+});
+export type Rules = z.infer<typeof Rules>;
+
+export const MachineSpec = z.object({
+  title: z.string(),
+  caption: z.string().optional().describe('one sentence for players: what should happen, no numbers'),
+  closest: z.string().optional().describe('only when the request could not be built as asked: one honest sentence for the player saying what was built instead'),
+  stage: Stage.optional().describe('stage size in cells; leave out for the default 24 by 24'),
+  landscape: Landscape.optional().describe('looks only: the world around the board (forests, hills, mountains, lakes) when the request describes a place; never changes how the machine runs'),
+  terrain: z.array(Terrain).max(10).optional().describe('the shape of the ground: ditches, rivers, pits, banks and hills the route has to deal with; leave out for flat ground'),
+  parts: z.array(Part).min(1).max(64),
+  /** A level laid out with no solution: how many parts the AI's idea of a way through would use. */
+  par: z.number().int().min(1).max(12).optional(),
+  spares: z.array(Spare).max(8).optional().describe('2 or 3 extra parts for the player\'s bin that your route does not need, so there is more than one way and the player has to think'),
+  goal: z.array(MachineGoal).min(1).max(4).describe('ordered events; the machine works when all happen in order'),
+  duration: z.number().min(4).max(30).default(15).describe('seconds to simulate'),
+  rules: Rules.optional().describe('challenge rules, set by the game, not the designer'),
+});
+export type MachineSpec = z.infer<typeof MachineSpec>;
+export type MachineSpecInput = z.input<typeof MachineSpec>;
+
+export interface SpecIssue {
+  path: string;
+  message: string;
+}
+
+export interface CheckOptions {
+  /** Accept goals that name parts which are not there (a fix-it puzzle with its part pulled out). */
+  allowMissingGoalParts?: boolean;
+}
+
+/** What zod cannot check: ids, references, exactly one ball. */
+export function checkMachine(spec: MachineSpec, opts: CheckOptions = {}): SpecIssue[] {
+  const issues: SpecIssue[] = [];
+  const ids = new Set<string>();
+  spec.parts.forEach((p, i) => {
+    if (ids.has(p.id)) issues.push({ path: `parts.${i}.id`, message: `duplicate id "${p.id}"` });
+    ids.add(p.id);
+  });
+  const stage = stageOf(spec);
+  spec.parts.forEach((p, i) => {
+    if (!inStage(stage, p.x, p.z)) issues.push({ path: `parts.${i}`, message: `"${p.id}" at x ${p.x} z ${p.z} is off the ${stage.x} by ${stage.z} stage` });
+  });
+  (spec.terrain ?? []).forEach((t, i) => {
+    if (t.x + t.w > stage.x || t.z + t.d > stage.z) issues.push({ path: `terrain.${i}`, message: `ground "${t.name ?? 'block'}" runs past the ${stage.x} by ${stage.z} stage` });
+  });
+  const balls = spec.parts.filter((p) => p.kind === 'ball');
+  if (balls.length !== 1) issues.push({ path: 'parts', message: `exactly one ball is needed (found ${balls.length})` });
+  // Two parts in one cell sit inside each other; only a platform may share a cell with what stands on it.
+  const cells = new Map<string, string>();
+  spec.parts.forEach((p, i) => {
+    if (p.kind === 'platform') return;
+    const key = `${p.x},${p.y},${p.z}`;
+    const other = cells.get(key);
+    if (other) issues.push({ path: `parts.${i}`, message: `"${p.id}" is in the same cell as "${other}"; give every part its own cell` });
+    else cells.set(key, p.id);
+  });
+  spec.parts.forEach((p, i) => {
+    // A loose wall with prop "landmark" is a workbench part: the player places it.
+    if (p.prop && !(p.kind === 'wall' && (p.fixed || p.prop === 'landmark'))) issues.push({ path: `parts.${i}.prop`, message: `"${p.id}" has prop ${p.prop}; only a fixed wall can be an obstacle prop` });
+    if ((p.prop === 'landmark') !== !!p.build?.some((s) => collides(s, isGadget(p)))) issues.push({ path: `parts.${i}.build`, message: `"${p.id}": a composed landmark needs prop "landmark" and at least one solid shape` });
+    if (p.fixed && p.kind !== 'wall' && p.kind !== 'platform') issues.push({ path: `parts.${i}.fixed`, message: `"${p.id}" is a ${p.kind}; only walls and platforms can be fixed scenery` });
+  });
+  const byId = new Map(spec.parts.map((p) => [p.id, p]));
+  spec.goal.forEach((g, i) => {
+    const part = byId.get(g.part);
+    if (!part) {
+      if (!opts.allowMissingGoalParts) issues.push({ path: `goal.${i}.part`, message: `unknown part "${g.part}"` });
+      return;
+    }
+    const want: Record<MachineGoal['type'], PartKind[] | null> = { bucket: ['bucket'], bell: ['bell'], topple: ['dominoes'], touch: null };
+    const kinds = want[g.type];
+    if (kinds && !kinds.includes(part.kind)) issues.push({ path: `goal.${i}.part`, message: `"${g.part}" is a ${part.kind}, but a ${g.type} goal needs a ${kinds.join('/')}` });
+    if (g.type === 'touch' && part.kind === 'ball') issues.push({ path: `goal.${i}.part`, message: 'the ball cannot touch itself' });
+  });
+  return issues;
+}
+
+export type ParseResult = { ok: true; spec: MachineSpec } | { ok: false; issues: SpecIssue[] };
+
+export function parseMachine(input: unknown, opts: CheckOptions = {}): ParseResult {
+  const r = MachineSpec.safeParse(fitMachine(input));
+  if (!r.success) return { ok: false, issues: r.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) };
+  const issues = checkMachine(r.data, opts);
+  return issues.length ? { ok: false, issues } : { ok: true, spec: r.data };
+}
+
+/**
+ * A machine with what is out of range fitted in rather than refused: too many shapes are trimmed,
+ * numbers past a limit pulled back, long names cut, and anything still wrong left out (one shape, one
+ * piece of decor, one obstacle) so the rest of the level stands. The ball and the goal are never left out.
+ */
+export function fitMachine(input: unknown): unknown {
+  return fitTo(MachineSpec, input, (spec, path, item) => {
+    const goalParts = new Set(((spec.goal as { part?: string }[] | undefined) ?? []).map((g) => g.part));
+    return path[0] === 'parts' && path.length === 2 && (item?.kind === 'ball' || goalParts.has(item?.id));
+  });
+}
+
+/** Any input fitted to a schema the same way; `keep` names list items that must never be left out. */
+export function fitTo(schema: z.ZodType, input: unknown, keep: (root: Record<string, unknown>, path: (string | number)[], item: { kind?: string; id?: string } | undefined) => boolean = () => false): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const spec = structuredClone(input) as Record<string, unknown>;
+  for (let pass = 0; pass < 16; pass++) {
+    const r = schema.safeParse(spec);
+    if (r.success) break;
+    let changed = false;
+    for (const issue of r.error.issues) {
+      const path = issue.path as (string | number)[];
+      const parentOf = (n: number) => path.slice(0, n).reduce<unknown>((o, k) => (o as Record<string | number, unknown> | undefined)?.[k], spec) as Record<string | number, unknown> | undefined;
+      const holder = parentOf(path.length - 1), last = path[path.length - 1];
+      const value = holder?.[last];
+      const i = issue as { code: string; maximum?: number | bigint; minimum?: number | bigint };
+      if ((i.code === 'too_big' || i.code === 'too_small') && holder) {
+        const lim = Number(i.code === 'too_big' ? i.maximum : i.minimum);
+        if (Array.isArray(value) && i.code === 'too_big') { holder[last] = value.slice(0, lim); changed = true; continue; }
+        if (typeof value === 'number') { holder[last] = lim; changed = true; continue; }
+        if (typeof value === 'string' && i.code === 'too_big') { holder[last] = value.slice(0, lim); changed = true; continue; }
+      }
+      // Leave out the smallest thing that holds the problem: an item of the deepest list on its path.
+      for (let n = path.length - 1; n >= 0; n--) {
+        if (typeof path[n] !== 'number') continue;
+        const list = parentOf(n) as unknown as unknown[] | undefined;
+        const item = list?.[path[n] as number] as { kind?: string; id?: string } | undefined;
+        if (!Array.isArray(list) || item === undefined) break;
+        if (keep(spec, path.slice(0, n + 1), item)) break;
+        if (list.length <= 1 && n > 1) continue;
+        list.splice(path[n] as number, 1);
+        changed = true;
+        break;
+      }
+      if (changed) break; // indices moved: check again
+    }
+    if (!changed) break;
+  }
+  return spec;
+}

@@ -1,5 +1,5 @@
 {
-  "name": "orbital-goldberg",
+  "name": "prompt-goldberg",
   "private": true,
   "version": "0.1.0",
   "license": "MIT",
@@ -9,11 +9,13 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @og/web",
-    "dev:server": "npm run dev -w @og/server",
-    "build": "npm run build -w @og/web",
+    "dev": "npm run dev -w @pg/web",
+    "dev:server": "npm run dev -w @pg/server",
+    "build": "npm run build -w @pg/web",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "pg": "npm run -s pg -w @pg/cli --",
+    "recipes": "npm run -s pg -w @pg/cli -- recipes --jobs 4"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",
